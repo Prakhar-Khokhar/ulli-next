@@ -110,6 +110,7 @@ $script:Distros = [ordered]@{
         RadioLabel    = "Debian Live 13.6.0 - KDE Edition (approx. 3.9 GB)"
         ExpectedSize  = "approximately 3.9 GB"
         Mirrors       = @(
+            "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
             "https://mirrors.edge.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
             "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
         )
@@ -126,10 +127,8 @@ $script:Distros = [ordered]@{
         RadioLabel    = "Fedora 43 - KDE Plasma Desktop (approx. 3.0 GB)"
         ExpectedSize  = "approximately 3.0 GB"
         Mirrors       = @(
-            "https://d2lzkl7pfhq30w.cloudfront.net/pub/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-            "https://mirror.web-ster.com/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-            "https://forksystems.mm.fcix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-            "https://southfront.mm.fcix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
+            "https://mirror.telepoint.bg/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
+            "https://mirrors.netix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
         )
         Checksum      = "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab"
         IsoFilename   = "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
