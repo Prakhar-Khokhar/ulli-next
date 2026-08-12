@@ -1,22 +1,17 @@
-# ULLI:    USB-less Linux Installer
+# ULLI-Next:    A community maintained fork of ULLI
 
-**Donations/tips:** [https://ko-fi.com/rltvty](https://ko-fi.com/rltvty)
+Original Code By- [rltvty2](https://github.com/rltvty2/)
+Improved, and currently being Maintained by- [https://github.com/prakhar-khokhar/](Prakhar-Khokhar)
 
-**Bitcoin donations:** bc1qwgwq2y083mvmhaezwky7mknnnqq567hmrpt47r
-
-**Website:** [https://rltvty.net/installlinux.html](https://rltvty.net/installlinux.html)
-
-**Codeberg mirror:** https://codeberg.org/rltvty/ulli
-
-Install a bootable Linux partition to your hard drive without a USB stick or manual BIOS configuration.
+Installs a bootable live Linux partition to your hard drive without a USB stick or manual BIOS configuration.
 
 > **⚠️ WARNING, BETA SOFTWARE** — Modifies your disk's partition table and UEFI boot configuration. Errors during this process may leave your system unbootable and require manual recovery. In the rare situation where this could occur, most windows installations can be fully recovered by typing bcdboot C:\Windows and then hitting Enter in the command prompt in the Windows recovery environment. Back up your data before use. Use at your own risk.
 
 ---
 
-Acknowledgement: AI (mostly Claude) was used in the development of this software. That being said I always test before releasing code.
+Acknowledgement: AI (mostly Claude) was used in the development of this software. That being said The Original Developer always tests before releasing code.
 
-For those who do not want to use a program with AI generated source code, I'm also working on ULLI-organic, a non-AI version, which can be found here: [https://github.com/rltvty2/ulli-organic](https://github.com/rltvty2/ulli-organic)
+For those who do not want to use a program with AI generated source code, The developers of original ULLI are also working on ULLI-organic, a non-AI version, which can be found here: [https://github.com/rltvty2/ulli-organic](https://github.com/rltvty2/ulli-organic)
 
 ## Running under Linux
 
@@ -47,7 +42,7 @@ ULLI includes an option to install the boot manager rEFInd (https://www.rodsbook
 
 - You may have to disable Secure Boot in the BIOS depending on your computer.
 
-- Currently the installer supports the installation of **Linux Mint 22.3 Cinnamon**, **Ubuntu 24.04.4 LTS**, **Kubuntu 24.04.4 LTS**, **Debian Live 13.3.0 KDE**, and **Fedora 43 - KDE Plasma Desktop**. You may also use your own `.iso` files, but Debian and Fedora based distros don't work for now. Linux Mint Debian Edition is an exception.
+- Currently the installer supports the installation of **Linux Mint 22.3 Cinnamon**, **Ubuntu 24.04.4 LTS**, **Kubuntu 24.04.4 LTS**, **Debian Live 13.6.0 KDE**, and **Fedora 43 - KDE Plasma Desktop**. You may also use your own `.iso` files, but Debian and Fedora based distros don't work for now. Linux Mint Debian Edition is an exception.
 
 - ulli attempts to set Linux as the default boot entry automatically, but this doesn't work on all systems. You may have to select Linux as the default boot option in the BIOS. The BIOS is accessible during startup by pressing F2, DEL, F10, ESC, F1, F12, or F11. Refer to your PC or motherboard's documentation for more information.
 
