@@ -56,13 +56,13 @@ $script:Distros = [ordered]@{
     }
     cachyos = @{
         Name          = "CachyOS Desktop"
-        RadioLabel    = "CachyOS Desktop (approx. 2.6 GB)"
-        ExpectedSize  = "approximately 2.6 GB"
+        RadioLabel    = "CachyOS Desktop (approx. 3 GB)"
+        ExpectedSize  = "approximately 3 GB"
         Mirrors       = @(
-            "https://cdn77.cachyos.org/ISO/desktop/260308/cachyos-desktop-linux-260308.iso"
+            "https://cdn77.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso"
         )
-        Checksum      = "69f1ffbded158d4d95e6567e994b1813d0d040d323742aef9f489a0b71ad1d29"
-        IsoFilename   = "cachyos-desktop-linux-260308.iso"
+        Checksum      = "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c"
+        IsoFilename   = "cachyos-desktop-linux-260809.iso"
         DownloadPage  = "https://cachyos.org/download/"
         DownloadMsg   = "Please download CachyOS Desktop and save it as:"
         Keyword       = "CachyOS"
@@ -71,8 +71,8 @@ $script:Distros = [ordered]@{
     }
     ubuntu = @{
         Name          = "Ubuntu 24.04.4 LTS"
-        RadioLabel    = "Ubuntu 24.04.4 LTS - GNOME Edition (approx. 5.9 GB)"
-        ExpectedSize  = "approximately 5.9 GB"
+        RadioLabel    = "Ubuntu 24.04.4 LTS - GNOME Edition (approx. 6.2GB)"
+        ExpectedSize  = "approximately 6.2 GB"
         Mirrors       = @(
             "https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
             "https://mirror.cs.uchicago.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
@@ -89,8 +89,8 @@ $script:Distros = [ordered]@{
     }
     kubuntu = @{
         Name          = "Kubuntu 24.04.4 LTS"
-        RadioLabel    = "Kubuntu 24.04.4 LTS - KDE Plasma 5 Edition (approx. 4.2 GB)"
-        ExpectedSize  = "approximately 4.2 GB"
+        RadioLabel    = "Kubuntu 24.04.4 LTS - KDE Plasma 5 Edition (approx. 4.5 GB)"
+        ExpectedSize  = "approximately 4.5 GB"
         Mirrors       = @(
             "https://cdimage.ubuntu.com/kubuntu/releases/24.04.4/release/kubuntu-24.04.4-desktop-amd64.iso",
             "https://mirror.netzwerge.de/ubuntu-dvd/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
@@ -106,19 +106,17 @@ $script:Distros = [ordered]@{
         IsHybrid      = $false
     }
     debian = @{
-        Name          = "Debian Live 13.3.0 KDE"
-        RadioLabel    = "Debian Live 13.3.0 - KDE Edition (approx. 3.2 GB)"
-        ExpectedSize  = "approximately 3.2 GB"
+        Name          = "Debian Live 13.6.0 KDE"
+        RadioLabel    = "Debian Live 13.6.0 - KDE Edition (approx. 3.9 GB)"
+        ExpectedSize  = "approximately 3.9 GB"
         Mirrors       = @(
-            "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.3.0-amd64-kde.iso",
-            "https://mirrors.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.3.0-amd64-kde.iso",
-            "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.3.0-amd64-kde.iso",
-            "https://mirrors.mit.edu/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.3.0-amd64-kde.iso"
+            "https://mirrors.edge.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
+            "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
         )
-        Checksum      = "6a162340bca02edf67e159c847cd605618a77d50bf82088ee514f83369e43b89"
-        IsoFilename   = "debian-live-13.3.0-amd64-kde.iso"
+        Checksum      = "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639"
+        IsoFilename   = "debian-live-13.6.0-amd64-kde.iso"
         DownloadPage  = "https://www.debian.org/CD/live/"
-        DownloadMsg   = "Please download Debian Live 13.3.0 KDE (amd64) and save it as:"
+        DownloadMsg   = "Please download Debian Live 13.6.0 KDE (amd64) and save it as:"
         Keyword       = "Debian"
         ValidationFile = "live\vmlinuz"
         IsHybrid      = $true
