@@ -1,7 +1,7 @@
 # Linux Installer for Windows 11 UEFI Systems - Enhanced Edition with Auto-Restart
 # PowerShell GUI Version - Fixed unit conversions for proper partition placement
 # Run as Administrator: powershell -ExecutionPolicy Bypass -File linux_installer.ps1
-# Distributions: Linux Mint 22.3 "Zena" (Cinnamon Edition), CachyOS Desktop, Ubuntu 24.04.4 LTS, Kubuntu 24.04.4 LTS, Debian Live 13.3.0 KDE, Fedora 43 KDE
+# Distributions: Linux Mint 22.3 "Zena" (Cinnamon Edition), CachyOS Desktop, Ubuntu 24.04.4 LTS, Kubuntu 24.04.4 LTS, Debian Live 13.6.0 KDE, Fedora 43 KDE
 # Optional rEFInd boot manager on a dedicated FAT32 partition with ext4 driver
 
 #Requires -Version 5.1
