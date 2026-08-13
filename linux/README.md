@@ -21,7 +21,7 @@ Supports:
 | Linux Mint 22.3 "Zena" | Cinnamon |
 | Ubuntu 24.04.4 LTS | GNOME |
 | Kubuntu 24.04.4 LTS | KDE Plasma |
-| Debian Live 13.3.0 | KDE |
+| Debian Live 13.6.0 | KDE |
 | Cachy OS | KDE Plasma|
 | Fedora 43 | KDE Plasma |
 
