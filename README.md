@@ -1,7 +1,8 @@
 # ULLI-Next:    A community maintained fork of ULLI
 
-Original Code By- [rltvty2](https://github.com/rltvty2/)
-Improved, and currently being Maintained by- [Prakhar-Khokhar](https://github.com/prakhar-khokhar/)
+Original Code By- [rltvty2](https://github.com/rltvty2/) ,
+
+Improved, and currently being Maintained by- [Prakhar Khokhar](https://github.com/prakhar-khokhar/)
 
 Installs a bootable live Linux partition to your hard drive without a USB stick or manual BIOS configuration.
 
