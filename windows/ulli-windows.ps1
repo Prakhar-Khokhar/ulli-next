@@ -230,6 +230,23 @@ foreach ($distroId in $script:DistroKeys) {
 $distroCombo.SelectedIndex = 0
 $isoGroup.Controls.Add($distroCombo)
 
+# Show informative warning when Fedora is selected because Anaconda treats the Live partition's disk as installer media
+$distroCombo.Add_SelectedIndexChanged({
+    try {
+        $idx = $distroCombo.SelectedIndex
+        if ($idx -ge 0 -and $idx -lt $script:DistroKeys.Count) {
+            $selected = $script:Distros[$script:DistroKeys[$idx]]
+            if ($selected.Keyword -eq "Fedora") {
+                $msg = "Important: Fedora's installer (Anaconda) treats the disk that contains the Live Linux partition as the installer media and will refuse to install onto that same disk.\n\nIf you intend to install Fedora, use a separate physical disk (select the other disk in ULLI) or use Fedora as a live-only environment."
+                [System.Windows.Forms.MessageBox]::Show($msg, "Fedora installation warning", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+            }
+        }
+    } catch {
+        # Don't let UI warnings break the app; log and continue
+        Log-Message "Error showing Fedora warning: $_" -Error
+    }
+})
+
 # Custom ISO checkbox
 $customRadio = New-Object System.Windows.Forms.CheckBox
 $customRadio.Text = "Use existing ISO file:"

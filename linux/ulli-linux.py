@@ -917,6 +917,27 @@ class InstallerWindow(Gtk.ApplicationWindow):
         idx = combo.get_active()
         if 0 <= idx < len(self._distro_keys):
             self.selected_distro = self._distro_keys[idx]
+            # Informational warning for Fedora: Anaconda treats the Live partition's disk
+            # as installation media and will refuse to install onto that same disk.
+            try:
+                if self.selected_distro == "fedora":
+                    msg = ("Important: Fedora's installer (Anaconda) treats the disk that contains "
+                           "the Live Linux partition as the installer media and will refuse to install "
+                           "onto that same disk.\n\nIf you intend to install Fedora, use a separate physical "
+                           "disk (select the other disk in ULLI) or use Fedora as a live-only environment.")
+                    dlg = Gtk.MessageDialog(parent=self, flags=0,
+                                            type=Gtk.MessageType.WARNING,
+                                            buttons=Gtk.ButtonsType.OK,
+                                            message_format=msg)
+                    dlg.set_title("Fedora installation warning")
+                    dlg.run()
+                    dlg.destroy()
+            except Exception as e:
+                # Log and continue; do not interrupt the UI flow
+                try:
+                    self.log(f"Error showing Fedora warning: {e}")
+                except Exception:
+                    pass
 
     def _on_custom_toggled(self, btn):
         on = btn.get_active()
