@@ -43,7 +43,7 @@ ULLI includes an option to install the boot manager rEFInd (https://www.rodsbook
 
 - You may have to disable Secure Boot in the BIOS depending on your computer.
 
-- Currently the installer supports the installation of **Linux Mint 22.3 Cinnamon**, **Ubuntu 24.04.4 LTS**, **Kubuntu 24.04.4 LTS**, **Debian Live 13.6.0 KDE**, and **Fedora 43 - KDE Plasma Desktop**. You may also use your own `.iso` files, but Debian and Fedora based distros don't work for now. Linux Mint Debian Edition is an exception.
+- Currently the installer supports the installation of **Linux Mint 22.3 Cinnamon**, **Ubuntu 24.04.4 LTS**, **Kubuntu 24.04.4 LTS**, **Debian Live 13.6.0 KDE**,**Cachy OS Live- KDE** and **Fedora 43 - KDE Plasma Desktop**. You may also use your own `.iso` files, but Debian and Fedora based distros don't work for now. Linux Mint Debian Edition is an exception.
 
 - ulli attempts to set Linux as the default boot entry automatically, but this doesn't work on all systems. You may have to select Linux as the default boot option in the BIOS. The BIOS is accessible during startup by pressing F2, DEL, F10, ESC, F1, F12, or F11. Refer to your PC or motherboard's documentation for more information.
 
