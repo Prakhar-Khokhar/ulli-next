@@ -70,37 +70,35 @@ $script:Distros = [ordered]@{
         IsHybrid      = $true
     }
     ubuntu = @{
-        Name          = "Ubuntu 24.04.4 LTS"
-        RadioLabel    = "Ubuntu 24.04.4 LTS - GNOME Edition (approx. 6.2GB)"
-        ExpectedSize  = "approximately 6.2 GB"
+        Name          = "Ubuntu 26.04 LTS"
+        RadioLabel    = "Ubuntu 26.04 LTS - GNOME Edition (approx. 6.2GB)"
+        ExpectedSize  = "approximately 6.1 GB"
         Mirrors       = @(
-            "https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirror.cs.uchicago.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirrors.mit.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://ubuntu.osuosl.org/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso"
+            "https://gsl-syd.mm.fcix.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
+            "https://mirror.xenyth.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
+            "https://ftp.udx.icscoe.jp/Linux/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso"
         )
-        Checksum      = "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e"
-        IsoFilename   = "ubuntu-24.04.4-desktop-amd64.iso"
+        Checksum      = "487f87faaf547ea30e0aba4d5b53346292571256b25333a978db1692bcee9dd2"
+        IsoFilename   = "ubuntu-26.04-desktop-amd64.iso"
         DownloadPage  = "https://ubuntu.com/download/desktop"
-        DownloadMsg   = "Please download Ubuntu 24.04.4 LTS (64-bit) and save it as:"
+        DownloadMsg   = "Please download Ubuntu 26.04 LTS (64-bit) and save it as:"
         Keyword       = "Ubuntu"
         ValidationFile = "casper\vmlinuz"
         IsHybrid      = $false
     }
     kubuntu = @{
-        Name          = "Kubuntu 24.04.4 LTS"
-        RadioLabel    = "Kubuntu 24.04.4 LTS - KDE Plasma 5 Edition (approx. 4.5 GB)"
-        ExpectedSize  = "approximately 4.5 GB"
+        Name          = "Kubuntu 26.04 LTS"
+        RadioLabel    = "Kubuntu 26.04 LTS - KDE Plasma 6 Edition (approx. 4.7 GB)"
+        ExpectedSize  = "approximately 4.7 GB"
         Mirrors       = @(
-            "https://cdimage.ubuntu.com/kubuntu/releases/24.04.4/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirror.netzwerge.de/ubuntu-dvd/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://ftpmirror.your.org/pub/ubuntu/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso"
+            "https://ftp.linux.org.tr/kubuntu/26.04/release/kubuntu-26.04-desktop-amd64.iso",
+            "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso",
+            "https://cdimage.ubuntu.com/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso"
         )
-        Checksum      = "02cda2568cb96c090b0438a31a7d2e7b07357fde16217c215e7c3f45263bcc49"
-        IsoFilename   = "kubuntu-24.04.4-desktop-amd64.iso"
+        Checksum      = "95ce9cf68f13015b9a88bd1ef86fcf7eda77c99979fda48c69e28aa0a84f88ac"
+        IsoFilename   = "kubuntu-26.04-desktop-amd64.iso"
         DownloadPage  = "https://kubuntu.org/getkubuntu/"
-        DownloadMsg   = "Please download Kubuntu 24.04.4 LTS (64-bit) and save it as:"
+        DownloadMsg   = "Please download Kubuntu 26.04 LTS (64-bit) and save it as:"
         Keyword       = "Kubuntu"
         ValidationFile = "casper\vmlinuz"
         IsHybrid      = $false
@@ -123,17 +121,18 @@ $script:Distros = [ordered]@{
         IsHybrid      = $true
     }
     fedora = @{
-        Name          = "Fedora 43 KDE"
-        RadioLabel    = "Fedora 43 - KDE Plasma Desktop (approx. 3.0 GB)"
+        Name          = "Fedora 44 KDE"
+        RadioLabel    = "Fedora 44 - KDE Plasma Desktop (approx. 3.0 GB)"
         ExpectedSize  = "approximately 3.0 GB"
         Mirrors       = @(
-            "https://mirror.telepoint.bg/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-            "https://mirrors.netix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
+            "https://ftp.kaist.ac.kr/pub/fedora/linux/releases/44/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso",
+            "https://gsl-syd.mm.fcix.net/fedora/linux/releases/44/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso",
+            "https://muug.ca/mirror/fedora/linux/releases/44/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso"
         )
-        Checksum      = "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab"
-        IsoFilename   = "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
+        Checksum      = "c8295961d4c41adbf785a31a17c21a971d3b7415fda72dcad0c11c49577bf03a"
+        IsoFilename   = "Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso"
         DownloadPage  = "https://fedoraproject.org/kde/download/"
-        DownloadMsg   = "Please download Fedora 43 KDE Plasma Desktop (x86_64) and save it as:"
+        DownloadMsg   = "Please download Fedora 44 KDE Plasma Desktop (x86_64) and save it as:"
         Keyword       = "Fedora"
         ValidationFile = "LiveOS\squashfs.img"
         IsHybrid      = $true
