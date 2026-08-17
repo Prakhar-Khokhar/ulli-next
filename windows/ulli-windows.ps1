@@ -112,7 +112,7 @@ $script:Distros = [ordered]@{
         Mirrors       = @(
             "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
             "https://mirrors.edge.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
-            "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
+            "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso"
         )
         Checksum      = "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639"
         IsoFilename   = "debian-live-13.6.0-amd64-kde.iso"
