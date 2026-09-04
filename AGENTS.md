@@ -21,7 +21,7 @@ sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 parted btrfs-progs gr
 
 **Windows:**
 ```powershell
-# Ensure Windows 11 and UEFI firmware with Secure Boot enabled
+# Ensure Windows 10/11 with UEFI firmware (Secure Boot can stay on; only required to be off if installing rEFInd)
 # No additional pip requirements needed for PowerShell version
 ```
 

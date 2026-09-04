@@ -133,7 +133,43 @@ REFIND_URL      = "https://sourceforge.net/projects/refind/files/0.14.2/refind-b
 REFIND_FILENAME = "refind-bin-0.14.2.zip"
 REFIND_MIB      = 100          # 100 MiB FAT32 partition for rEFInd
 
-DISTROS = {
+# ─── Distro catalog ──────────────────────────────────────────────────────────
+# Shared with the Windows script via distros.json. Falls back to FALLBACK_DISTROS
+# if the file is missing or malformed.
+def load_distros_from_json():
+    """Return the distro catalog.
+
+    Tries distros.json first in the script's own directory (release layout:
+    the .json sits next to the .py), then at the repository root. Falls back to
+    FALLBACK_DISTROS if both lookups fail or the file is malformed.
+    """
+    try:
+        import json
+        here = Path(__file__).resolve().parent
+        candidates = [here / "distros.json", here.parent / "distros.json"]
+        for path in candidates:
+            if path.is_file():
+                with open(path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                if isinstance(raw, dict) and raw:
+                    # Translate shared schema (snake_case) -> Linux field names.
+                    out = {}
+                    for key, e in raw.items():
+                        out[key] = {
+                            "label":    e.get("label", key),
+                            "filename": e["filename"],
+                            "sha256":   e["sha256"],
+                            "size_gb":  0.0,
+                            "mirrors":  list(e.get("mirrors", [])),
+                            "live_path": e.get("validation_file", "").replace("\\", "/"),
+                            "hybrid":   bool(e.get("is_hybrid", False)),
+                        }
+                    return out
+    except Exception as exc:
+        print(f"WARN: failed to load distros.json ({exc}); using built-in catalog")
+    return FALLBACK_DISTROS
+
+FALLBACK_DISTROS = {
     "mint": {
         "label":    "Linux Mint 22.3 \"Zena\" – Cinnamon  (~2.9 GB)",
         "filename": "linuxmint-22.3-cinnamon-64bit.iso",
@@ -205,6 +241,9 @@ DISTROS = {
         "hybrid": True,
     },
 }
+
+DISTROS = load_distros_from_json()
+
 
 # ─── unit conversion helpers ─────────────────────────────────────────────────
 #

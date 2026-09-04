@@ -1,12 +1,28 @@
-# Linux Installer for Windows 11 UEFI Systems - Enhanced Edition with Auto-Restart
+# Linux Installer for Windows 10/11 UEFI Systems - Enhanced Edition with Auto-Restart
 # PowerShell GUI Version - Fixed unit conversions for proper partition placement
 # Run as Administrator: powershell -ExecutionPolicy Bypass -File linux_installer.ps1
 # Distributions: Linux Mint 22.3 "Zena" (Cinnamon Edition), CachyOS Desktop, Ubuntu 24.04.4 LTS, Kubuntu 24.04.4 LTS, Debian Live 13.6.0 KDE, Fedora 43 KDE
 # Optional rEFInd boot manager on a dedicated FAT32 partition with ext4 driver
+#
+# ─── Table of Contents ───────────────────────────────────────────────────────
+#   1. Bootstrap       (auto-elevate, assemblies)
+#   2. Global state    ($script: variables, constants, log file)
+#   3. Distro catalog  (Load-DistroCatalog + hard-coded fallback)
+#   4. UI constants    (screen size, form dimensions)
+#   5. Main form       (controls, layout, event wiring)
+#   6. Helpers         (Write-Log, Set-Status, Get-SelectedDistro, Get-PartitionLabel,
+#                       Format-AfterLayout, Invoke-PartitionShrink, Set-UILocked)
+#   7. UEFI boot       (New-UefiBootEntry, bcdedit wrappers)
+#   8. Disk info       (Update-DiskInfo, Get-DiskLayoutText, Get-DiskUnallocatedGB)
+#   9. Plan dialog     (Show-DiskPlan, strategy selection)
+#  10. ISO / rEFInd    (Test-IsoChecksum, Save-LinuxIso, Save-Refind, Install-Refind,
+#                       New-RefindPartition)
+#  11. Install state   (Start-Installation - top-level state machine)
+#  12. Entry point     ($form.ShowDialog())
 
 #Requires -Version 5.1
 
-# ─── Auto-elevate to Administrator ────────────────────────────────────────────
+# ─── 1. Bootstrap ─────────────────────────────────────────────────────────────
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     try {
@@ -27,134 +43,73 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-# Global variables
+# ─── 2. Global state ─────────────────────────────────────────────────────────
+# Catalog / partition / rEFInd tunables
 $script:MinPartitionSizeGB = 7
 $script:MinLinuxSizeGB = 20
 $script:RefindUrl = "https://sourceforge.net/projects/refind/files/0.14.2/refind-bin-0.14.2.zip/download"
 $script:RefindFilename = "refind-bin-0.14.2.zip"
 $script:RefindSizeMB = 100  # 100 MB FAT32 partition for rEFInd
 
-# ─── Distro Data Table ────────────────────────────────────────────────────────
-$script:Distros = [ordered]@{
-    mint = @{
-        Name          = "Linux Mint 22.3"
-        RadioLabel    = 'Linux Mint 22.3 "Zena" - Cinnamon Edition (approx. 2.9 GB)'
-        ExpectedSize  = "approximately 2.9 GB"
-        Mirrors       = @(
-            "https://mirrors.kernel.org/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
-            "https://mirror.csclub.uwaterloo.ca/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
-            "https://mirrors.seas.harvard.edu/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
-            "https://mirror.arizona.edu/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso"
-        )
-        Checksum      = "a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4"
-        IsoFilename   = "linuxmint-22.3-cinnamon-64bit.iso"
-        DownloadPage  = "https://linuxmint.com/edition.php?id=326"
-        DownloadMsg   = "Please download Linux Mint 22.3 Cinnamon (64-bit) and save it as:"
-        Keyword       = "Mint"
-        ValidationFile = "casper\vmlinuz"
-        IsHybrid      = $false
-    }
-    cachyos = @{
-        Name          = "CachyOS Desktop"
-        RadioLabel    = "CachyOS Desktop (approx. 3 GB)"
-        ExpectedSize  = "approximately 3 GB"
-        Mirrors       = @(
-            "https://cdn77.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso"
-        )
-        Checksum      = "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c"
-        IsoFilename   = "cachyos-desktop-linux-260809.iso"
-        DownloadPage  = "https://cachyos.org/download/"
-        DownloadMsg   = "Please download CachyOS Desktop and save it as:"
-        Keyword       = "CachyOS"
-        ValidationFile = "arch\boot\x86_64\vmlinuz-linux-cachyos"
-        IsHybrid      = $true
-    }
-    ubuntu = @{
-        Name          = "Ubuntu 24.04.4 LTS"
-        RadioLabel    = "Ubuntu 24.04.4 LTS - GNOME Edition (approx. 6.2GB)"
-        ExpectedSize  = "approximately 6.2 GB"
-        Mirrors       = @(
-            "https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirror.cs.uchicago.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirrors.mit.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://ubuntu.osuosl.org/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso"
-        )
-        Checksum      = "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e"
-        IsoFilename   = "ubuntu-24.04.4-desktop-amd64.iso"
-        DownloadPage  = "https://ubuntu.com/download/desktop"
-        DownloadMsg   = "Please download Ubuntu 24.04.4 LTS (64-bit) and save it as:"
-        Keyword       = "Ubuntu"
-        ValidationFile = "casper\vmlinuz"
-        IsHybrid      = $false
-    }
-    kubuntu = @{
-        Name          = "Kubuntu 24.04.4 LTS"
-        RadioLabel    = "Kubuntu 24.04.4 LTS - KDE Plasma 5 Edition (approx. 4.5 GB)"
-        ExpectedSize  = "approximately 4.5 GB"
-        Mirrors       = @(
-            "https://cdimage.ubuntu.com/kubuntu/releases/24.04.4/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirror.netzwerge.de/ubuntu-dvd/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://ftpmirror.your.org/pub/ubuntu/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso"
-        )
-        Checksum      = "02cda2568cb96c090b0438a31a7d2e7b07357fde16217c215e7c3f45263bcc49"
-        IsoFilename   = "kubuntu-24.04.4-desktop-amd64.iso"
-        DownloadPage  = "https://kubuntu.org/getkubuntu/"
-        DownloadMsg   = "Please download Kubuntu 24.04.4 LTS (64-bit) and save it as:"
-        Keyword       = "Kubuntu"
-        ValidationFile = "casper\vmlinuz"
-        IsHybrid      = $false
-    }
-    debian = @{
-        Name          = "Debian Live 13.6.0 KDE"
-        RadioLabel    = "Debian Live 13.6.0 - KDE Edition (approx. 3.9 GB)"
-        ExpectedSize  = "approximately 3.9 GB"
-        Mirrors       = @(
-            "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
-            "https://mirrors.edge.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
-            "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso"
-        )
-        Checksum      = "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639"
-        IsoFilename   = "debian-live-13.6.0-amd64-kde.iso"
-        DownloadPage  = "https://www.debian.org/CD/live/"
-        DownloadMsg   = "Please download Debian Live 13.6.0 KDE (amd64) and save it as:"
-        Keyword       = "Debian"
-        ValidationFile = "live\vmlinuz"
-        IsHybrid      = $true
-    }
-    fedora = @{
-        Name          = "Fedora 43 KDE"
-        RadioLabel    = "Fedora 43 - KDE Plasma Desktop (approx. 3.0 GB)"
-        ExpectedSize  = "approximately 3.0 GB"
-        Mirrors       = @(
-            "https://mirror.telepoint.bg/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-            "https://mirrors.netix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
-        )
-        Checksum      = "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab"
-        IsoFilename   = "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
-        DownloadPage  = "https://fedoraproject.org/kde/download/"
-        DownloadMsg   = "Please download Fedora 43 KDE Plasma Desktop (x86_64) and save it as:"
-        Keyword       = "Fedora"
-        ValidationFile = "LiveOS\squashfs.img"
-        IsHybrid      = $true
-    }
+# Named constants for the rest of the script. Pulled out so that the magic
+# numbers in the plan dialog and install pipeline have a single source of truth.
+$script:Const = [ordered]@{
+    # Free-space headroom (GB) when validating that a strategy can fit.
+    ShrinkAllCHeadroomGB       = 10   # required extra free space on C: for shrink_all
+    UseFreeBootCHeadroomGB     = 10   # required extra free space on C: for use_free_boot
+    OtherDriveShrinkHeadroomGB = 5    # required extra free space on shrunk non-C: volume
+    GapSlackGB                 = 1    # required slack in a gap for a partition to fit
+    # Restart countdown
+    RestartCountdownSeconds    = 30
+    # Defaults
+    DefaultLinuxSizeGB         = 30
+    MaxLinuxSizeFallbackGB     = 10000
+    # UI pump intervals (ms) during long downloads.
+    UiPumpIntervalMs           = 500
+    # Sleep durations (seconds) used after partition operations.
+    SleepAfterPartitionSec     = 2
+    SleepForDriveLetterSec     = 3
+    # Layout constants
+    FormMinWidth               = 720
+    FormMinHeight              = 480
+    FormDefaultWidth           = 720
+    FormCompactHeight          = 645
+    FormTallHeight             = 665
+    CompactHeightThreshold     = 900
 }
+
+# ─── 3. Distro catalog ───────────────────────────────────────────────────────
+# Load the distro catalog from windows/distros.json. If the file is missing or
+# malformed, fall back to the built-in catalog so the installer still works.
+$script:Distros = Get-DistroCatalog
 
 $script:IsoPath = ""
 $script:CustomIsoPath = ""
 $script:IsRunning = $false
-$script:MaxAvailableGB = 10000
+$script:MaxAvailableGB = $script:Const.MaxLinuxSizeFallbackGB
 
+# ─── Log file sink ──────────────────────────────────────────────────────────
+# Per-run log file in %TEMP% for post-install debugging and user bug reports.
+$script:LogFile = Join-Path $env:TEMP "ulli-install-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+$script:LogStream = $null
+try {
+    $script:LogStream = New-Object System.IO.StreamWriter($script:LogFile, $true)
+    $script:LogStream.AutoFlush = $true
+} catch {
+    # Non-fatal: fall back to in-memory logging only.
+    $script:LogStream = $null
+}
+
+# ─── 4. UI constants ─────────────────────────────────────────────────────────
 # Detect screen resolution and adapt window size
 $primaryScreen = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$scrW = $primaryScreen.Width
 $scrH = $primaryScreen.Height
-if ($scrH -le 900) {
-    $formW = 720
-    $formH = [Math]::Min($scrH - 60, 645)
+if ($scrH -le $script:Const.CompactHeightThreshold) {
+    $formW = $script:Const.FormDefaultWidth
+    $formH = [Math]::Min($scrH - 60, $script:Const.FormCompactHeight)
 } else {
-    $formW = 720
-    $formH = 665
+    $formW = $script:Const.FormDefaultWidth
+    $formH = $script:Const.FormTallHeight
 }
 
 # Create main form
@@ -163,7 +118,7 @@ $form.Text = "USB-less Linux Installer for Windows"
 $form.Size = New-Object System.Drawing.Size($formW, $formH)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "Sizable"
-$form.MinimumSize = New-Object System.Drawing.Size(720, 480)
+$form.MinimumSize = New-Object System.Drawing.Size($script:Const.FormMinWidth, $script:Const.FormMinHeight)
 $form.AutoScroll = $true
 $form.Icon = [System.Drawing.SystemIcons]::Application
 
@@ -216,7 +171,8 @@ $isoGroup.Location = New-Object System.Drawing.Point(10, 104)
 $isoGroup.Size = New-Object System.Drawing.Size(680, 100)
 $form.Controls.Add($isoGroup)
 
-# ─── Distro dropdown list ─────────────────────────────────────────────────────
+# ─── 5. Main form ────────────────────────────────────────────────────────────
+# Distro dropdown list
 $script:DistroKeys = @($script:Distros.Keys)
 $distroCombo = New-Object System.Windows.Forms.ComboBox
 $distroCombo.Font = $boldFont
@@ -243,7 +199,7 @@ $distroCombo.Add_SelectedIndexChanged({
         }
     } catch {
         # Don't let UI warnings break the app; log and continue
-        Log-Message "Error showing Fedora warning: $_" -Error
+        Write-Log "Error showing Fedora warning: $_" -Error
     }
 })
 
@@ -303,8 +259,24 @@ $logBox.ScrollBars = "Vertical"
 $logBox.ReadOnly = $true
 $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
 $logBox.Location = New-Object System.Drawing.Point(10, 20)
-$logBox.Size = New-Object System.Drawing.Size(660, 60)
+$logBox.Size = New-Object System.Drawing.Size(530, 60)
 $logGroup.Controls.Add($logBox)
+
+# Copy log to clipboard
+$copyLogButton = New-Object System.Windows.Forms.Button
+$copyLogButton.Text = "Copy Log"
+$copyLogButton.Font = $normalFont
+$copyLogButton.Location = New-Object System.Drawing.Point(548, 20)
+$copyLogButton.Size = New-Object System.Drawing.Size(122, 28)
+$logGroup.Controls.Add($copyLogButton)
+
+# Open log folder in Explorer
+$openLogButton = New-Object System.Windows.Forms.Button
+$openLogButton.Text = "Open Folder"
+$openLogButton.Font = $normalFont
+$openLogButton.Location = New-Object System.Drawing.Point(548, 52)
+$openLogButton.Size = New-Object System.Drawing.Size(122, 28)
+$logGroup.Controls.Add($openLogButton)
 
 # Delete ISO checkbox
 $deleteIsoCheck = New-Object System.Windows.Forms.CheckBox
@@ -351,14 +323,21 @@ $exitButton.Location = New-Object System.Drawing.Point(540, 535)
 $exitButton.Size = New-Object System.Drawing.Size(140, 35)
 $form.Controls.Add($exitButton)
 
-# ============================================================
+# ─── 6. Helpers ──────────────────────────────────────────────────────────────
 # HELPER FUNCTIONS
-# ============================================================
+# ────────────────────────────────────────────────────────────────────────────
 
-function Log-Message {
+# Write-Log shadows a built-in PowerShell 7+ cmdlet of the same name. The
+# installer targets PowerShell 5.1 (Windows 10/11 default) where the built-in
+# does not exist, so the override is intentional.
+function Write-Log {
+    [CmdletBinding()]
     param(
+        [Parameter(Position=0)]
         [string]$Message,
-        [switch]$Error
+        [switch]$IsError,
+        [ValidateSet('Info','Warn','Error')]
+        [string]$Severity = 'Info'
     )
 
     $timestamp = Get-Date -Format "HH:mm:ss"
@@ -368,10 +347,24 @@ function Log-Message {
     $logBox.SelectionStart = $logBox.TextLength
     $logBox.ScrollToCaret()
 
-    if ($Error) {
-        Write-Host $fullMessage -ForegroundColor Red
-    } else {
-        Write-Host $fullMessage
+    # Back-compat: $IsError implies Severity=Error unless caller overrode it.
+    $effectiveSeverity = if ($PSBoundParameters.ContainsKey('Severity')) { $Severity } elseif ($IsError) { 'Error' } else { 'Info' }
+    $hostColor = switch ($effectiveSeverity) {
+        'Error' { 'Red' }
+        'Warn'  { 'Yellow' }
+        default { 'Cyan' }
+    }
+    Write-Host $fullMessage -ForegroundColor $hostColor
+
+    # Mirror to log file (best-effort: never let a logging failure crash the run).
+    if ($script:LogStream) {
+        try {
+            $script:LogStream.WriteLine("[$effectiveSeverity] $fullMessage")
+        } catch {
+            # Drop the stream silently on any IO error.
+            try { $script:LogStream.Dispose() } catch {}
+            $script:LogStream = $null
+        }
     }
 }
 
@@ -379,6 +372,156 @@ function Set-Status {
     param([string]$Status)
     $statusLabel.Text = $Status
     $form.Refresh()
+}
+
+# ─── Distro catalog loader (called from section 3) ──────────────────────────
+function Get-DistroCatalog {
+    # 1. Try distros.json next to this script (release layout: the .json sits
+    #    in the same directory as the .ps1).
+    $candidates = @(
+        (Join-Path $PSScriptRoot "distros.json"),
+        (Join-Path (Split-Path -Parent $PSScriptRoot) "distros.json")
+    )
+    foreach ($catalogPath in $candidates) {
+        if (Test-Path -LiteralPath $catalogPath) {
+            try {
+                $raw = Get-Content -LiteralPath $catalogPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                $ordered = [ordered]@{}
+                foreach ($prop in $raw.PSObject.Properties) {
+                    $e = $prop.Value
+                    # Translate shared-schema keys to Windows-specific names.
+                    $ordered[$prop.Name] = @{
+                        Name           = if ($e.PSObject.Properties.Name -contains 'Name') { $e.Name } else { $e.label }
+                        RadioLabel     = $e.label
+                        ExpectedSize   = if ($e.PSObject.Properties.Name -contains 'ExpectedSize') { $e.ExpectedSize } else { '' }
+                        Mirrors        = @($e.mirrors)
+                        Checksum       = $e.sha256
+                        IsoFilename    = $e.filename
+                        DownloadPage   = $e.download_page
+                        DownloadMsg    = $e.download_msg
+                        Keyword        = $e.keyword
+                        ValidationFile = $e.validation_file
+                        IsHybrid       = [bool]$e.is_hybrid
+                    }
+                }
+                if ($ordered.Count -gt 0) {
+                    Write-Host "Loaded $($ordered.Count) distros from $catalogPath"
+                    return $ordered
+                }
+            } catch {
+                Write-Host "WARN: failed to parse $catalogPath ($($_.Exception.Message)). Trying next location."
+            }
+        }
+    }
+    # 2. Built-in fallback (mirror of distros.json - keep in sync).
+    return Get-FallbackDistroCatalog
+}
+
+function Get-FallbackDistroCatalog {
+    return [ordered]@{
+        mint = @{
+            Name          = "Linux Mint 22.3"
+            RadioLabel    = 'Linux Mint 22.3 "Zena" - Cinnamon Edition (approx. 2.9 GB)'
+            ExpectedSize  = "approximately 2.9 GB"
+            Mirrors       = @(
+                "https://mirrors.kernel.org/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
+                "https://mirror.csclub.uwaterloo.ca/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
+                "https://mirrors.seas.harvard.edu/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
+                "https://mirror.arizona.edu/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso"
+            )
+            Checksum       = "a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4"
+            IsoFilename    = "linuxmint-22.3-cinnamon-64bit.iso"
+            DownloadPage   = "https://linuxmint.com/edition.php?id=326"
+            DownloadMsg    = "Please download Linux Mint 22.3 Cinnamon (64-bit) and save it as:"
+            Keyword        = "Mint"
+            ValidationFile = "casper\vmlinuz"
+            IsHybrid       = $false
+        }
+        cachyos = @{
+            Name          = "CachyOS Desktop"
+            RadioLabel    = "CachyOS Desktop (approx. 3 GB)"
+            ExpectedSize  = "approximately 3 GB"
+            Mirrors       = @(
+                "https://cdn77.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso"
+            )
+            Checksum       = "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c"
+            IsoFilename    = "cachyos-desktop-linux-260809.iso"
+            DownloadPage   = "https://cachyos.org/download/"
+            DownloadMsg    = "Please download CachyOS Desktop and save it as:"
+            Keyword        = "CachyOS"
+            ValidationFile = "arch\boot\x86_64\vmlinuz-linux-cachyos"
+            IsHybrid       = $true
+        }
+        ubuntu = @{
+            Name          = "Ubuntu 24.04.4 LTS"
+            RadioLabel    = "Ubuntu 24.04.4 LTS - GNOME Edition (approx. 6.2GB)"
+            ExpectedSize  = "approximately 6.2 GB"
+            Mirrors       = @(
+                "https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
+                "https://mirror.cs.uchicago.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
+                "https://mirrors.mit.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
+                "https://ubuntu.osuosl.org/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso"
+            )
+            Checksum       = "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e"
+            IsoFilename    = "ubuntu-24.04.4-desktop-amd64.iso"
+            DownloadPage   = "https://ubuntu.com/download/desktop"
+            DownloadMsg    = "Please download Ubuntu 24.04.4 LTS (64-bit) and save it as:"
+            Keyword        = "Ubuntu"
+            ValidationFile = "casper\vmlinuz"
+            IsHybrid       = $false
+        }
+        kubuntu = @{
+            Name          = "Kubuntu 24.04.4 LTS"
+            RadioLabel    = "Kubuntu 24.04.4 LTS - KDE Plasma 5 Edition (approx. 4.5 GB)"
+            ExpectedSize  = "approximately 4.5 GB"
+            Mirrors       = @(
+                "https://cdimage.ubuntu.com/kubuntu/releases/24.04.4/release/kubuntu-24.04.4-desktop-amd64.iso",
+                "https://mirror.netzwerge.de/ubuntu-dvd/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
+                "https://ftpmirror.your.org/pub/ubuntu/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
+                "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso"
+            )
+            Checksum       = "02cda2568cb96c090b0438a31a7d2e7b07357fde16217c215e7c3f45263bcc49"
+            IsoFilename    = "kubuntu-24.04.4-desktop-amd64.iso"
+            DownloadPage   = "https://kubuntu.org/getkubuntu/"
+            DownloadMsg    = "Please download Kubuntu 24.04.4 LTS (64-bit) and save it as:"
+            Keyword        = "Kubuntu"
+            ValidationFile = "casper\vmlinuz"
+            IsHybrid       = $false
+        }
+        debian = @{
+            Name          = "Debian Live 13.6.0 KDE"
+            RadioLabel    = "Debian Live 13.6.0 - KDE Edition (approx. 3.9 GB)"
+            ExpectedSize  = "approximately 3.9 GB"
+            Mirrors       = @(
+                "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
+                "https://mirrors.edge.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
+                "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso"
+            )
+            Checksum       = "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639"
+            IsoFilename    = "debian-live-13.6.0-amd64-kde.iso"
+            DownloadPage   = "https://www.debian.org/CD/live/"
+            DownloadMsg    = "Please download Debian Live 13.6.0 KDE (amd64) and save it as:"
+            Keyword        = "Debian"
+            ValidationFile = "live\vmlinuz"
+            IsHybrid       = $true
+        }
+        fedora = @{
+            Name          = "Fedora 43 KDE"
+            RadioLabel    = "Fedora 43 - KDE Plasma Desktop (approx. 3.0 GB)"
+            ExpectedSize  = "approximately 3.0 GB"
+            Mirrors       = @(
+                "https://mirror.telepoint.bg/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
+                "https://mirrors.netix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
+            )
+            Checksum       = "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab"
+            IsoFilename    = "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
+            DownloadPage   = "https://fedoraproject.org/kde/download/"
+            DownloadMsg    = "Please download Fedora 43 KDE Plasma Desktop (x86_64) and save it as:"
+            Keyword        = "Fedora"
+            ValidationFile = "LiveOS\squashfs.img"
+            IsHybrid       = $true
+        }
+    }
 }
 
 function Get-SelectedDistro {
@@ -476,7 +619,7 @@ function Format-AfterLayout {
     return $lines
 }
 
-function Shrink-Partition {
+function Invoke-PartitionShrink {
     param(
         [string]$DriveLetter,
         [double]$ShrinkAmountGB
@@ -485,11 +628,11 @@ function Shrink-Partition {
         $currentSize = (Get-Partition -DriveLetter $DriveLetter).Size
         $newSize = $currentSize - ($ShrinkAmountGB * 1GB)
         Resize-Partition -DriveLetter $DriveLetter -Size $newSize -ErrorAction Stop
-        Log-Message "${DriveLetter}: partition shrunk successfully!"
+        Write-Log "${DriveLetter}: partition shrunk successfully!"
         return $true
     }
     catch {
-        Log-Message "Trying diskpart method..."
+        Write-Log "Trying diskpart method..."
         $sizeMB = [int]($ShrinkAmountGB * 1024)
         $diskpartScript = @"
 select volume $DriveLetter
@@ -503,7 +646,7 @@ exit
         Remove-Item $scriptPath -Force
 
         if ($result -match "successfully") {
-            Log-Message "${DriveLetter}: partition shrunk successfully!"
+            Write-Log "${DriveLetter}: partition shrunk successfully!"
             return $true
         } else {
             $hint = if ($DriveLetter -eq 'C') {
@@ -511,13 +654,64 @@ exit
             } else {
                 "You may need to: 1) Run disk cleanup 2) Defragment the drive 3) Reboot"
             }
-            Log-Message "Failed to shrink ${DriveLetter}: partition!" -Error
-            Log-Message $hint -Error
+            Write-Log "Failed to shrink ${DriveLetter}: partition!" -Error
+            Write-Log $hint -Error
             return $false
         }
     }
 }
 
+# Log-button click handlers (UI)
+$copyLogButton.Add_Click({
+    try {
+        if ($script:LogFile -and (Test-Path $script:LogFile)) {
+            $content = Get-Content -Path $script:LogFile -Raw -ErrorAction Stop
+            [System.Windows.Forms.Clipboard]::SetText($content)
+            $copyLogButton.Text = "Copied!"
+            $copyLogButton.Enabled = $false
+            $copyTimer = New-Object System.Windows.Forms.Timer
+            $copyTimer.Interval = 1500
+            $copyTimer.Add_Tick({
+                $copyLogButton.Text = "Copy Log"
+                $copyLogButton.Enabled = $true
+                $copyTimer.Stop()
+                $copyTimer.Dispose()
+            })
+            $copyTimer.Start()
+        } else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Log file not available yet.`nIt is created when the installer starts logging to disk.",
+                "ULLI", "OK", "Information") | Out-Null
+        }
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Failed to copy log: $_",
+            "ULLI", "OK", "Error") | Out-Null
+    }
+})
+
+$openLogButton.Add_Click({
+    try {
+        # Ensure the file exists so Explorer highlights it.
+        if ($script:LogFile -and -not (Test-Path $script:LogFile)) {
+            New-Item -ItemType File -Path $script:LogFile -Force | Out-Null
+        }
+        Start-Process explorer.exe "/select,`"$($script:LogFile)`""
+    } catch {
+        Start-Process explorer.exe $env:TEMP
+    }
+})
+
+# Flush & close the log stream when the form closes.
+$form.Add_FormClosed({
+    if ($script:LogStream) {
+        try { $script:LogStream.Flush() } catch {}
+        try { $script:LogStream.Dispose() } catch {}
+        $script:LogStream = $null
+    }
+})
+
+# ─── 7. UEFI boot ────────────────────────────────────────────────────────────
 function New-UefiBootEntry {
     param(
         [string]$DistroName,
@@ -531,14 +725,14 @@ function New-UefiBootEntry {
 
         if ($copyOutputStr -match '\{[0-9a-fA-F-]+\}') {
             $newGuid = $matches[0]
-            Log-Message "Created new entry: $newGuid"
+            Write-Log "Created new entry: $newGuid"
 
             $inheritedProps = @("default", "displayorder", "toolsdisplayorder", "timeout", "resumeobject", "inherit", "locale")
             foreach ($prop in $inheritedProps) {
                 Start-Process "bcdedit.exe" -ArgumentList "/deletevalue", $newGuid, $prop -Wait -NoNewWindow -ErrorAction SilentlyContinue 2>$null | Out-Null
             }
 
-            Log-Message "Setting device=partition=$DevicePartition path=$EfiPath"
+            Write-Log "Setting device=partition=$DevicePartition path=$EfiPath"
 
             $r1 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "device", "partition=$DevicePartition" -Wait -PassThru -NoNewWindow
             $r2 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "path", $EfiPath -Wait -PassThru -NoNewWindow
@@ -547,18 +741,18 @@ function New-UefiBootEntry {
             $r4 = Start-Process "bcdedit.exe" -ArgumentList "/set", "{fwbootmgr}", "default", $newGuid -Wait -PassThru -NoNewWindow
 
             if ($r1.ExitCode -eq 0 -and $r2.ExitCode -eq 0 -and $r3.ExitCode -eq 0 -and $r4.ExitCode -eq 0) {
-                Log-Message "UEFI boot entry created and set as default!"
+                Write-Log "UEFI boot entry created and set as default!"
                 $bootCreated = $true
             } else {
-                Log-Message "Some bcdedit commands failed (exit codes: device=$($r1.ExitCode), path=$($r2.ExitCode), displayorder=$($r3.ExitCode), default=$($r4.ExitCode))" -Error
+                Write-Log "Some bcdedit commands failed (exit codes: device=$($r1.ExitCode), path=$($r2.ExitCode), displayorder=$($r3.ExitCode), default=$($r4.ExitCode))" -Error
                 Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue
             }
         } else {
-            Log-Message "bcdedit /copy did not return a GUID: $copyOutputStr" -Error
+            Write-Log "bcdedit /copy did not return a GUID: $copyOutputStr" -Error
         }
     }
     catch {
-        Log-Message "Failed to create boot entry: $_" -Error
+        Write-Log "Failed to create boot entry: $_" -Error
     }
     return $bootCreated
 }
@@ -576,10 +770,10 @@ function Set-UILocked {
     $refindCheck.Enabled = $enabled
 }
 
+# ─── 8. Disk info ────────────────────────────────────────────────────────────
 function Update-DiskInfo {
     try {
         $cDrive = Get-Partition -DriveLetter C -ErrorAction Stop | Select-Object -First 1
-        $disk = Get-Disk -Number $cDrive.DiskNumber -ErrorAction Stop
         $volume = Get-Volume -DriveLetter C -ErrorAction Stop
 
         $partitionNumber = if ($cDrive.PartitionNumber) {
@@ -610,14 +804,11 @@ Partition Number: $partitionNumber
         $script:MaxAvailableGB = [math]::Floor($script:CDriveInfo.FreeGB - $script:MinPartitionSizeGB - 10)
     }
     catch {
-        Log-Message "Error getting disk information: $_" -Error
+        Write-Log "Error getting disk information: $_" -Error
         $diskInfoText.Text = "Error retrieving disk information"
     }
 }
 
-# ============================================================
-# DISK PLAN DIALOG
-# ============================================================
 function Get-DiskLayoutText {
     param(
         [int]$DiskNumber
@@ -695,6 +886,7 @@ function Get-DiskUnallocatedGB {
     return [math]::Round($total / 1GB, 2)
 }
 
+# ─── 9. Plan dialog ──────────────────────────────────────────────────────────
 function Show-DiskPlan {
     param(
         [string]$DistroName
@@ -740,7 +932,7 @@ function Show-DiskPlan {
     $planForm.Size = New-Object System.Drawing.Size(720, 780)
     $planForm.StartPosition = "CenterParent"
     $planForm.FormBorderStyle = "Sizable"
-    $planForm.MinimumSize = New-Object System.Drawing.Size(720, 480)
+    $planForm.MinimumSize = New-Object System.Drawing.Size($script:Const.FormMinWidth, $script:Const.FormMinHeight)
     $planForm.MaximizeBox = $true
     $planForm.MinimizeBox = $false
     $planForm.AutoScroll = $true
@@ -822,7 +1014,7 @@ function Show-DiskPlan {
     $sizeNumeric.Location = New-Object System.Drawing.Point(145, 22)
     $sizeNumeric.Size = New-Object System.Drawing.Size(80, 24)
     $sizeNumeric.Minimum = $script:MinLinuxSizeGB
-    $sizeNumeric.Maximum = if ($script:MaxAvailableGB -gt $script:MinLinuxSizeGB) { $script:MaxAvailableGB } else { 10000 }
+    $sizeNumeric.Maximum = if ($script:MaxAvailableGB -gt $script:MinLinuxSizeGB) { $script:MaxAvailableGB } else { $script:Const.MaxLinuxSizeFallbackGB }
     $sizeNumeric.Value = 30
     $sizeGroup.Controls.Add($sizeNumeric)
 
@@ -965,7 +1157,6 @@ function Show-DiskPlan {
             $radioWipe.Checked = $false
             $cPartition = Get-Partition -DriveLetter C
             $cSizeGB = [math]::Round($cPartition.Size / 1GB, 2)
-            $cFreeGB = $script:CDriveInfo.FreeGB
             $cPartitionEnd = $cPartition.Offset + $cPartition.Size
             $usableFreeGB = Get-DiskUnallocatedGB -DiskNumber $selDiskNum -AfterOffset $cPartitionEnd
 
@@ -1492,28 +1683,32 @@ function Show-DiskPlan {
     }
 }
 
-function Verify-ISOChecksum {
+# ─── 10. ISO / rEFInd ────────────────────────────────────────────────────────
+# CHECKSUM / DOWNLOAD / REFIND HELPERS
+# ────────────────────────────────────────────────────────────────────────────
+
+function Test-IsoChecksum {
     param(
         [string]$FilePath
     )
 
-    Log-Message "Verifying ISO checksum..."
+    Write-Log "Verifying ISO checksum..."
     Set-Status "Verifying ISO integrity..."
 
     try {
         $distro = Get-SelectedDistro
         $expectedHash = $distro.Checksum
-        Log-Message "Expected SHA256: $expectedHash"
+        Write-Log "Expected SHA256: $expectedHash"
 
-        Log-Message "Calculating SHA256 checksum of downloaded ISO (this may take a minute)..."
+        Write-Log "Calculating SHA256 checksum of downloaded ISO (this may take a minute)..."
         $actualHash = (Get-FileHash -Path $FilePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLower()
-        Log-Message "Actual SHA256:   $actualHash"
+        Write-Log "Actual SHA256:   $actualHash"
 
         if ($actualHash -eq $expectedHash) {
-            Log-Message "[PASS] Checksum verification PASSED - ISO is authentic!"
+            Write-Log "[PASS] Checksum verification PASSED - ISO is authentic!"
             return $true
         } else {
-            Log-Message "[FAIL] Checksum verification FAILED - ISO may be corrupted or tampered!" -Error
+            Write-Log "[FAIL] Checksum verification FAILED - ISO may be corrupted or tampered!" -Error
 
             $response = [System.Windows.Forms.MessageBox]::Show(
                 "The ISO file checksum does not match the expected checksum!`n`n" +
@@ -1529,9 +1724,9 @@ function Verify-ISOChecksum {
             if ($response -eq [System.Windows.Forms.DialogResult]::Yes) {
                 try {
                     Remove-Item $FilePath -Force
-                    Log-Message "Corrupted ISO deleted"
+                    Write-Log "Corrupted ISO deleted"
                 } catch {
-                    Log-Message "Error deleting ISO: $_" -Error
+                    Write-Log "Error deleting ISO: $_" -Error
                 }
             }
 
@@ -1539,7 +1734,7 @@ function Verify-ISOChecksum {
         }
     }
     catch {
-        Log-Message "Error calculating checksum: $_" -Error
+        Write-Log "Error calculating checksum: $_" -Error
 
         $response = [System.Windows.Forms.MessageBox]::Show(
             "Unable to verify the ISO checksum. Error: $_`n`n" +
@@ -1553,7 +1748,7 @@ function Verify-ISOChecksum {
     }
 }
 
-function Download-LinuxISO {
+function Save-LinuxIso {
     param(
         [string]$Destination
     )
@@ -1563,12 +1758,12 @@ function Download-LinuxISO {
     $expectedSize = $distro.ExpectedSize
     $mirrors = $distro.Mirrors
 
-    Log-Message "Downloading $isoName ISO ($expectedSize)..."
-    Log-Message "This may take a while depending on your internet speed..."
+    Write-Log "Downloading $isoName ISO ($expectedSize)..."
+    Write-Log "This may take a while depending on your internet speed..."
 
     foreach ($i in 0..($mirrors.Count - 1)) {
         $mirror = $mirrors[$i]
-        Log-Message "Trying mirror $($i + 1)/$($mirrors.Count): $($mirror.Split('/')[2])"
+        Write-Log "Trying mirror $($i + 1)/$($mirrors.Count): $($mirror.Split('/')[2])"
         Set-Status "Connecting to mirror..."
 
         try {
@@ -1582,7 +1777,7 @@ function Download-LinuxISO {
             if ($response.IsSuccessStatusCode) {
                 $totalBytes = $response.Content.Headers.ContentLength
                 $totalMB = [math]::Round($totalBytes / 1MB, 1)
-                Log-Message "File size: $totalMB MB"
+                Write-Log "File size: $totalMB MB"
 
                 $fileStream = [System.IO.File]::Create($Destination)
                 $downloadStream = $response.Content.ReadAsStreamAsync().Result
@@ -1630,16 +1825,16 @@ function Download-LinuxISO {
 
                 $fileInfo = Get-Item $Destination
                 $fileSizeGB = [math]::Round($fileInfo.Length / 1GB, 2)
-                Log-Message "Downloaded file size: $fileSizeGB GB"
+                Write-Log "Downloaded file size: $fileSizeGB GB"
 
                 if ($fileInfo.Length -lt 2GB) {
-                    Log-Message "File size too small, download may be corrupted" -Error
+                    Write-Log "File size too small, download may be corrupted" -Error
                     Remove-Item $Destination -Force
                     continue
                 }
 
-                if (-not (Verify-ISOChecksum -FilePath $Destination)) {
-                    Log-Message "Checksum verification failed, trying next mirror..." -Error
+                if (-not (Test-IsoChecksum -FilePath $Destination)) {
+                    Write-Log "Checksum verification failed, trying next mirror..." -Error
                     continue
                 }
 
@@ -1649,23 +1844,23 @@ function Download-LinuxISO {
             }
         }
         catch {
-            Log-Message "Download failed: $_" -Error
+            Write-Log "Download failed: $_" -Error
 
             if (Test-Path $Destination) {
                 try {
                     Remove-Item $Destination -Force -ErrorAction SilentlyContinue
-                    Log-Message "Removed incomplete download"
+                    Write-Log "Removed incomplete download"
                 } catch {}
             }
 
             if ($i -lt $mirrors.Count - 1) {
-                Log-Message "Trying next mirror..."
+                Write-Log "Trying next mirror..."
             }
         }
     }
 
     # All mirrors failed
-    Log-Message "All automatic download attempts failed" -Error
+    Write-Log "All automatic download attempts failed" -Error
 
     $response = [System.Windows.Forms.MessageBox]::Show(
         "Automatic download failed. Would you like to:`n`n" +
@@ -1680,9 +1875,9 @@ function Download-LinuxISO {
 
     if ($response -eq [System.Windows.Forms.DialogResult]::Yes) {
         Start-Process $distro.DownloadPage
-        Log-Message $distro.DownloadMsg
-        Log-Message $Destination
-        Log-Message "Then run the installer again"
+        Write-Log $distro.DownloadMsg
+        Write-Log $Destination
+        Write-Log "Then run the installer again"
     }
 
     return $false
@@ -1691,13 +1886,13 @@ function Download-LinuxISO {
 # ============================================================
 # rEFInd DOWNLOAD AND INSTALL
 # ============================================================
-function Download-Refind {
+function Save-Refind {
     $dest = Join-Path $env:TEMP $script:RefindFilename
     if (Test-Path $dest) {
-        Log-Message "Found cached rEFInd: $dest"
+        Write-Log "Found cached rEFInd: $dest"
         return $dest
     }
-    Log-Message "Downloading rEFInd boot manager..."
+    Write-Log "Downloading rEFInd boot manager..."
     Set-Status "Downloading rEFInd..."
     try {
         Add-Type -AssemblyName System.Net.Http
@@ -1742,7 +1937,7 @@ function Download-Refind {
             $httpClient.Dispose()
 
             $sizeMB = [math]::Round((Get-Item $dest).Length / 1MB, 1)
-            Log-Message "rEFInd downloaded: $sizeMB MB"
+            Write-Log "rEFInd downloaded: $sizeMB MB"
             Set-Status ""
             return $dest
         } else {
@@ -1750,7 +1945,7 @@ function Download-Refind {
         }
     }
     catch {
-        Log-Message "rEFInd download failed: $_" -Error
+        Write-Log "rEFInd download failed: $_" -Error
         if (Test-Path $dest) { Remove-Item $dest -Force }
         return $null
     }
@@ -1763,17 +1958,17 @@ function Install-Refind {
         [string]$DistroLabel
     )
 
-    Log-Message ""
-    Log-Message "== Installing rEFInd boot manager =="
+    Write-Log ""
+    Write-Log "== Installing rEFInd boot manager =="
 
-    $refindZip = Download-Refind
+    $refindZip = Save-Refind
     if (-not $refindZip) {
-        Log-Message "Cannot install rEFInd without the download." -Error
+        Write-Log "Cannot install rEFInd without the download." -Error
         return $false
     }
 
     # Extract rEFInd
-    Log-Message "Extracting rEFInd..."
+    Write-Log "Extracting rEFInd..."
     Set-Status "Extracting rEFInd..."
     $extractDir = Join-Path $env:TEMP "refind_extract"
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
@@ -1782,7 +1977,7 @@ function Install-Refind {
         Expand-Archive -Path $refindZip -DestinationPath $extractDir -Force
     }
     catch {
-        Log-Message "Failed to extract rEFInd: $_" -Error
+        Write-Log "Failed to extract rEFInd: $_" -Error
         return $false
     }
 
@@ -1791,16 +1986,16 @@ function Install-Refind {
     $efiBoot = Join-Path $refindDrive "EFI\BOOT"
     New-Item -Path $efiBoot -ItemType Directory -Force | Out-Null
 
-    Log-Message "Copying rEFInd files..."
+    Write-Log "Copying rEFInd files..."
     Set-Status "Installing rEFInd..."
 
     # Copy refind_x64.efi as default UEFI loader
     $srcEfi = Join-Path $refindSrc "refind_x64.efi"
     if (Test-Path $srcEfi) {
         Copy-Item $srcEfi (Join-Path $efiBoot "BOOTx64.EFI") -Force
-        Log-Message "  Copied refind_x64.efi as BOOTx64.EFI"
+        Write-Log "  Copied refind_x64.efi as BOOTx64.EFI"
     } else {
-        Log-Message "refind_x64.efi not found in extracted archive!" -Error
+        Write-Log "refind_x64.efi not found in extracted archive!" -Error
         return $false
     }
 
@@ -1812,7 +2007,7 @@ function Install-Refind {
         $src = Join-Path $driversSrc $drv
         if (Test-Path $src) {
             Copy-Item $src $driversDir -Force
-            Log-Message "  Copied driver: $drv"
+            Write-Log "  Copied driver: $drv"
         }
     }
 
@@ -1822,7 +2017,7 @@ function Install-Refind {
         $iconsDir = Join-Path $efiBoot "icons"
         New-Item -Path $iconsDir -ItemType Directory -Force | Out-Null
         robocopy $iconsSrc $iconsDir /E /R:2 /W:2 /NP /NFL /NDL | Out-Null
-        Log-Message "  Copied rEFInd icons."
+        Write-Log "  Copied rEFInd icons."
     }
 
     # Detect boot layout on LINUX_LIVE partition
@@ -1842,16 +2037,16 @@ function Install-Refind {
                     $s = $line.Trim()
                     if ($s -match "^(linux|linuxefi)\s") {
                         $parts = $s -split "\s+"
-                        $args = @()
+                        $extraKernelArgs = @()
                         for ($i = 2; $i -lt $parts.Count; $i++) {
                             $p = $parts[$i]
                             if ($p -match "^root=") { continue }
                             if ($p -match "CDLABEL=" -or $p -match "LABEL=") {
                                 $p = $p -replace "(CDLABEL=|LABEL=)\S+", '$1LINUX_LIVE'
                             }
-                            $args += $p
+                            $extraKernelArgs += $p
                         }
-                        $extraArgs = $args -join " "
+                        $extraArgs = $extraKernelArgs -join " "
                         break
                     }
                 }
@@ -1861,7 +2056,7 @@ function Install-Refind {
     }
 
     # Write refind.conf
-    Log-Message "Writing rEFInd configuration..."
+    Write-Log "Writing rEFInd configuration..."
     $conf = "# rEFInd configuration - generated by ULLI`n"
     $conf += "timeout 10`n"
     $conf += "use_graphics_for linux`n"
@@ -1907,13 +2102,13 @@ function Install-Refind {
     }
 
     Set-Content -Path (Join-Path $efiBoot "refind.conf") -Value $conf -Encoding UTF8 -Force
-    Log-Message "rEFInd configuration written."
+    Write-Log "rEFInd configuration written."
 
     # Clean up extract dir
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
 
-    Log-Message "rEFInd installed successfully."
-    Log-Message "  rEFInd partition: $refindDrive"
+    Write-Log "rEFInd installed successfully."
+    Write-Log "  rEFInd partition: $refindDrive"
     return $true
 }
 
@@ -1923,7 +2118,7 @@ function New-RefindPartition {
         [int64]$AfterOffset = 0
     )
 
-    Log-Message "Creating 100 MB rEFInd partition..."
+    Write-Log "Creating 100 MB rEFInd partition..."
     Set-Status "Creating rEFInd partition..."
 
     $refindSize = [int64]($script:RefindSizeMB * 1MB)
@@ -1970,15 +2165,15 @@ function New-RefindPartition {
             -Confirm:$false `
             -ErrorAction Stop | Out-Null
 
-        Log-Message "rEFInd partition created as ${refindDriveLetter}: (REFIND)"
+        Write-Log "rEFInd partition created as ${refindDriveLetter}: (REFIND)"
         return $refindDriveLetter
     }
     catch {
-        Log-Message "Failed to create rEFInd partition: $_" -Error
+        Write-Log "Failed to create rEFInd partition: $_" -Error
 
         # Fallback: try diskpart
         if ($alignedOffset -gt 0) {
-            Log-Message "Trying diskpart method for rEFInd partition..."
+            Write-Log "Trying diskpart method for rEFInd partition..."
             $offsetMB = [int64]([Math]::Floor($alignedOffset / 1MB))
             $sizeMB = $script:RefindSizeMB
 
@@ -2019,17 +2214,21 @@ exit
                             -NewFileSystemLabel "REFIND" `
                             -Confirm:$false `
                             -ErrorAction Stop | Out-Null
-                        Log-Message "rEFInd partition created via diskpart as ${refindDriveLetter}: (REFIND)"
+                        Write-Log "rEFInd partition created via diskpart as ${refindDriveLetter}: (REFIND)"
                         return $refindDriveLetter
                     }
                 }
             }
         }
 
-        Log-Message "All rEFInd partition creation methods failed" -Error
+        Write-Log "All rEFInd partition creation methods failed" -Error
         return $null
     }
 }
+
+# ─── 11. Install state ──────────────────────────────────────────────────────
+# START-INSTALLATION - top-level state machine
+# ────────────────────────────────────────────────────────────────────────────
 
 function Start-Installation {
     if ($script:IsRunning) {
@@ -2045,7 +2244,7 @@ function Start-Installation {
     $planResult = Show-DiskPlan -DistroName $distroName
 
     if (-not $planResult.Approved) {
-        Log-Message "Installation cancelled by user at disk plan review."
+        Write-Log "Installation cancelled by user at disk plan review."
         Set-Status "Ready to install"
         return
     }
@@ -2060,7 +2259,7 @@ function Start-Installation {
     $refindGB = if ($useRefind) { 0.1 } else { 0 }
     $totalNeededGB = $linuxSizeGB + $script:MinPartitionSizeGB + $refindGB
     $refindNote = if ($useRefind) { ", rEFInd: yes" } else { "" }
-    Log-Message "Disk plan approved. Strategy: $selectedStrategy, Target disk: $targetDiskNumber, Linux size: $linuxSizeGB GB$refindNote"
+    Write-Log "Disk plan approved. Strategy: $selectedStrategy, Target disk: $targetDiskNumber, Linux size: $linuxSizeGB GB$refindNote"
 
     # Now lock the UI and proceed
     $script:IsRunning = $true
@@ -2070,56 +2269,59 @@ function Start-Installation {
         # Determine ISO path
         if ($customRadio.Checked) {
             if (-not $script:CustomIsoPath -or -not (Test-Path $script:CustomIsoPath)) {
-                Log-Message "Error: Please select a valid ISO file!" -Error
+                Write-Log "Error: Please select a valid ISO file!" -Error
                 return
             }
             $script:IsoPath = $script:CustomIsoPath
-            Log-Message "Using custom ISO: $script:IsoPath"
+            Write-Log "Using custom ISO: $script:IsoPath"
             $isoInfo = Get-Item $script:IsoPath
-            Log-Message "ISO file size: $([math]::Round($isoInfo.Length / 1GB, 2)) GB"
+            Write-Log "ISO file size: $([math]::Round($isoInfo.Length / 1GB, 2)) GB"
         } else {
             $script:IsoPath = Join-Path $env:TEMP $distro.IsoFilename
-            Log-Message "Selected distribution: $distroName"
+            Write-Log "Selected distribution: $distroName"
         }
 
         # Check space (only if we're shrinking C:)
         if ($selectedStrategy -eq "shrink_all") {
-            if ($script:CDriveInfo.FreeGB -lt ($totalNeededGB + 10)) {
-                Log-Message "Error: Not enough free space on C: to shrink!" -Error
-                Log-Message "Need: $($totalNeededGB + 10) GB free on C:" -Error
-                Log-Message "Have: $($script:CDriveInfo.FreeGB) GB" -Error
+            $headroom = $script:Const.ShrinkAllCHeadroomGB
+            if ($script:CDriveInfo.FreeGB -lt ($totalNeededGB + $headroom)) {
+                Write-Log "Error: Not enough free space on C: to shrink!" -Error
+                Write-Log "Need: $($totalNeededGB + $headroom) GB free on C:" -Error
+                Write-Log "Have: $($script:CDriveInfo.FreeGB) GB" -Error
                 return
             }
         } elseif ($selectedStrategy -eq "use_free_boot") {
-            if ($script:CDriveInfo.FreeGB -lt ($linuxSizeGB + 10)) {
-                Log-Message "Error: Not enough free space on C: to shrink!" -Error
-                Log-Message "Need: $($linuxSizeGB + 10) GB free on C:" -Error
-                Log-Message "Have: $($script:CDriveInfo.FreeGB) GB" -Error
+            $headroom = $script:Const.UseFreeBootCHeadroomGB
+            if ($script:CDriveInfo.FreeGB -lt ($linuxSizeGB + $headroom)) {
+                Write-Log "Error: Not enough free space on C: to shrink!" -Error
+                Write-Log "Need: $($linuxSizeGB + $headroom) GB free on C:" -Error
+                Write-Log "Have: $($script:CDriveInfo.FreeGB) GB" -Error
                 return
             }
         } elseif ($selectedStrategy -eq "other_drive") {
             $otherDiskFreeGB = Get-DiskUnallocatedGB -DiskNumber $targetDiskNumber
-            $minNeededFreeGB = $script:MinPartitionSizeGB + $refindGB + 1
+            $minNeededFreeGB = $script:MinPartitionSizeGB + $refindGB + $script:Const.GapSlackGB
             if ($otherDiskFreeGB -lt $minNeededFreeGB) {
-                Log-Message "Error: Not enough unallocated space on Disk $targetDiskNumber!" -Error
-                Log-Message "Need: $minNeededFreeGB GB, Have: $otherDiskFreeGB GB" -Error
+                Write-Log "Error: Not enough unallocated space on Disk $targetDiskNumber!" -Error
+                Write-Log "Need: $minNeededFreeGB GB, Have: $otherDiskFreeGB GB" -Error
                 return
             }
         } elseif ($selectedStrategy -eq "other_drive_shrink") {
             if (-not $otherDriveShrinkLetter) {
-                Log-Message "Error: No partition selected to shrink on Disk $targetDiskNumber!" -Error
+                Write-Log "Error: No partition selected to shrink on Disk $targetDiskNumber!" -Error
                 return
             }
             try {
                 $shrinkVol = Get-Volume -DriveLetter $otherDriveShrinkLetter -ErrorAction Stop
                 $shrinkFreeGB = [math]::Round($shrinkVol.SizeRemaining / 1GB, 2)
-                if ($shrinkFreeGB -lt ($otherDriveShrinkAmountGB + 5)) {
-                    Log-Message "Error: Not enough free space on ${otherDriveShrinkLetter}: to shrink!" -Error
-                    Log-Message "Need: $($otherDriveShrinkAmountGB + 5) GB free, Have: $shrinkFreeGB GB" -Error
+                $headroom = $script:Const.OtherDriveShrinkHeadroomGB
+                if ($shrinkFreeGB -lt ($otherDriveShrinkAmountGB + $headroom)) {
+                    Write-Log "Error: Not enough free space on ${otherDriveShrinkLetter}: to shrink!" -Error
+                    Write-Log "Need: $($otherDriveShrinkAmountGB + $headroom) GB free, Have: $shrinkFreeGB GB" -Error
                     return
                 }
             } catch {
-                Log-Message "Error: Cannot access volume ${otherDriveShrinkLetter}: - $_" -Error
+                Write-Log "Error: Cannot access volume ${otherDriveShrinkLetter}: - $_" -Error
                 return
             }
         }
@@ -2127,41 +2329,41 @@ function Start-Installation {
         # Download ISO if needed
         if (-not $customRadio.Checked) {
             if (Test-Path $script:IsoPath) {
-                Log-Message "Found existing ISO at: $script:IsoPath"
+                Write-Log "Found existing ISO at: $script:IsoPath"
 
                 try {
                     $fileInfo = Get-Item $script:IsoPath
                     $fileSizeGB = [math]::Round($fileInfo.Length / 1GB, 2)
-                    Log-Message "Existing ISO size: $fileSizeGB GB"
+                    Write-Log "Existing ISO size: $fileSizeGB GB"
 
                     if ($fileInfo.Length -lt 2GB) {
-                        Log-Message "Existing ISO appears corrupted (too small)" -Error
-                        Log-Message "Deleting corrupted file..." -Error
+                        Write-Log "Existing ISO appears corrupted (too small)" -Error
+                        Write-Log "Deleting corrupted file..." -Error
                         Remove-Item $script:IsoPath -Force
 
                         Set-Status "Re-downloading $distroName ISO..."
-                        if (-not (Download-LinuxISO -Destination $script:IsoPath)) {
-                            Log-Message "Failed to download $distroName ISO!" -Error
+                        if (-not (Save-LinuxIso -Destination $script:IsoPath)) {
+                            Write-Log "Failed to download $distroName ISO!" -Error
                             return
                         }
                     } else {
-                        if (-not (Verify-ISOChecksum -FilePath $script:IsoPath)) {
-                            Log-Message "Existing ISO failed checksum verification" -Error
+                        if (-not (Test-IsoChecksum -FilePath $script:IsoPath)) {
+                            Write-Log "Existing ISO failed checksum verification" -Error
 
                             Set-Status "Re-downloading $distroName ISO..."
-                            if (-not (Download-LinuxISO -Destination $script:IsoPath)) {
-                                Log-Message "Failed to download $distroName ISO!" -Error
+                            if (-not (Save-LinuxIso -Destination $script:IsoPath)) {
+                                Write-Log "Failed to download $distroName ISO!" -Error
                                 return
                             }
                         } else {
                             if (-not $distro.IsHybrid) {
                                 try {
-                                    $testMount = Get-DiskImage -ImagePath $script:IsoPath -ErrorAction Stop
-                                    Log-Message "ISO mount test passed"
+                                    Get-DiskImage -ImagePath $script:IsoPath -ErrorAction Stop | Out-Null
+                                    Write-Log "ISO mount test passed"
                                 }
                                 catch {
-                                    Log-Message "Existing ISO appears corrupted (mount test failed)" -Error
-                                    Log-Message "Error: $_" -Error
+                                    Write-Log "Existing ISO appears corrupted (mount test failed)" -Error
+                                    Write-Log "Error: $_" -Error
 
                                     $response = [System.Windows.Forms.MessageBox]::Show(
                                         "The existing ISO file appears to be corrupted. Would you like to re-download it?",
@@ -2173,29 +2375,29 @@ function Start-Installation {
                                     if ($response -eq [System.Windows.Forms.DialogResult]::Yes) {
                                         Remove-Item $script:IsoPath -Force
                                         Set-Status "Re-downloading $distroName ISO..."
-                                        if (-not (Download-LinuxISO -Destination $script:IsoPath)) {
-                                            Log-Message "Failed to download $distroName ISO!" -Error
+                                        if (-not (Save-LinuxIso -Destination $script:IsoPath)) {
+                                            Write-Log "Failed to download $distroName ISO!" -Error
                                             return
                                         }
                                     } else {
-                                        Log-Message "Installation cancelled by user" -Error
+                                        Write-Log "Installation cancelled by user" -Error
                                         return
                                     }
                                 }
                             } else {
-                                Log-Message "ISO mount test skipped ($($distro.Keyword) hybrid ISO format)"
+                                Write-Log "ISO mount test skipped ($($distro.Keyword) hybrid ISO format)"
                             }
                         }
                     }
                 }
                 catch {
-                    Log-Message "Error checking existing ISO: $_" -Error
+                    Write-Log "Error checking existing ISO: $_" -Error
                     return
                 }
             } else {
                 Set-Status "Downloading $distroName ISO..."
-                if (-not (Download-LinuxISO -Destination $script:IsoPath)) {
-                    Log-Message "Failed to download $distroName ISO!" -Error
+                if (-not (Save-LinuxIso -Destination $script:IsoPath)) {
+                    Write-Log "Failed to download $distroName ISO!" -Error
                     return
                 }
             }
@@ -2217,25 +2419,25 @@ function Start-Installation {
                 return
             }
 
-            Log-Message ""
-            Log-Message "== Strategy: wipe & reformat entire disk =="
-            Log-Message "Target disk: Disk $targetDiskNumber"
+            Write-Log ""
+            Write-Log "== Strategy: wipe & reformat entire disk =="
+            Write-Log "Target disk: Disk $targetDiskNumber"
 
             if ($targetDiskNumber -eq $script:CDriveInfo.DiskNumber) {
-                Log-Message "REFUSING to wipe the disk containing Windows!" -Error
+                Write-Log "REFUSING to wipe the disk containing Windows!" -Error
                 return
             }
 
             Set-Status "Wiping disk $targetDiskNumber..."
-            Log-Message "Clearing all data from Disk $targetDiskNumber..."
+            Write-Log "Clearing all data from Disk $targetDiskNumber..."
 
             try {
                 Clear-Disk -Number $targetDiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction Stop
-                Log-Message "Disk cleared successfully."
+                Write-Log "Disk cleared successfully."
             }
             catch {
-                Log-Message "Clear-Disk failed: $_" -Error
-                Log-Message "Trying diskpart fallback..."
+                Write-Log "Clear-Disk failed: $_" -Error
+                Write-Log "Trying diskpart fallback..."
 
                 $diskpartScript = @"
 select disk $targetDiskNumber
@@ -2250,11 +2452,11 @@ exit
 
                 $resultString = $result -join "`n"
                 if ($resultString -notmatch "succeeded|successfully") {
-                    Log-Message "Diskpart wipe also failed!" -Error
-                    Log-Message $resultString -Error
+                    Write-Log "Diskpart wipe also failed!" -Error
+                    Write-Log $resultString -Error
                     return
                 }
-                Log-Message "Disk wiped via diskpart."
+                Write-Log "Disk wiped via diskpart."
             }
 
             Start-Sleep -Seconds 2
@@ -2263,16 +2465,16 @@ exit
                 $diskStatus = Get-Disk -Number $targetDiskNumber
                 if ($diskStatus.PartitionStyle -ne "GPT") {
                     Initialize-Disk -Number $targetDiskNumber -PartitionStyle GPT -ErrorAction Stop
-                    Log-Message "Disk initialized as GPT."
+                    Write-Log "Disk initialized as GPT."
                 }
             } catch {
-                Log-Message "Note: GPT initialization: $_"
+                Write-Log "Note: GPT initialization: $_"
             }
 
             Start-Sleep -Seconds 2
 
             # Create boot partition (7 GB)
-            Log-Message "Creating $($script:MinPartitionSizeGB) GB boot partition..."
+            Write-Log "Creating $($script:MinPartitionSizeGB) GB boot partition..."
             Set-Status "Creating boot partition..."
             try {
                 $bootPartition = New-Partition -DiskNumber $targetDiskNumber `
@@ -2300,12 +2502,12 @@ exit
                     -Confirm:$false `
                     -ErrorAction Stop
 
-                Log-Message "Boot partition created as ${driveLetter}: (LINUX_LIVE)"
+                Write-Log "Boot partition created as ${driveLetter}: (LINUX_LIVE)"
                 $script:NewDrive = "${driveLetter}:"
                 $script:VolumeLabel = "LINUX_LIVE"
             }
             catch {
-                Log-Message "Failed to create boot partition: $_" -Error
+                Write-Log "Failed to create boot partition: $_" -Error
                 return
             }
 
@@ -2317,7 +2519,7 @@ exit
                 $refindAfterOffset = $bootPartInfo.Offset + $bootPartInfo.Size
                 $script:RefindDriveLetter = New-RefindPartition -DiskNumber $targetDiskNumber -AfterOffset $refindAfterOffset
                 if (-not $script:RefindDriveLetter) {
-                    Log-Message "Warning: rEFInd partition creation failed. Continuing without rEFInd." -Error
+                    Write-Log "Warning: rEFInd partition creation failed. Continuing without rEFInd." -Error
                     $useRefind = $false
                 }
             }
@@ -2329,14 +2531,14 @@ exit
             foreach ($p in $partsAfter) { $usedBytes += $p.Size }
             $unallocGB = [math]::Round(($diskAfter.Size - $usedBytes) / 1GB, 1)
 
-            Log-Message ""
-            Log-Message "Disk $targetDiskNumber wiped and reformatted successfully:"
-            Log-Message "  Partition 1: LINUX_LIVE ($($script:MinPartitionSizeGB) GB, ${driveLetter}:)"
+            Write-Log ""
+            Write-Log "Disk $targetDiskNumber wiped and reformatted successfully:"
+            Write-Log "  Partition 1: LINUX_LIVE ($($script:MinPartitionSizeGB) GB, ${driveLetter}:)"
             if ($useRefind -and $script:RefindDriveLetter) {
-                Log-Message "  Partition 2: REFIND ($($script:RefindSizeMB) MB, $($script:RefindDriveLetter):)"
+                Write-Log "  Partition 2: REFIND ($($script:RefindSizeMB) MB, $($script:RefindDriveLetter):)"
             }
-            Log-Message "  Unallocated: ~$unallocGB GB (for Linux installer)"
-            Log-Message ""
+            Write-Log "  Unallocated: ~$unallocGB GB (for Linux installer)"
+            Write-Log ""
         }
         # ── Shrink/free-space strategies ──────────────────────────────────────
         elseif ($selectedStrategy -eq "other_drive_shrink") {
@@ -2355,10 +2557,10 @@ exit
             }
 
             Set-Status "Shrinking ${otherDriveShrinkLetter}: partition on Disk $targetDiskNumber..."
-            Log-Message "Shrinking ${otherDriveShrinkLetter}: partition by $otherDriveShrinkAmountGB GB..."
-            Log-Message "This will create space for Linux: $linuxSizeGB GB and boot partition: $($script:MinPartitionSizeGB) GB..."
+            Write-Log "Shrinking ${otherDriveShrinkLetter}: partition by $otherDriveShrinkAmountGB GB..."
+            Write-Log "This will create space for Linux: $linuxSizeGB GB and boot partition: $($script:MinPartitionSizeGB) GB..."
 
-            if (-not (Shrink-Partition -DriveLetter $otherDriveShrinkLetter -ShrinkAmountGB $otherDriveShrinkAmountGB)) {
+            if (-not (Invoke-PartitionShrink -DriveLetter $otherDriveShrinkLetter -ShrinkAmountGB $otherDriveShrinkAmountGB)) {
                 return
             }
 
@@ -2381,33 +2583,33 @@ exit
             $shrinkAmountGB = if ($selectedStrategy -eq "use_free_boot") { $linuxSizeGB } else { $totalNeededGB }
 
             Set-Status "Shrinking C: partition..."
-            Log-Message "Shrinking C: partition by $shrinkAmountGB GB..."
+            Write-Log "Shrinking C: partition by $shrinkAmountGB GB..."
 
             if ($selectedStrategy -eq "shrink_all") {
                 $bootSizeGB = $script:MinPartitionSizeGB
-                Log-Message "This will create space for Linux: $linuxSizeGB GB and boot partition: $bootSizeGB GB..."
+                Write-Log "This will create space for Linux: $linuxSizeGB GB and boot partition: $bootSizeGB GB..."
             } else {
-                Log-Message "This will create $linuxSizeGB GB of space for Linux installation..."
-                Log-Message "The 7 GB boot partition will use existing unallocated space."
+                Write-Log "This will create $linuxSizeGB GB of space for Linux installation..."
+                Write-Log "The 7 GB boot partition will use existing unallocated space."
             }
 
-            if (-not (Shrink-Partition -DriveLetter 'C' -ShrinkAmountGB $shrinkAmountGB)) {
+            if (-not (Invoke-PartitionShrink -DriveLetter 'C' -ShrinkAmountGB $shrinkAmountGB)) {
                 return
             }
 
             Start-Sleep -Seconds 5
         } else {
             if ($isOtherDrive) {
-                Log-Message "Skipping C: partition shrink - installing to a separate disk (Disk $targetDiskNumber)."
+                Write-Log "Skipping C: partition shrink - installing to a separate disk (Disk $targetDiskNumber)."
             } else {
-                Log-Message "Skipping C: partition shrink - using existing unallocated space."
+                Write-Log "Skipping C: partition shrink - using existing unallocated space."
             }
         }
 
         # Create boot partition (skip for wipe_disk -- already created above)
         if ($selectedStrategy -ne "wipe_disk") {
         Set-Status "Creating boot partition..."
-        Log-Message "Creating $script:MinPartitionSizeGB GB boot partition on Disk $targetDiskNumber..."
+        Write-Log "Creating $script:MinPartitionSizeGB GB boot partition on Disk $targetDiskNumber..."
 
         try {
             Start-Sleep -Seconds 2
@@ -2461,11 +2663,11 @@ exit
             $bufferSize = [int64](16MB) + $refindReserve
             $minGapRequired = $bootPartitionSize + $bufferSize + $alignmentSize
 
-            Log-Message "Scanning disk for unallocated gaps..."
+            Write-Log "Scanning disk for unallocated gaps..."
             foreach ($gap in $gaps) {
                 $gapGB = [math]::Round($gap.Size / 1GB, 2)
                 $gapStartGB = [math]::Round($gap.Start / 1GB, 2)
-                Log-Message "  Gap at $gapStartGB GB: $gapGB GB"
+                Write-Log "  Gap at $gapStartGB GB: $gapGB GB"
             }
 
             $usableGaps = $gaps | Where-Object { $_.Size -ge $minGapRequired }
@@ -2483,7 +2685,7 @@ exit
 
             $chosenGapGB = [math]::Round($chosenGap.Size / 1GB, 2)
             $chosenStartGB = [math]::Round($chosenGap.Start / 1GB, 2)
-            Log-Message "Selected gap for boot partition: $chosenGapGB GB starting at $chosenStartGB GB"
+            Write-Log "Selected gap for boot partition: $chosenGapGB GB starting at $chosenStartGB GB"
 
             $bootPartitionEndOffset = $chosenGap.End - $bufferSize
             $bootPartitionOffset = $bootPartitionEndOffset - $bootPartitionSize
@@ -2496,12 +2698,12 @@ exit
             $linuxSpace = $bootPartitionOffset - $chosenGap.Start
             $linuxSpaceGB = [math]::Round($linuxSpace / 1GB, 2)
 
-            Log-Message "Unallocated space starts at: $chosenStartGB GB"
-            Log-Message "Boot partition will start at: $([math]::Round($bootPartitionOffset / 1GB, 2)) GB"
-            Log-Message "Gap ends at: $([math]::Round($chosenGap.End / 1GB, 2)) GB"
-            Log-Message "Linux will have $linuxSpaceGB GB of unallocated space"
+            Write-Log "Unallocated space starts at: $chosenStartGB GB"
+            Write-Log "Boot partition will start at: $([math]::Round($bootPartitionOffset / 1GB, 2)) GB"
+            Write-Log "Gap ends at: $([math]::Round($chosenGap.End / 1GB, 2)) GB"
+            Write-Log "Linux will have $linuxSpaceGB GB of unallocated space"
 
-            Log-Message "Creating boot partition..."
+            Write-Log "Creating boot partition..."
 
             $bootPartitionSize = [int64]($script:MinPartitionSizeGB * 1GB)
             $offsetMB = [int64]([Math]::Floor($bootPartitionOffset / 1MB))
@@ -2511,13 +2713,13 @@ exit
                 throw "Invalid offset calculated: $offsetMB MB (from $bootPartitionOffset bytes)"
             }
 
-            Log-Message "Attempting to create partition at offset: $([math]::Round($bootPartitionOffset / 1GB, 2)) GB - $offsetMB MB"
+            Write-Log "Attempting to create partition at offset: $([math]::Round($bootPartitionOffset / 1GB, 2)) GB - $offsetMB MB"
 
             $partitionCreated = $false
             $newPartition = $null
 
             try {
-                Log-Message "Attempting PowerShell method with specific offset..."
+                Write-Log "Attempting PowerShell method with specific offset..."
                 $newPartition = New-Partition -DiskNumber $targetDiskNumber `
                     -Offset $bootPartitionOffset `
                     -Size $bootPartitionSize `
@@ -2526,11 +2728,11 @@ exit
 
                 $partitionCreated = $true
                 $driveLetter = $newPartition.DriveLetter
-                Log-Message "Success! Partition created using PowerShell method"
+                Write-Log "Success! Partition created using PowerShell method"
             }
             catch {
-                Log-Message "PowerShell method failed: $_"
-                Log-Message "Trying diskpart method..."
+                Write-Log "PowerShell method failed: $_"
+                Write-Log "Trying diskpart method..."
 
                 $attempts = @(
                     @{Offset = $offsetMB; Description = "Calculated position"},
@@ -2542,8 +2744,8 @@ exit
                 $attempts = $attempts | Where-Object { $_.Offset -gt 0 }
 
                 foreach ($attempt in $attempts) {
-                    Log-Message "Attempt: $($attempt.Description)"
-                    Log-Message "Trying offset: $([math]::Round($attempt.Offset * 1MB / 1GB, 2)) GB"
+                    Write-Log "Attempt: $($attempt.Description)"
+                    Write-Log "Trying offset: $([math]::Round($attempt.Offset * 1MB / 1GB, 2)) GB"
 
                     $diskpartScript = @"
 select disk $targetDiskNumber
@@ -2560,21 +2762,21 @@ exit
                     $resultString = $result -join "`n"
 
                     if ($resultString -match "successfully created" -or $resultString -match "DiskPart successfully created") {
-                        Log-Message "Success! Boot partition created at offset $([math]::Round($attempt.Offset * 1MB / 1GB, 2)) GB"
+                        Write-Log "Success! Boot partition created at offset $([math]::Round($attempt.Offset * 1MB / 1GB, 2)) GB"
                         $partitionCreated = $true
                         break
                     } else {
                         if ($resultString -match "not enough usable space") {
-                            Log-Message "Not enough space at this offset, trying next position..."
+                            Write-Log "Not enough space at this offset, trying next position..."
                         } else {
-                            Log-Message "Failed with error: $($resultString | Select-String -Pattern 'error' -SimpleMatch)"
+                            Write-Log "Failed with error: $($resultString | Select-String -Pattern 'error' -SimpleMatch)"
                         }
                     }
                 }
             }
 
             if (-not $partitionCreated -and -not $isOtherDrive) {
-                Log-Message "Offset-based creation failed. Trying alternative approach..."
+                Write-Log "Offset-based creation failed. Trying alternative approach..."
 
                 $currentPartitions = Get-Partition -DiskNumber $targetDiskNumber | Sort-Object Offset
                 $cPartition = $currentPartitions | Where-Object { $_.DriveLetter -eq 'C' }
@@ -2587,33 +2789,33 @@ exit
                 if ($recoveryPartition) {
                     $gapSize = $recoveryPartition.Offset - $cEndOffset
                     $gapSizeGB = [math]::Round($gapSize / 1GB, 2)
-                    Log-Message "Gap between C: and Recovery: $gapSizeGB GB"
+                    Write-Log "Gap between C: and Recovery: $gapSizeGB GB"
 
                     $fillerSize = [int64]($gapSize - ($script:MinPartitionSizeGB * 1GB) - (1GB))
                     $fillerSizeGB = [math]::Round($fillerSize / 1GB, 2)
 
                     if ($fillerSize -gt 0) {
-                        Log-Message "Attempting workaround: Creating filler partition of $fillerSizeGB GB"
+                        Write-Log "Attempting workaround: Creating filler partition of $fillerSizeGB GB"
 
                         try {
                             $fillerPartition = New-Partition -DiskNumber $targetDiskNumber `
                                 -Size $fillerSize `
                                 -ErrorAction Stop
 
-                            Log-Message "Filler partition created. Now creating boot partition..."
+                            Write-Log "Filler partition created. Now creating boot partition..."
 
                             $bootPartition = New-Partition -DiskNumber $targetDiskNumber `
                                 -Size ($script:MinPartitionSizeGB * 1GB) `
                                 -AssignDriveLetter `
                                 -ErrorAction Stop
 
-                            Log-Message "Removing filler partition..."
+                            Write-Log "Removing filler partition..."
                             Remove-Partition -DiskNumber $targetDiskNumber `
                                 -PartitionNumber $fillerPartition.PartitionNumber `
                                 -Confirm:$false `
                                 -ErrorAction Stop
 
-                            Log-Message "Filler partition removed. Boot partition should now be at end."
+                            Write-Log "Filler partition removed. Boot partition should now be at end."
                             $partitionCreated = $true
                             $newPartition = $bootPartition
                             $driveLetter = $bootPartition.DriveLetter
@@ -2625,14 +2827,14 @@ exit
                             }
                         }
                         catch {
-                            Log-Message "Workaround failed: $_" -Error
+                            Write-Log "Workaround failed: $_" -Error
                         }
                     }
                 }
             }
 
             if (-not $partitionCreated) {
-                Log-Message "All offset methods failed. Creating partition without specific offset..."
+                Write-Log "All offset methods failed. Creating partition without specific offset..."
                 try {
                     $newPartition = New-Partition -DiskNumber $targetDiskNumber `
                         -Size ($script:MinPartitionSizeGB * 1GB) `
@@ -2641,7 +2843,7 @@ exit
 
                     $driveLetter = $newPartition.DriveLetter
                     $partitionCreated = $true
-                    Log-Message "Boot partition created using standard method"
+                    Write-Log "Boot partition created using standard method"
                 }
                 catch {
                     throw "All partition creation methods failed: $_"
@@ -2677,7 +2879,7 @@ exit
                 throw "Failed to get drive letter for boot partition"
             }
 
-            Log-Message "Formatting boot partition as FAT32..."
+            Write-Log "Formatting boot partition as FAT32..."
 
             $volumeLabel = "LINUX_LIVE"
 
@@ -2687,12 +2889,12 @@ exit
                 -Confirm:$false `
                 -ErrorAction Stop
 
-            Log-Message "Boot partition created and assigned to ${driveLetter}:"
+            Write-Log "Boot partition created and assigned to ${driveLetter}:"
             $script:NewDrive = "${driveLetter}:"
             $script:VolumeLabel = $volumeLabel
 
-            Log-Message ""
-            Log-Message "=== Final Disk Layout (Disk $targetDiskNumber) ==="
+            Write-Log ""
+            Write-Log "=== Final Disk Layout (Disk $targetDiskNumber) ==="
             $finalPartitions = Get-Partition -DiskNumber $targetDiskNumber | Sort-Object Offset
 
             $previousEnd = [int64]0
@@ -2704,7 +2906,7 @@ exit
                 if ($part.Offset -gt ($previousEnd + 1MB)) {
                     $gapSize = [math]::Round(($part.Offset - $previousEnd) / 1GB, 2)
                     if ($gapSize -gt 0.1) {
-                        Log-Message "[Unallocated: $gapSize GB]"
+                        Write-Log "[Unallocated: $gapSize GB]"
                     }
                 }
 
@@ -2713,7 +2915,7 @@ exit
                         elseif ($part.IsSystem) { "(System)" }
                         else { "(No letter)" }
 
-                Log-Message "Partition $($part.PartitionNumber): $label - Size: $sizeGB GB - Location: $offsetGB-$endGB GB"
+                Write-Log "Partition $($part.PartitionNumber): $label - Size: $sizeGB GB - Location: $offsetGB-$endGB GB"
 
                 $previousEnd = [int64]($part.Offset + $part.Size)
             }
@@ -2721,12 +2923,12 @@ exit
             if ($disk.Size -gt ($previousEnd + 1MB)) {
                 $trailingGap = [math]::Round(($disk.Size - $previousEnd) / 1GB, 2)
                 if ($trailingGap -gt 0.1) {
-                    Log-Message "[Unallocated: $trailingGap GB]"
+                    Write-Log "[Unallocated: $trailingGap GB]"
                 }
             }
 
-            Log-Message ""
-            Log-Message "Boot partition successfully created!"
+            Write-Log ""
+            Write-Log "Boot partition successfully created!"
 
             # Create rEFInd partition if enabled (non-wipe strategies)
             if ($useRefind) {
@@ -2736,31 +2938,31 @@ exit
                     $refindAfterOffset = $bootPartInfo.Offset + $bootPartInfo.Size
                     $script:RefindDriveLetter = New-RefindPartition -DiskNumber $targetDiskNumber -AfterOffset $refindAfterOffset
                     if (-not $script:RefindDriveLetter) {
-                        Log-Message "Warning: rEFInd partition creation failed. Continuing without rEFInd." -Error
+                        Write-Log "Warning: rEFInd partition creation failed. Continuing without rEFInd." -Error
                         $useRefind = $false
                     }
                 } else {
-                    Log-Message "Warning: Could not find boot partition to place rEFInd after." -Error
+                    Write-Log "Warning: Could not find boot partition to place rEFInd after." -Error
                     $useRefind = $false
                 }
             }
 
-            Log-Message "Linux can use the unallocated space for installation"
+            Write-Log "Linux can use the unallocated space for installation"
 
         }
         catch {
-            Log-Message "Failed to create boot partition: $_" -Error
+            Write-Log "Failed to create boot partition: $_" -Error
             return
         }
         } # end if ($selectedStrategy -ne "wipe_disk")
 
         # Mount ISO
         Set-Status "Mounting ISO..."
-        Log-Message "Mounting ISO..."
+        Write-Log "Mounting ISO..."
 
         try {
             if (-not (Test-Path $script:IsoPath)) {
-                Log-Message "ISO file not found at: $script:IsoPath" -Error
+                Write-Log "ISO file not found at: $script:IsoPath" -Error
                 return
             }
 
@@ -2770,19 +2972,19 @@ exit
             $isoVolume = Get-Volume -DiskImage $mountResult -ErrorAction Stop | Select-Object -First 1
 
             if (-not $isoVolume) {
-                Log-Message "Failed to get volume information from mounted ISO" -Error
+                Write-Log "Failed to get volume information from mounted ISO" -Error
                 Dismount-DiskImage -ImagePath $script:IsoPath -ErrorAction SilentlyContinue
                 return
             }
 
             $sourceDrive = "$($isoVolume.DriveLetter):"
-            Log-Message "ISO mounted at $sourceDrive"
+            Write-Log "ISO mounted at $sourceDrive"
 
             if (-not $customRadio.Checked) {
                 $validationFile = "$sourceDrive\$($distro.ValidationFile)"
 
                 if (-not (Test-Path $validationFile)) {
-                    Log-Message "Warning: ISO may not be a valid $distroName image (missing expected files)" -Error
+                    Write-Log "Warning: ISO may not be a valid $distroName image (missing expected files)" -Error
 
                     $response = [System.Windows.Forms.MessageBox]::Show(
                         "The ISO doesn't appear to be a valid $distroName image. Continue anyway?",
@@ -2797,11 +2999,11 @@ exit
                     }
                 }
             } else {
-                Log-Message "Custom ISO mounted. Skipping validation."
+                Write-Log "Custom ISO mounted. Skipping validation."
             }
         }
         catch {
-            Log-Message "Failed to mount ISO: $_" -Error
+            Write-Log "Failed to mount ISO: $_" -Error
 
             $response = [System.Windows.Forms.MessageBox]::Show(
                 "Failed to mount the ISO file. It may be corrupted. Would you like to delete it and re-download?",
@@ -2813,15 +3015,15 @@ exit
             if ($response -eq [System.Windows.Forms.DialogResult]::Yes -and -not $customRadio.Checked) {
                 try {
                     Remove-Item $script:IsoPath -Force
-                    Log-Message "Deleted corrupted ISO"
+                    Write-Log "Deleted corrupted ISO"
 
                     Set-Status "Re-downloading $distroName ISO..."
-                    if (Download-LinuxISO -Destination $script:IsoPath) {
+                    if (Save-LinuxIso -Destination $script:IsoPath) {
                         Start-Installation
                         return
                     }
                 } catch {
-                    Log-Message "Error handling corrupted ISO: $_" -Error
+                    Write-Log "Error handling corrupted ISO: $_" -Error
                 }
             }
             return
@@ -2829,8 +3031,8 @@ exit
 
         # Copy files
         Set-Status "Copying files..."
-        Log-Message "Copying $distroName files to $script:NewDrive..."
-        Log-Message "This may take 10-20 minutes..."
+        Write-Log "Copying $distroName files to $script:NewDrive..."
+        Write-Log "This may take 10-20 minutes..."
 
         try {
             $robocopyArgs = @(
@@ -2848,13 +3050,13 @@ exit
             $result = robocopy @robocopyArgs
 
             if ($LASTEXITCODE -ge 8) {
-                Log-Message "Failed to copy files! Exit code: $LASTEXITCODE" -Error
+                Write-Log "Failed to copy files! Exit code: $LASTEXITCODE" -Error
                 return
             }
 
-            Log-Message "Files copied successfully!"
+            Write-Log "Files copied successfully!"
 
-            Log-Message "Removing read-only attributes..."
+            Write-Log "Removing read-only attributes..."
             Set-Status "Removing read-only attributes..."
             try {
                 Get-ChildItem -Path $script:NewDrive -Recurse -Force -ErrorAction SilentlyContinue |
@@ -2863,11 +3065,11 @@ exit
                         $_.Attributes = $_.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
                     }
             } catch {
-                Log-Message "Warning: Could not remove all read-only attributes: $_" -Error
+                Write-Log "Warning: Could not remove all read-only attributes: $_" -Error
             }
         }
         catch {
-            Log-Message "Error during file copy: $_" -Error
+            Write-Log "Error during file copy: $_" -Error
             return
         }
         finally {
@@ -2877,7 +3079,7 @@ exit
         # Fedora-specific: fix volume label in GRUB and isolinux configs
         if ($distro.Keyword -eq "Fedora") {
             Set-Status "Fixing Fedora boot labels..."
-            Log-Message "Fixing Fedora volume label references in boot configs..."
+            Write-Log "Fixing Fedora volume label references in boot configs..."
 
             $fedoraLabel = $script:VolumeLabel
 
@@ -2899,7 +3101,7 @@ exit
             }
 
             if ($bootConfigFiles.Count -eq 0) {
-                Log-Message "Warning: No boot config files found to patch" -Error
+                Write-Log "Warning: No boot config files found to patch" -Error
             } else {
                 $patchedCount = 0
                 foreach ($cfgFile in $bootConfigFiles) {
@@ -2913,22 +3115,22 @@ exit
 
                         if ($content -ne $originalContent) {
                             Set-Content -Path $cfgFile -Value $content -Encoding UTF8 -Force
-                            Log-Message "  Patched: $(Split-Path -Leaf $cfgFile)"
+                            Write-Log "  Patched: $(Split-Path -Leaf $cfgFile)"
                             $patchedCount++
                         } else {
-                            Log-Message "  No label references in: $(Split-Path -Leaf $cfgFile)"
+                            Write-Log "  No label references in: $(Split-Path -Leaf $cfgFile)"
                         }
                     }
                     catch {
-                        Log-Message "  Warning: Could not patch $($cfgFile): $_" -Error
+                        Write-Log "  Warning: Could not patch $($cfgFile): $_" -Error
                     }
                 }
 
                 if ($patchedCount -gt 0) {
-                    Log-Message "Patched $patchedCount boot config file(s) with label '$fedoraLabel'"
+                    Write-Log "Patched $patchedCount boot config file(s) with label '$fedoraLabel'"
                 } else {
-                    Log-Message "Warning: No LABEL references found to patch. Fedora may not boot correctly." -Error
-                    Log-Message "You may need to manually edit EFI\BOOT\grub.cfg and replace the LABEL= value with '$fedoraLabel'" -Error
+                    Write-Log "Warning: No LABEL references found to patch. Fedora may not boot correctly." -Error
+                    Write-Log "You may need to manually edit EFI\BOOT\grub.cfg and replace the LABEL= value with '$fedoraLabel'" -Error
                 }
             }
         }
@@ -2936,7 +3138,7 @@ exit
         # CachyOS/Arch-specific: fix archisolabel in GRUB, syslinux, and loader configs
         if ($distro.Keyword -eq "CachyOS") {
             Set-Status "Fixing CachyOS boot labels..."
-            Log-Message "Fixing CachyOS volume label references in boot configs..."
+            Write-Log "Fixing CachyOS volume label references in boot configs..."
 
             $cachyLabel = $script:VolumeLabel
 
@@ -2967,7 +3169,7 @@ exit
             }
 
             if ($bootConfigFiles.Count -eq 0) {
-                Log-Message "Warning: No boot config files found to patch" -Error
+                Write-Log "Warning: No boot config files found to patch" -Error
             } else {
                 $patchedCount = 0
                 foreach ($cfgFile in $bootConfigFiles) {
@@ -2986,22 +3188,22 @@ exit
 
                         if ($content -ne $originalContent) {
                             Set-Content -Path $cfgFile -Value $content -Encoding UTF8 -Force
-                            Log-Message "  Patched: $(Split-Path -Leaf $cfgFile)"
+                            Write-Log "  Patched: $(Split-Path -Leaf $cfgFile)"
                             $patchedCount++
                         } else {
-                            Log-Message "  No label references in: $(Split-Path -Leaf $cfgFile)"
+                            Write-Log "  No label references in: $(Split-Path -Leaf $cfgFile)"
                         }
                     }
                     catch {
-                        Log-Message "  Warning: Could not patch $($cfgFile): $_" -Error
+                        Write-Log "  Warning: Could not patch $($cfgFile): $_" -Error
                     }
                 }
 
                 if ($patchedCount -gt 0) {
-                    Log-Message "Patched $patchedCount boot config file(s) with label '$cachyLabel'"
+                    Write-Log "Patched $patchedCount boot config file(s) with label '$cachyLabel'"
                 } else {
-                    Log-Message "Warning: No archisolabel references found to patch. CachyOS may not boot correctly." -Error
-                    Log-Message "You may need to manually edit the boot config files and replace archisolabel= with '$cachyLabel'" -Error
+                    Write-Log "Warning: No archisolabel references found to patch. CachyOS may not boot correctly." -Error
+                    Write-Log "You may need to manually edit the boot config files and replace archisolabel= with '$cachyLabel'" -Error
                 }
             }
         }
@@ -3014,14 +3216,14 @@ exit
                 -BootDriveLetter $bootDriveLetter `
                 -DistroLabel $distroName
             if (-not $refindInstalled) {
-                Log-Message "Warning: rEFInd installation failed. Falling back to direct boot." -Error
+                Write-Log "Warning: rEFInd installation failed. Falling back to direct boot." -Error
                 $useRefind = $false
             }
         }
 
         # Create boot configuration
         Set-Status "Creating boot configuration..."
-        Log-Message "Creating boot configuration..."
+        Write-Log "Creating boot configuration..."
 
         $efiPath = $script:NewDrive + "\EFI\BOOT"
         if (-not (Test-Path $efiPath)) {
@@ -3033,7 +3235,7 @@ exit
         $script:WipeBootInstalled = $false
         if ($selectedStrategy -eq "wipe_disk" -and -not ($useRefind -and $script:RefindDriveLetter)) {
             try {
-                Log-Message "Installing bootloader into Windows ESP..."
+                Write-Log "Installing bootloader into Windows ESP..."
                 Set-Status "Installing bootloader into Windows ESP..."
 
                 $winEspPart = Get-Partition -DiskNumber $script:CDriveInfo.DiskNumber |
@@ -3059,7 +3261,7 @@ exit
                 }
 
                 $winEspDrive = "${winEspLetter}:"
-                Log-Message "Windows ESP mounted at $winEspDrive"
+                Write-Log "Windows ESP mounted at $winEspDrive"
 
                 $safeName = ($distroName -replace '[^a-zA-Z0-9]', '').Trim()
                 if (-not $safeName) { $safeName = "Linux" }
@@ -3070,7 +3272,7 @@ exit
                 $sourceEfi = $script:NewDrive + "\EFI\BOOT"
                 if (Test-Path $sourceEfi) {
                     robocopy $sourceEfi $distroEspDir /E /R:2 /W:2 /NP /NFL /NDL | Out-Null
-                    Log-Message "EFI\BOOT directory copied to $distroEspDir"
+                    Write-Log "EFI\BOOT directory copied to $distroEspDir"
                 } else {
                     throw "No EFI\BOOT directory found on $($script:NewDrive)"
                 }
@@ -3081,12 +3283,12 @@ exit
                         $dstGrub = Join-Path $distroEspDir $grubDir
                         New-Item -Path $dstGrub -ItemType Directory -Force | Out-Null
                         robocopy $srcGrub $dstGrub /E /R:2 /W:2 /NP /NFL /NDL | Out-Null
-                        Log-Message "Copied $grubDir to ESP"
+                        Write-Log "Copied $grubDir to ESP"
                     }
                 }
 
                 $liveLabel = $script:VolumeLabel
-                Log-Message "Patching boot configs in ESP to use label '$liveLabel'..."
+                Write-Log "Patching boot configs in ESP to use label '$liveLabel'..."
 
                 $cfgFiles = Get-ChildItem -Path $distroEspDir -Recurse -Include "*.cfg","*.conf" -ErrorAction SilentlyContinue
                 $patchedCount = 0
@@ -3110,10 +3312,10 @@ exit
                             $patchedCount++
                         }
                     } catch {
-                        Log-Message "  Warning: Could not patch $($cfgFile.Name): $_" -Error
+                        Write-Log "  Warning: Could not patch $($cfgFile.Name): $_" -Error
                     }
                 }
-                Log-Message "Patched $patchedCount config file(s) in ESP"
+                Write-Log "Patched $patchedCount config file(s) in ESP"
 
                 $script:WipeEfiName = "BOOTx64.EFI"
                 foreach ($candidate in @("shimx64.efi", "grubx64.efi")) {
@@ -3122,7 +3324,7 @@ exit
                         break
                     }
                 }
-                Log-Message "Boot binary: $($script:WipeEfiName)"
+                Write-Log "Boot binary: $($script:WipeEfiName)"
 
                 $script:WipeWinEspDrive = $winEspDrive
                 $script:WipeBootInstalled = $true
@@ -3135,30 +3337,30 @@ exit
                     $script:WipeEspRemoveLetter = $false
                 }
 
-                Log-Message "Bootloader installed to Windows ESP at $($script:WipeEspDistroDir)"
+                Write-Log "Bootloader installed to Windows ESP at $($script:WipeEspDistroDir)"
             } catch {
-                Log-Message "Failed to install bootloader to Windows ESP: $_" -Error
-                Log-Message "You may need to configure boot manually in UEFI/BIOS settings" -Error
+                Write-Log "Failed to install bootloader to Windows ESP: $_" -Error
+                Write-Log "You may need to configure boot manually in UEFI/BIOS settings" -Error
             }
         }
 
         if ($autoRestartCheck.Checked) {
-            Log-Message "Configuring UEFI boot priority..."
+            Write-Log "Configuring UEFI boot priority..."
             Set-Status "Configuring UEFI boot priority..."
 
             try {
                 if ($useRefind -and $script:RefindDriveLetter) {
                     # rEFInd boot entry - point to the rEFInd partition
-                    Log-Message "Creating UEFI boot entry for rEFInd..."
+                    Write-Log "Creating UEFI boot entry for rEFInd..."
                     $refindDrive = "$($script:RefindDriveLetter):"
                     $bootCreated = New-UefiBootEntry -DistroName "rEFInd - ULLI" `
                         -DevicePartition $refindDrive -EfiPath "\EFI\BOOT\BOOTx64.EFI"
 
                     if ($bootCreated) {
-                        Log-Message "rEFInd UEFI boot entry created and set as default!"
+                        Write-Log "rEFInd UEFI boot entry created and set as default!"
                     } else {
-                        Log-Message "Could not create rEFInd boot entry automatically" -Error
-                        Log-Message "You will need to select 'rEFInd - ULLI' manually in UEFI/BIOS boot menu" -Error
+                        Write-Log "Could not create rEFInd boot entry automatically" -Error
+                        Write-Log "You will need to select 'rEFInd - ULLI' manually in UEFI/BIOS boot menu" -Error
                     }
                 } else {
                     # Standard boot entry (no rEFInd)
@@ -3190,9 +3392,9 @@ exit
                         $bootEntries += $currentEntry
                     }
 
-                    Log-Message "Found $($bootEntries.Count) firmware boot entries:"
+                    Write-Log "Found $($bootEntries.Count) firmware boot entries:"
                     foreach ($entry in $bootEntries) {
-                        Log-Message "  $($entry.Description) [$($entry.ID)]"
+                        Write-Log "  $($entry.Description) [$($entry.ID)]"
                     }
 
                     $distroKeyword = $distro.Keyword
@@ -3201,35 +3403,35 @@ exit
 
                     $targetEntry = $bootEntries | Where-Object { $_.Description -like "*$distroKeyword*" } | Select-Object -First 1
                     if ($targetEntry) {
-                        Log-Message "Found existing boot entry for '$distroKeyword'"
+                        Write-Log "Found existing boot entry for '$distroKeyword'"
                     }
 
                     if (-not $targetEntry) {
                         $targetEntry = $bootEntries | Where-Object { $_.Description -like '*UEFI OS*' } | Select-Object -First 1
                         if ($targetEntry) {
-                            Log-Message "Found generic 'UEFI OS' boot entry"
+                            Write-Log "Found generic 'UEFI OS' boot entry"
                         }
                     }
 
                     if ($targetEntry) {
-                        Log-Message "Setting boot priority to: $($targetEntry.Description) [$($targetEntry.ID)]"
+                        Write-Log "Setting boot priority to: $($targetEntry.Description) [$($targetEntry.ID)]"
 
                         $process = Start-Process -FilePath "bcdedit.exe" `
                             -ArgumentList "/set", "{fwbootmgr}", "default", $targetEntry.ID `
                             -Wait -PassThru -NoNewWindow
 
                         if ($process.ExitCode -eq 0) {
-                            Log-Message "UEFI boot priority set successfully!"
+                            Write-Log "UEFI boot priority set successfully!"
                         } else {
-                            Log-Message "bcdedit /set default returned exit code $($process.ExitCode)" -Error
+                            Write-Log "bcdedit /set default returned exit code $($process.ExitCode)" -Error
                         }
                     } else {
-                        Log-Message "No existing boot entry found for $distroName"
-                        Log-Message "Creating new UEFI firmware boot entry..."
+                        Write-Log "No existing boot entry found for $distroName"
+                        Write-Log "Creating new UEFI firmware boot entry..."
                         $bootCreated = $false
 
                         if ($script:WipeBootInstalled) {
-                            Log-Message "Creating firmware boot entry (Windows ESP)..."
+                            Write-Log "Creating firmware boot entry (Windows ESP)..."
                             $wipeEfiPath = "$($script:WipeEspDistroDir)\$($script:WipeEfiName)"
                             $bootCreated = New-UefiBootEntry -DistroName $distroName `
                                 -DevicePartition $script:WipeWinEspDrive -EfiPath $wipeEfiPath
@@ -3240,36 +3442,36 @@ exit
                             }
                         } else {
                             $bootDeviceDrive = $script:NewDrive
-                            Log-Message "Boot entry will point to partition: $bootDeviceDrive"
-                            Log-Message "Attempting bcdedit /copy method..."
+                            Write-Log "Boot entry will point to partition: $bootDeviceDrive"
+                            Write-Log "Attempting bcdedit /copy method..."
                             $bootCreated = New-UefiBootEntry -DistroName $distroName `
                                 -DevicePartition $bootDeviceDrive -EfiPath "\EFI\BOOT\BOOTx64.EFI"
                         }
 
                         if (-not $bootCreated) {
-                            Log-Message "Could not create UEFI boot entry automatically" -Error
-                            Log-Message "You will need to set boot priority manually in UEFI/BIOS settings" -Error
-                            Log-Message "Or use the one-time boot menu (usually F12) to select the $distroName partition" -Error
+                            Write-Log "Could not create UEFI boot entry automatically" -Error
+                            Write-Log "You will need to set boot priority manually in UEFI/BIOS settings" -Error
+                            Write-Log "Or use the one-time boot menu (usually F12) to select the $distroName partition" -Error
                         }
                     }
                 }
             }
             catch {
-                Log-Message "Error configuring UEFI boot: $_" -Error
-                Log-Message "You may need to set boot priority manually in UEFI/BIOS settings" -Error
+                Write-Log "Error configuring UEFI boot: $_" -Error
+                Write-Log "You may need to set boot priority manually in UEFI/BIOS settings" -Error
             }
         }
 
         # Success
-        Log-Message "====================================="
-        Log-Message "Installation Complete!"
-        Log-Message "====================================="
-        Log-Message "$distroName boot partition created at drive $script:NewDrive"
+        Write-Log "====================================="
+        Write-Log "Installation Complete!"
+        Write-Log "====================================="
+        Write-Log "$distroName boot partition created at drive $script:NewDrive"
         if ($customRadio.Checked) {
-            Log-Message "ISO used: $(Split-Path -Leaf $script:CustomIsoPath)"
+            Write-Log "ISO used: $(Split-Path -Leaf $script:CustomIsoPath)"
         }
-        Log-Message ""
-        Log-Message "*** DISK LAYOUT ***"
+        Write-Log ""
+        Write-Log "*** DISK LAYOUT ***"
         $finalPartitions = Get-Partition -DiskNumber $targetDiskNumber | Sort-Object Offset
         foreach ($part in $finalPartitions) {
             $sizeGB = [math]::Round($part.Size / 1GB, 2)
@@ -3277,45 +3479,45 @@ exit
                     elseif ($part.Type -eq "Recovery" -or $part.GptType -match "de94bba4") { "Recovery" }
                     elseif ($part.IsSystem) { "System" }
                     else { "No letter" }
-            Log-Message "- ${label}: $sizeGB GB"
+            Write-Log "- ${label}: $sizeGB GB"
         }
-        Log-Message ""
-        Log-Message "The unallocated space is ready for $distroName installation."
-        Log-Message "The installer will automatically detect and use this space."
-        Log-Message ""
+        Write-Log ""
+        Write-Log "The unallocated space is ready for $distroName installation."
+        Write-Log "The installer will automatically detect and use this space."
+        Write-Log ""
 
         if ($useRefind -and $script:RefindDriveLetter) {
-            Log-Message ""
-            Log-Message "rEFInd boot manager has been installed and set as the default UEFI boot entry."
-            Log-Message ""
+            Write-Log ""
+            Write-Log "rEFInd boot manager has been installed and set as the default UEFI boot entry."
+            Write-Log ""
         }
 
         if ($autoRestartCheck.Checked) {
-            Log-Message "*** AUTOMATIC RESTART ENABLED ***"
-            Log-Message "UEFI boot priority has been configured."
-            Log-Message "The system will restart in 30 seconds!"
+            Write-Log "*** AUTOMATIC RESTART ENABLED ***"
+            Write-Log "UEFI boot priority has been configured."
+            Write-Log "The system will restart in 30 seconds!"
             if ($useRefind -and $script:RefindDriveLetter) {
-                Log-Message "After restart, rEFInd should appear automatically and show `"$distroName`"."
+                Write-Log "After restart, rEFInd should appear automatically and show `"$distroName`"."
             } else {
-                Log-Message "After restart, the system will boot into $distroName"
+                Write-Log "After restart, the system will boot into $distroName"
             }
-            Log-Message ""
+            Write-Log ""
         } else {
             if ($useRefind -and $script:RefindDriveLetter) {
-                Log-Message "To boot ${distroName}:"
-                Log-Message "1. Restart your computer"
-                Log-Message "2. rEFInd should appear automatically and show `"$distroName`""
-                Log-Message "3. If rEFInd doesn't appear, enter UEFI/BIOS (F2/F10/F12/DEL)"
-                Log-Message "   and select `"rEFInd - ULLI`" from the boot menu"
-                Log-Message "4. Disable Secure Boot if needed"
+                Write-Log "To boot ${distroName}:"
+                Write-Log "1. Restart your computer"
+                Write-Log "2. rEFInd should appear automatically and show `"$distroName`""
+                Write-Log "3. If rEFInd doesn't appear, enter UEFI/BIOS (F2/F10/F12/DEL)"
+                Write-Log "   and select `"rEFInd - ULLI`" from the boot menu"
+                Write-Log "4. Disable Secure Boot if needed"
             } else {
-                Log-Message "To boot $distroName, use the UEFI boot menu:"
-                Log-Message "1. Restart your computer"
-                Log-Message "2. Press F2, F10, F12, DEL, or ESC during startup"
-                Log-Message "3. Select the $distroName entry"
-                Log-Message "4. Make sure Secure Boot is disabled"
+                Write-Log "To boot $distroName, use the UEFI boot menu:"
+                Write-Log "1. Restart your computer"
+                Write-Log "2. Press F2, F10, F12, DEL, or ESC during startup"
+                Write-Log "3. Select the $distroName entry"
+                Write-Log "4. Make sure Secure Boot is disabled"
             }
-            Log-Message ""
+            Write-Log ""
         }
 
         Set-Status "Installation complete!"
@@ -3324,17 +3526,17 @@ exit
         if ($deleteIsoCheck.Checked -and -not $customRadio.Checked) {
             try {
                 Remove-Item $script:IsoPath -Force
-                Log-Message "ISO file deleted."
+                Write-Log "ISO file deleted."
             }
             catch {
-                Log-Message "Could not delete ISO file."
+                Write-Log "Could not delete ISO file."
             }
         }
 
         # Auto-restart if enabled
         if ($autoRestartCheck.Checked) {
-            Log-Message ""
-            Log-Message "Preparing for automatic restart..."
+            Write-Log ""
+            Write-Log "Preparing for automatic restart..."
 
             $countdownForm = New-Object System.Windows.Forms.Form
             $countdownForm.Text = "System Restart"
@@ -3367,7 +3569,7 @@ exit
 
             $timer = New-Object System.Windows.Forms.Timer
             $timer.Interval = 1000
-            $script:CountdownSeconds = 30
+            $script:CountdownSeconds = $script:Const.RestartCountdownSeconds
 
             $timer.Add_Tick({
                 $script:CountdownSeconds--
@@ -3384,17 +3586,17 @@ exit
             $timer.Stop()
 
             if (-not $script:CancelRestart) {
-                Log-Message "Restarting system..."
+                Write-Log "Restarting system..."
                 Start-Sleep -Seconds 2
                 Restart-Computer -Force
             } else {
-                Log-Message "Restart cancelled by user"
-                Log-Message "You can restart manually when ready"
+                Write-Log "Restart cancelled by user"
+                Write-Log "You can restart manually when ready"
             }
         }
     }
     catch {
-        Log-Message "Installation error: $_" -Error
+        Write-Log "Installation error: $_" -Error
         Set-Status "Installation failed!"
     }
     finally {
@@ -3450,11 +3652,12 @@ $browseButton.Add_Click({
 
         $fileInfo = Get-Item $script:CustomIsoPath
         $fileSizeGB = [math]::Round($fileInfo.Length / 1GB, 2)
-        Log-Message "Selected ISO: $(Split-Path -Leaf $script:CustomIsoPath)"
-        Log-Message "File size: $fileSizeGB GB"
+        Write-Log "Selected ISO: $(Split-Path -Leaf $script:CustomIsoPath)"
+        Write-Log "File size: $fileSizeGB GB"
     }
 })
 
+# ─── 12. Entry point ─────────────────────────────────────────────────────────
 # Initialize
 Update-DiskInfo
 
