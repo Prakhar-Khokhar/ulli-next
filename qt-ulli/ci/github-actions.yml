@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt 6 and bundled tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qt6-base-dev qt6-tools-dev cmake ninja-build g++ \
+            parted e2fsprogs btrfs-progs ntfs-3g
+      - name: Configure
+        run: cmake -S qt-ulli -B qt-ulli/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Build
+        run: cmake --build qt-ulli/build
+      - name: Test
+        run: ctest --test-dir qt-ulli/build --output-on-failure
+
+  build-windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt 6 via aqt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          host: 'windows'
+          target: 'desktop'
+          modules: 'qtimageformats'
+      - name: Configure (Ninja + MSVC)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - run: cmake -S qt-ulli -B qt-ulli/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build qt-ulli/build

@@ -1,0 +1,46 @@
+# ninja log v7
+2	10851	1788544634150071362	ulli-core_autogen/timestamp	3a9a31f411101581
+2	10851	1788544634150071362	ulli-core_autogen/mocs_compilation.cpp	3a9a31f411101581
+2	10851	1788544634150071362	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/ulli-core_autogen/timestamp	3a9a31f411101581
+2	10851	1788544634150071362	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/ulli-core_autogen/mocs_compilation.cpp	3a9a31f411101581
+10853	13956	1788544634169497361	CMakeFiles/ulli-core.dir/ulli-core_autogen/mocs_compilation.cpp.o	b21e2fab5cf8059
+13956	15308	1788544637272074285	CMakeFiles/ulli-core.dir/src/core/InstallPlan.cpp.o	94b1dceef6a88abc
+10853	16312	1788544634169775552	CMakeFiles/ulli-core.dir/src/core/Catalog.cpp.o	2d476ba73a8717de
+15308	18205	1788544638624075551	CMakeFiles/ulli-core.dir/src/core/InstallEngine.cpp.o	d3980c73d1222829
+16312	18807	1788544639628076491	CMakeFiles/ulli-core.dir/src/core/ProgressLog.cpp.o	2cf897c2547bce58
+18807	21217	1788544642123078827	CMakeFiles/ulli-core.dir/src/platform/linux/DiskOps.cpp.o	313f0832fe8cdd15
+18205	21258	1788544641521078263	CMakeFiles/ulli-core.dir/src/platform/Platform_linux.cpp.o	5ff1611c62821b27
+21258	24158	1788544644574081122	libulli-core.a	6d286aa2b50cf8e6
+24158	26705	1788544650016086219	ulli-qt_autogen/timestamp	7bb5732d3037718
+24158	26705	1788544650016086219	ulli-qt_autogen/mocs_compilation.cpp	7bb5732d3037718
+24158	26705	1788544650016086219	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/ulli-qt_autogen/timestamp	7bb5732d3037718
+24158	26705	1788544650016086219	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/ulli-qt_autogen/mocs_compilation.cpp	7bb5732d3037718
+26705	29652	1788544652960088975	tests/test_catalog_autogen/timestamp	8154f019dafed666
+26705	29652	1788544652960088975	tests/test_catalog_autogen/mocs_compilation.cpp	8154f019dafed666
+26705	29652	1788544652960088975	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog_autogen/timestamp	8154f019dafed666
+26705	29652	1788544652960088975	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog_autogen/mocs_compilation.cpp	8154f019dafed666
+24158	29653	1788544652960088975	tests/test_result_autogen/timestamp	daff5e9620cf495c
+24158	29653	1788544652960088975	tests/test_result_autogen/mocs_compilation.cpp	daff5e9620cf495c
+24158	29653	1788544652960088975	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result_autogen/timestamp	daff5e9620cf495c
+24158	29653	1788544652960088975	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result_autogen/mocs_compilation.cpp	daff5e9620cf495c
+29653	31051	1788544654358090285	tests/test_plan_autogen/timestamp	92340f8fb6ee2bce
+29653	31051	1788544654358090285	tests/test_plan_autogen/mocs_compilation.cpp	92340f8fb6ee2bce
+29653	31051	1788544654358090285	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan_autogen/timestamp	92340f8fb6ee2bce
+29653	31051	1788544654358090285	/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan_autogen/mocs_compilation.cpp	92340f8fb6ee2bce
+29653	33282	1788544652970308642	CMakeFiles/ulli-qt.dir/ulli-qt_autogen/mocs_compilation.cpp.o	6c61f0fdf7666501
+31051	33708	1788544654367090293	CMakeFiles/ulli-qt.dir/src/app/main.cpp.o	f847e533e405acfd
+33708	37390	1788544657024092782	CMakeFiles/ulli-qt.dir/src/ui/PlanDialog.cpp.o	3d82c89c13f2550e
+33407	37689	1788544656723092500	CMakeFiles/ulli-qt.dir/src/ui/MainWindow.cpp.o	27b6e52cd63f236f
+37689	39890	1788544661005096511	CMakeFiles/ulli-qt.dir/src/ui/PartitionEditor.cpp.o	486a565b3b8d437b
+37390	40148	1788544660706096231	CMakeFiles/ulli-qt.dir/src/ui/DistroSelector.cpp.o	e865d59765ebcb10
+40148	40156	1788544663465057058	tests/CMakeFiles/test_result.dir/test_result_autogen/mocs_compilation.cpp.o	88d0f0b7af6e62c6
+39890	42795	1788544663206098573	CMakeFiles/ulli-qt.dir/src/ui/LogView.cpp.o	caac648e32076753
+42795	42805	1788544666111101294	tests/CMakeFiles/test_catalog.dir/test_catalog_autogen/mocs_compilation.cpp.o	1b3a14d9ac0e077b
+40156	44809	1788544663472098822	tests/CMakeFiles/test_result.dir/test_result.cpp.o	b0f4a0a82b185add
+44875	44887	1788544668191103243	tests/CMakeFiles/test_plan.dir/test_plan_autogen/mocs_compilation.cpp.o	4ed0ce109f39388d
+42805	48245	1788544666121101304	tests/CMakeFiles/test_catalog.dir/test_catalog.cpp.o	c68a1c7ee56283f4
+44887	49493	1788544668203173657	tests/CMakeFiles/test_plan.dir/test_plan.cpp.o	2c523919649a0e1a
+49493	50789	1788544672810107571	tests/test_result	d71578868e7a9b4e
+50789	51183	1788544674105108784	tests/test_catalog	a76ed38319c17dbc
+51183	51288	1788544674499109153	tests/test_plan	fed3cb3e05f700dc
+48245	53657	1788544671562106402	ulli-qt	f4adfe3b361cb00a
