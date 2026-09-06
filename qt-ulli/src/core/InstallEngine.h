@@ -47,8 +47,16 @@ public:
     virtual std::vector<Disk> enumerateDisks() = 0;
 
     // Pre-flight: check BitLocker, sudo, etc. Returns NotElevated if
-    // the user is not admin/root.
+    // the user is not admin/root. Implementations should also call
+    // validatePlanForDisk() internally to reject unsafe plans early.
     virtual Result<void> preflight(const InstallPlan& plan) = 0;
+
+    // Validate a plan against the current disk state without
+    // mutating anything. Used by the engine as a defense-in-depth
+    // check before each mutation stage. Implementations should reject
+    // plans that target a missing disk, a non-system disk for
+    // WipeDisk, or other clearly-unsafe combinations.
+    virtual Result<void> validatePlanForDisk(const InstallPlan& plan) = 0;
 
     // ISO download / verification. Returns the resolved ISO path.
     virtual Result<std::filesystem::path> resolveIso(const Distro& distro) = 0;

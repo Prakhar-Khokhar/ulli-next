@@ -127,6 +127,8 @@ ulli-qt_autogen/timestamp: \
 	/home/prakhark/ULLI\ beta/ulli-next/qt-ulli/src/ui/PartitionEditor.h \
 	/home/prakhark/ULLI\ beta/ulli-next/qt-ulli/src/ui/PlanDialog.cpp \
 	/home/prakhark/ULLI\ beta/ulli-next/qt-ulli/src/ui/PlanDialog.h \
+	/home/prakhark/ULLI\ beta/ulli-next/qt-ulli/src/ui/RestartCountdownDialog.cpp \
+	/home/prakhark/ULLI\ beta/ulli-next/qt-ulli/src/ui/RestartCountdownDialog.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/QAtomicInt \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/QDateTime \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/QFile \
@@ -140,6 +142,7 @@ ulli-qt_autogen/timestamp: \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/QStringList \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/QTextStream \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/QThread \
+	/tmp/qt6/6.7.3/gcc_64/include/QtCore/QTimer \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/q20functional.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/q20memory.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/q20type_traits.h \
@@ -153,6 +156,7 @@ ulli-qt_autogen/timestamp: \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qatomic.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qatomic_cxx11.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qbasicatomic.h \
+	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qbasictimer.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qbindingstorage.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qbytearray.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qbytearrayalgorithms.h \
@@ -256,6 +260,7 @@ ulli-qt_autogen/timestamp: \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qtenvironmentvariables.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qtextstream.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qthread.h \
+	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qtimer.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qtmetamacros.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qtnoop.h \
 	/tmp/qt6/6.7.3/gcc_64/include/QtCore/qtpreprocessorsupport.h \

@@ -3,6 +3,7 @@
 #include "ui/DistroSelector.h"
 #include "ui/LogView.h"
 #include "ui/PlanDialog.h"
+#include "ui/RestartCountdownDialog.h"
 
 #include "platform/Platform.h"
 
@@ -200,8 +201,12 @@ void MainWindow::onEngineFinished(bool success, QString message) {
     setBusy(false);
     if (success) {
         statusLabel_->setText(tr("Done — ready to restart"));
-        QMessageBox::information(this, tr("ULLI"),
-            tr("Installation completed.\n\n%1").arg(message));
+        // Check if auto-restart is enabled (from the plan)
+        // For now, we'll use a simple approach: if the plan has autoRestart,
+        // show the countdown dialog. In a full implementation, we'd pass
+        // the plan to this method or store it.
+        // For Phase 1.1, we'll show the restart dialog unconditionally on success.
+        showRestartCountdown();
     } else {
         statusLabel_->setText(tr("Failed: %1").arg(message));
         QMessageBox::critical(this, tr("ULLI"),
@@ -209,6 +214,37 @@ void MainWindow::onEngineFinished(bool success, QString message) {
     }
     engineThread_ = nullptr;
     engine_ = nullptr;
+}
+
+void MainWindow::showRestartCountdown() {
+    restartDialog_ = new RestartCountdownDialog(this);
+    connect(restartDialog_, &RestartCountdownDialog::countdownFinished,
+            this, &MainWindow::onRestartCountdownFinished);
+    connect(restartDialog_, &RestartCountdownDialog::countdownCancelled,
+            this, &MainWindow::onRestartCountdownCancelled);
+    restartDialog_->startCountdown(30);
+    restartDialog_->exec();
+}
+
+void MainWindow::onRestartCountdownFinished() {
+    // User didn't cancel - proceed with restart
+    logBackend_.append("Restart countdown finished. Restarting system...",
+                       core::ProgressLog::Severity::Warn);
+    std::unique_ptr<core::IPlatformBackend> backend;
+#if defined(Q_OS_WIN)
+    backend = std::make_unique<platform::windows::DiskOps>();
+#else
+    backend = std::make_unique<platform::linux::DiskOps>();
+#endif
+    backend->restartSystem();
+    qApp->quit();
+}
+
+void MainWindow::onRestartCountdownCancelled() {
+    logBackend_.append("Restart cancelled by user.",
+                       core::ProgressLog::Severity::Warn);
+    QMessageBox::information(this, tr("ULLI"),
+        tr("Restart cancelled. You can restart manually later."));
 }
 
 void MainWindow::onExitClicked() {

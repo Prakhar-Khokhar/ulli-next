@@ -1,21 +1,23 @@
 // platform/windows/BitLocker.cpp
 #include "platform/windows/BitLocker.h"
 
-#include <QProcess>
+#include "platform/windows/Wmi.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
 
 namespace ulli::platform::windows {
 
 bool BitLocker::isLocked() {
-    // Use manage-bde (built into Windows) — no PowerShell dependency.
-    QProcess proc;
-    proc.start("manage-bde.exe", {"/status", "C:"});
-    if (!proc.waitForFinished(10000)) return false;
-    if (proc.exitCode() != 0) return false;
-    const QString out = QString::fromLocal8Bit(proc.readAll());
-    // Look for "Protection On" and "Lock Status:" lines.
-    bool protectionOn = out.contains("Protection On", Qt::CaseInsensitive);
-    bool locked = out.contains("Lock Status:           Locked", Qt::CaseInsensitive);
-    return protectionOn && locked;
+    auto r = Wmi::runScript("bitlocker_status");
+    if (!r) {
+        // PowerShell/CIM unavailable — fail open but do not lie.
+        return false;
+    }
+    QJsonDocument doc = r.value();
+    if (!doc.isTextual()) return false;
+    const QString text = doc.text().trimmed();
+    return text.compare("true", Qt::CaseInsensitive) == 0;
 }
 
 }  // namespace ulli::platform::windows

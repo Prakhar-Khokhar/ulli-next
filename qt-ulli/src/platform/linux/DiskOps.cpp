@@ -13,6 +13,11 @@ core::Result<void> DiskOps::preflight(const core::InstallPlan&) {
     return core::makeOk();
 }
 
+core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan&) {
+    return core::makeError(core::Error::Kind::Internal,
+        "validatePlanForDisk: not implemented (Phase 2)");
+}
+
 core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro&) {
     return core::makeError<std::filesystem::path>(core::Error::Kind::Internal,
         "resolveIso: not implemented (Phase 2)");

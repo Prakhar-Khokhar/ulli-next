@@ -1,0 +1,81 @@
+Start testing: Sep 06 17:00 IST
+----------------------------------------------------------
+1/3 Testing: result
+1/3 Test: result
+Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result"
+Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
+"result" start time: Sep 06 17:00 IST
+Output:
+----------------------------------------------------------
+********* Start testing of TestResult *********
+Config: Using QtTest library 6.7.3, Qt 6.7.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 10.3.1 20210422 (Red Hat 10.3.1-1)), ubuntu 26.04
+PASS   : TestResult::initTestCase()
+PASS   : TestResult::okHoldsValue()
+PASS   : TestResult::errHoldsMessage()
+PASS   : TestResult::mapTransformsSuccess()
+PASS   : TestResult::mapPreservesError()
+PASS   : TestResult::voidOkAndError()
+PASS   : TestResult::onErrorCanSwallow()
+PASS   : TestResult::cleanupTestCase()
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 17ms
+********* Finished testing of TestResult *********
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"result" end time: Sep 06 17:00 IST
+"result" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/3 Testing: catalog
+2/3 Test: catalog
+Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog"
+Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
+"catalog" start time: Sep 06 17:00 IST
+Output:
+----------------------------------------------------------
+********* Start testing of TestCatalog *********
+Config: Using QtTest library 6.7.3, Qt 6.7.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 10.3.1 20210422 (Red Hat 10.3.1-1)), ubuntu 26.04
+PASS   : TestCatalog::initTestCase()
+WARN: distros.json not found; using built-in catalog
+PASS   : TestCatalog::fallbackNotEmpty()
+WARN: distros.json not found; using built-in catalog
+PASS   : TestCatalog::keysOrdered()
+PASS   : TestCatalog::fromDistros()
+PASS   : TestCatalog::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
+********* Finished testing of TestCatalog *********
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"catalog" end time: Sep 06 17:00 IST
+"catalog" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/3 Testing: plan
+3/3 Test: plan
+Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan"
+Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
+"plan" start time: Sep 06 17:00 IST
+Output:
+----------------------------------------------------------
+********* Start testing of TestPlan *********
+Config: Using QtTest library 6.7.3, Qt 6.7.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 10.3.1 20210422 (Red Hat 10.3.1-1)), ubuntu 26.04
+PASS   : TestPlan::initTestCase()
+PASS   : TestPlan::emptyPlanInvalid()
+PASS   : TestPlan::minimalValid()
+PASS   : TestPlan::tooSmallLinuxInvalid()
+PASS   : TestPlan::summaryContainsDistro()
+PASS   : TestPlan::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
+********* Finished testing of TestPlan *********
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"plan" end time: Sep 06 17:00 IST
+"plan" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 06 17:00 IST

@@ -4,3 +4,4 @@
 #include "YPKJ5OE7LN/moc_MainWindow.cpp"
 #include "YPKJ5OE7LN/moc_PartitionEditor.cpp"
 #include "YPKJ5OE7LN/moc_PlanDialog.cpp"
+#include "YPKJ5OE7LN/moc_RestartCountdownDialog.cpp"

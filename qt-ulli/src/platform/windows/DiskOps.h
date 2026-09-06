@@ -28,6 +28,7 @@ public:
     std::vector<core::Disk> enumerateDisks() override;
 
     core::Result<void> preflight(const core::InstallPlan& plan) override;
+    core::Result<void> validatePlanForDisk(const core::InstallPlan& plan) override;
     core::Result<std::filesystem::path> resolveIso(const core::Distro& d) override;
     core::Result<std::uint64_t> shrinkPartition(char driveLetter,
                                                 std::uint64_t newSizeBytes) override;

@@ -66,6 +66,10 @@ if(WIN32)
         src/platform/windows/EspOps.cpp
         src/platform/windows/BitLocker.h
         src/platform/windows/BitLocker.cpp
+        src/platform/windows/Wmi.h
+        src/platform/windows/Wmi.cpp
+        src/platform/windows/Sha256.h
+        src/platform/windows/Sha256.cpp
     )
 elseif(UNIX AND NOT APPLE)
     list(APPEND ULLI_PLATFORM_SOURCES
@@ -86,6 +90,8 @@ set(ULLI_UI_SOURCES
     src/ui/PartitionEditor.cpp
     src/ui/LogView.h
     src/ui/LogView.cpp
+    src/ui/RestartCountdownDialog.h
+    src/ui/RestartCountdownDialog.cpp
 )
 
 set(ULLI_APP_SOURCES

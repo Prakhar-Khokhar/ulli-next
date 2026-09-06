@@ -23,6 +23,7 @@ namespace ulli::ui {
 
 class DistroSelector;
 class LogView;
+class RestartCountdownDialog;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -36,10 +37,13 @@ private slots:
     void onEngineStageChanged(QString stage);
     void onEngineProgressChanged(int percent);
     void onEngineFinished(bool success, QString message);
+    void onRestartCountdownFinished();
+    void onRestartCountdownCancelled();
 
 private:
     void setBusy(bool busy);
     void startEngine(core::InstallPlan plan);
+    void showRestartCountdown();
 
     core::Catalog catalog_;
     bool fallbackUsed_ = false;
@@ -54,6 +58,8 @@ private:
     core::ProgressLog logBackend_;
     QThread* engineThread_ = nullptr;
     QPointer<core::InstallEngine> engine_;
+
+    RestartCountdownDialog* restartDialog_ = nullptr;
 };
 
 }  // namespace ulli::ui
