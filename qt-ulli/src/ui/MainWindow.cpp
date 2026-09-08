@@ -83,6 +83,31 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // ─── Wire up ─────────────────────────────────────────────────────────
     connect(startBtn_, &QPushButton::clicked, this, &MainWindow::onStartClicked);
     connect(exitBtn_,  &QPushButton::clicked, this, &MainWindow::onExitClicked);
+
+    // ─── Wire up ISO download callback ────────────────────────────────────
+    distro_->setDownloadCallback([this](const core::Distro& distro,
+                                         const std::filesystem::path& destPath,
+                                         std::function<void(int, const QString&)> progressCb,
+                                         std::function<void(core::Result<std::filesystem::path>)> finishedCb) {
+        // Create backend on the UI thread for download
+        std::unique_ptr<core::IPlatformBackend> backend;
+    #if defined(Q_OS_WIN)
+        backend = std::make_unique<platform::windows::DiskOps>();
+    #else
+        backend = std::make_unique<platform::linux::DiskOps>();
+    #endif
+
+        // Run download in a worker thread to not block UI
+        auto* worker = new QObject();
+        worker->moveToThread(QThread::currentThread());
+
+        QMetaObject::invokeMethod(worker, [backend = std::move(backend), &distro, destPath,
+                                           progressCb, finishedCb, worker]() mutable {
+            auto result = backend->downloadIso(distro, destPath, progressCb);
+            finishedCb(result);
+            worker->deleteLater();
+        }, Qt::QueuedConnection);
+    });
 }
 
 MainWindow::~MainWindow() {
@@ -197,16 +222,18 @@ void MainWindow::onEngineProgressChanged(int percent) {
     progress_->setValue(percent);
 }
 
-void MainWindow::onEngineFinished(bool success, QString message) {
+void MainWindow::onEngineFinished(bool success, QString message, bool autoRestart) {
     setBusy(false);
     if (success) {
         statusLabel_->setText(tr("Done — ready to restart"));
-        // Check if auto-restart is enabled (from the plan)
-        // For now, we'll use a simple approach: if the plan has autoRestart,
-        // show the countdown dialog. In a full implementation, we'd pass
-        // the plan to this method or store it.
-        // For Phase 1.1, we'll show the restart dialog unconditionally on success.
-        showRestartCountdown();
+        // Only show restart countdown if the plan requested auto-restart
+        if (autoRestart) {
+            showRestartCountdown();
+        } else {
+            QMessageBox::information(this, tr("ULLI"),
+                tr("Installation completed successfully.\n"
+                   "You can restart your computer manually to boot into the new system."));
+        }
     } else {
         statusLabel_->setText(tr("Failed: %1").arg(message));
         QMessageBox::critical(this, tr("ULLI"),

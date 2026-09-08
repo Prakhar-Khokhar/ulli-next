@@ -1,0 +1,103 @@
+{
+	"BUILD_DIR" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine_autogen",
+	"CMAKE_BINARY_DIR" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests",
+	"CMAKE_EXECUTABLE" : "/home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake",
+	"CMAKE_LIST_FILES" : [ "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt" ],
+	"CMAKE_SOURCE_DIR" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli",
+	"CROSS_CONFIG" : false,
+	"DEP_FILE" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine_autogen/deps",
+	"DEP_FILE_RULE_NAME" : "test_engine_autogen/timestamp",
+	"HEADERS" : [],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine_autogen/include",
+	"MOC_COMPILATION_FILE" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"QT_CORE_LIB",
+		"QT_NETWORK_LIB",
+		"QT_NO_DEBUG",
+		"QT_TESTCASE_BUILDDIR=\"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests\"",
+		"QT_TESTCASE_SOURCEDIR=\"/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests\"",
+		"QT_TESTLIB_LIB"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/src",
+		"/usr/include/x86_64-linux-gnu/qt6/QtCore",
+		"/usr/include/x86_64-linux-gnu/qt6",
+		"/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++",
+		"/usr/include/x86_64-linux-gnu/qt6/QtNetwork",
+		"/usr/include/x86_64-linux-gnu/qt6/QtTest",
+		"/usr/include/c++/15",
+		"/usr/include/x86_64-linux-gnu/c++/15",
+		"/usr/include/c++/15/backward",
+		"/usr/lib/gcc/x86_64-linux-gnu/15/include",
+		"/usr/local/include",
+		"/usr/include/x86_64-linux-gnu",
+		"/usr/include"
+	],
+	"MOC_MACRO_NAMES" : 
+	[
+		"Q_OBJECT",
+		"Q_GADGET",
+		"Q_NAMESPACE",
+		"Q_NAMESPACE_EXPORT",
+		"Q_GADGET_EXPORT",
+		"Q_ENUM_NS"
+	],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"/usr/bin/c++",
+		"-std=c++20",
+		"-w",
+		"-dM",
+		"-E",
+		"/home/prakhark/.local/lib/python3.14/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : 
+	[
+		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog_autogen/mocs_compilation.cpp",
+		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan_autogen/mocs_compilation.cpp",
+		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result_autogen/mocs_compilation.cpp"
+	],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 6,
+	"PARSE_CACHE_FILE" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_engine_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "/usr/lib/qt6/libexec/moc",
+	"QT_UIC_EXECUTABLE" : "/usr/lib/qt6/libexec/uic",
+	"QT_VERSION_MAJOR" : 6,
+	"QT_VERSION_MINOR" : 10,
+	"SETTINGS_FILE" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_engine_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/test_engine.cpp",
+			"MU",
+			null
+		]
+	],
+	"UIC_OPTIONS" : [],
+	"UIC_SEARCH_PATHS" : [],
+	"UIC_SKIP" : 
+	[
+		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog_autogen/mocs_compilation.cpp",
+		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan_autogen/mocs_compilation.cpp",
+		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result_autogen/mocs_compilation.cpp"
+	],
+	"UIC_UI_FILES" : [],
+	"USE_BETTER_GRAPH" : true,
+	"VERBOSITY" : 0
+}

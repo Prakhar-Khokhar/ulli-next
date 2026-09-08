@@ -38,10 +38,15 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStorageInfo>
 #include <QTextStream>
+#include <QUrl>
+#include <QEventLoop>
 
 #include <algorithm>
 #include <iostream>
@@ -347,6 +352,91 @@ core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro& d) {
     return core::makeError(core::Error::Kind::NotFound,
         "ISO not found in cache. Please download " + d.isoFilename() +
         " to " + cache.string() + " (link: " + d.downloadPage() + ").");
+}
+
+core::Result<std::filesystem::path> DiskOps::downloadIso(
+    const core::Distro& distro,
+    const std::filesystem::path& destPath,
+    std::function<void(int percent, const QString& status)> progressCallback) {
+
+    if (distro.mirrors().empty()) {
+        return core::makeError(core::Error::Kind::NotFound,
+            "No download mirrors available for " + distro.label());
+    }
+
+    // Ensure destination directory exists
+    std::error_code ec;
+    std::filesystem::create_directories(destPath.parent_path(), ec);
+    if (ec) {
+        return core::makeError(core::Error::Kind::Io,
+            "Cannot create download directory: " + ec.message());
+    }
+
+    // Try each mirror in order
+    for (const auto& mirror : distro.mirrors()) {
+        if (progressCallback) {
+            progressCallback(0, QString("Connecting to %1...").arg(QString::fromStdString(mirror)));
+        }
+
+        QNetworkAccessManager manager;
+        QNetworkRequest request(QUrl(QString::fromStdString(mirror)));
+        request.setRawHeader("User-Agent", "ULLI/1.0");
+
+        QNetworkReply* reply = manager.get(request);
+        QEventLoop loop;
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        QObject::connect(reply, &QNetworkReply::downloadProgress,
+            [progressCallback](qint64 bytesReceived, qint64 bytesTotal) {
+                if (bytesTotal > 0 && progressCallback) {
+                    int percent = static_cast<int>((bytesReceived * 100) / bytesTotal);
+                    progressCallback(percent,
+                        QString("Downloading: %1 / %2 MB")
+                            .arg(bytesReceived / (1024*1024))
+                            .arg(bytesTotal / (1024*1024)));
+                }
+            });
+
+        loop.exec();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            QString error = reply->errorString();
+            reply->deleteLater();
+            if (progressCallback) {
+                progressCallback(0, tr("Mirror failed: %1").arg(error));
+            }
+            continue; // Try next mirror
+        }
+
+        // Write to file
+        QFile file(QString::fromStdString(destPath.string()));
+        if (!file.open(QIODevice::WriteOnly)) {
+            reply->deleteLater();
+            return core::makeError(core::Error::Kind::Io,
+                "Cannot open destination file for writing: " + destPath.string());
+        }
+
+        file.write(reply->readAll());
+        file.close();
+        reply->deleteLater();
+
+        // Verify SHA-256
+        if (progressCallback) {
+            progressCallback(100, tr("Verifying checksum..."));
+        }
+        auto v = Sha256::verifyFile(destPath, distro.sha256());
+        if (!v) {
+            std::filesystem::remove(destPath);
+            return v;
+        }
+
+        if (progressCallback) {
+            progressCallback(100, tr("Download complete and verified"));
+        }
+        return core::makeOk(destPath);
+    }
+
+    return core::makeError(core::Error::Kind::Platform,
+        "All download mirrors failed for " + distro.label());
 }
 
 core::Result<std::uint64_t> DiskOps::shrinkPartition(char /*driveLetter*/,

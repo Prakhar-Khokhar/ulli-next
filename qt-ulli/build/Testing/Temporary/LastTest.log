@@ -1,14 +1,14 @@
-Start testing: Sep 06 17:00 IST
+Start testing: Sep 08 12:31 IST
 ----------------------------------------------------------
-1/3 Testing: result
-1/3 Test: result
+1/4 Testing: result
+1/4 Test: result
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"result" start time: Sep 06 17:00 IST
+"result" start time: Sep 08 12:31 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestResult *********
-Config: Using QtTest library 6.7.3, Qt 6.7.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 10.3.1 20210422 (Red Hat 10.3.1-1)), ubuntu 26.04
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 15.2.0), ubuntu 26.04
 PASS   : TestResult::initTestCase()
 PASS   : TestResult::okHoldsValue()
 PASS   : TestResult::errHoldsMessage()
@@ -17,25 +17,25 @@ PASS   : TestResult::mapPreservesError()
 PASS   : TestResult::voidOkAndError()
 PASS   : TestResult::onErrorCanSwallow()
 PASS   : TestResult::cleanupTestCase()
-Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 17ms
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of TestResult *********
 <end of output>
-Test time =   0.02 sec
+Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"result" end time: Sep 06 17:00 IST
+"result" end time: Sep 08 12:31 IST
 "result" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-2/3 Testing: catalog
-2/3 Test: catalog
+2/4 Testing: catalog
+2/4 Test: catalog
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"catalog" start time: Sep 06 17:00 IST
+"catalog" start time: Sep 08 12:31 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestCatalog *********
-Config: Using QtTest library 6.7.3, Qt 6.7.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 10.3.1 20210422 (Red Hat 10.3.1-1)), ubuntu 26.04
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 15.2.0), ubuntu 26.04
 PASS   : TestCatalog::initTestCase()
 WARN: distros.json not found; using built-in catalog
 PASS   : TestCatalog::fallbackNotEmpty()
@@ -49,33 +49,129 @@ Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"catalog" end time: Sep 06 17:00 IST
+"catalog" end time: Sep 08 12:31 IST
 "catalog" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-3/3 Testing: plan
-3/3 Test: plan
+3/4 Testing: plan
+3/4 Test: plan
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"plan" start time: Sep 06 17:00 IST
+"plan" start time: Sep 08 12:31 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestPlan *********
-Config: Using QtTest library 6.7.3, Qt 6.7.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 10.3.1 20210422 (Red Hat 10.3.1-1)), ubuntu 26.04
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 15.2.0), ubuntu 26.04
 PASS   : TestPlan::initTestCase()
 PASS   : TestPlan::emptyPlanInvalid()
 PASS   : TestPlan::minimalValid()
 PASS   : TestPlan::tooSmallLinuxInvalid()
 PASS   : TestPlan::summaryContainsDistro()
 PASS   : TestPlan::cleanupTestCase()
-Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
 ********* Finished testing of TestPlan *********
 <end of output>
-Test time =   0.00 sec
+Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"plan" end time: Sep 06 17:00 IST
+"plan" end time: Sep 08 12:31 IST
 "plan" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Sep 06 17:00 IST
+4/4 Testing: engine
+4/4 Test: engine
+Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine"
+Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
+"engine" start time: Sep 08 12:31 IST
+Output:
+----------------------------------------------------------
+********* Start testing of ulli::core::TestEngine *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 15.2.0), ubuntu 26.04
+PASS   : ulli::core::TestEngine::initTestCase()
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "copy" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "patch" currentExpectation: 6
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "patch" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Mock called with stage: "bootentry" currentExpectation: 7
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Expected stage: "bootentry" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testSuccessfulInstall() Finished args: QList(QVariant(bool, true), QVariant(QString, "Installation completed"), QVariant(bool, false))
+PASS   : ulli::core::TestEngine::testSuccessfulInstall()
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestEngine::testFailurePropagation() Expected stage: "copy" shouldSucceed: false
+PASS   : ulli::core::TestEngine::testFailurePropagation()
+QDEBUG : ulli::core::TestEngine::testCancellation() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testCancellation() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testCancellation() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testCancellation() Expected stage: "validate" shouldSucceed: true
+PASS   : ulli::core::TestEngine::testCancellation()
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "wipe" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "wipe" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "layout" currentExpectation: 4
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "mount" currentExpectation: 5
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "copy" currentExpectation: 6
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "copy" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "patch" currentExpectation: 7
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "patch" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Mock called with stage: "bootentry" currentExpectation: 8
+QDEBUG : ulli::core::TestEngine::testWipeDiskStrategy() Expected stage: "bootentry" shouldSucceed: true
+PASS   : ulli::core::TestEngine::testWipeDiskStrategy()
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "resize" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "resize" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "layout" currentExpectation: 4
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "mount" currentExpectation: 5
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "copy" currentExpectation: 6
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "copy" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "patch" currentExpectation: 7
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "patch" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage: "bootentry" currentExpectation: 8
+QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "bootentry" shouldSucceed: true
+PASS   : ulli::core::TestEngine::testShrinkAllStrategy()
+PASS   : ulli::core::TestEngine::testInvalidPlanRejected()
+PASS   : ulli::core::TestEngine::cleanupTestCase()
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 20575ms
+********* Finished testing of ulli::core::TestEngine *********
+<end of output>
+Test time =  20.58 sec
+----------------------------------------------------------
+Test Passed.
+"engine" end time: Sep 08 12:31 IST
+"engine" time elapsed: 00:00:20
+----------------------------------------------------------
+
+End testing: Sep 08 12:31 IST

@@ -32,11 +32,11 @@
 	"MOC_INCLUDES" : 
 	[
 		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/src",
-		"/tmp/qt6/6.7.3/gcc_64/include/QtCore",
-		"/tmp/qt6/6.7.3/gcc_64/include",
-		"/tmp/qt6/6.7.3/gcc_64/mkspecs/linux-g++",
-		"/tmp/qt6/6.7.3/gcc_64/include/QtNetwork",
-		"/tmp/qt6/6.7.3/gcc_64/include/QtTest",
+		"/usr/include/x86_64-linux-gnu/qt6/QtCore",
+		"/usr/include/x86_64-linux-gnu/qt6",
+		"/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++",
+		"/usr/include/x86_64-linux-gnu/qt6/QtNetwork",
+		"/usr/include/x86_64-linux-gnu/qt6/QtTest",
 		"/usr/include/c++/15",
 		"/usr/include/x86_64-linux-gnu/c++/15",
 		"/usr/include/c++/15/backward",
@@ -71,10 +71,10 @@
 	"MULTI_CONFIG" : false,
 	"PARALLEL" : 6,
 	"PARSE_CACHE_FILE" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_result_autogen.dir/ParseCache.txt",
-	"QT_MOC_EXECUTABLE" : "/tmp/qt6/6.7.3/gcc_64/libexec/moc",
-	"QT_UIC_EXECUTABLE" : "/tmp/qt6/6.7.3/gcc_64/libexec/uic",
+	"QT_MOC_EXECUTABLE" : "/usr/lib/qt6/libexec/moc",
+	"QT_UIC_EXECUTABLE" : "/usr/lib/qt6/libexec/uic",
 	"QT_VERSION_MAJOR" : 6,
-	"QT_VERSION_MINOR" : 7,
+	"QT_VERSION_MINOR" : 10,
 	"SETTINGS_FILE" : "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_result_autogen.dir/AutogenUsed.txt",
 	"SOURCES" : 
 	[
@@ -88,6 +88,6 @@
 	"UIC_SEARCH_PATHS" : [],
 	"UIC_SKIP" : [],
 	"UIC_UI_FILES" : [],
-	"USE_BETTER_GRAPH" : false,
+	"USE_BETTER_GRAPH" : true,
 	"VERBOSITY" : 0
 }

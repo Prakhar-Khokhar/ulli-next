@@ -40,12 +40,13 @@ InstallEngine::~InstallEngine() = default;
 void InstallEngine::run(InstallPlan plan) {
     const bool cancelRequested = cancelFlag_.loadAcquire() != 0;
     if (cancelRequested) {
-        emit finished(false, "Cancelled before start");
+        emit finished(false, "Cancelled before start", false);
         return;
     }
 
     emit progressChanged(kProgressStart);
 
+    const bool autoRestart = plan.autoRestart;
     auto r = runStages(plan);
     if (cancelFlag_.loadAcquire() != 0) {
         log_->append("Installation cancelled by user", ProgressLog::Severity::Warn);
@@ -53,7 +54,7 @@ void InstallEngine::run(InstallPlan plan) {
         if (plan.bcdGuid.has_value()) {
             backend_->rollbackBootEntry(plan);
         }
-        emit finished(false, "Cancelled by user");
+        emit finished(false, "Cancelled by user", false);
         return;
     }
 
@@ -63,12 +64,12 @@ void InstallEngine::run(InstallPlan plan) {
         if (plan.bcdGuid.has_value()) {
             backend_->rollbackBootEntry(plan);
         }
-        emit finished(false, r.error().qmessage());
+        emit finished(false, r.error().qmessage(), false);
         return;
     }
 
     emit progressChanged(kProgressDone);
-    emit finished(true, "Installation completed");
+    emit finished(true, "Installation completed", autoRestart);
 }
 
 void InstallEngine::requestCancel() {
@@ -89,6 +90,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     emit stageChanged("Pre-flight checks");
     emit progressChanged(kProgressPreflight);
     if (auto r = backend_->preflight(plan); !r) return r;
+    if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     // 2. Resolve ISO (download if needed, verify checksum)
     emit stageChanged("Resolving ISO");
@@ -96,6 +98,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     auto isoR = backend_->resolveIso(*distro);
     if (!isoR) return makeError(isoR.error().kind(), isoR.error().message());
     plan.isoPath = isoR.value();
+    if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     // 3. Resize
     if (plan.strategy == Strategy::ShrinkAll ||
@@ -113,6 +116,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
                 return makeError(r.error().kind(), r.error().message());
             }
         }
+        if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
     }
 
     // 4. Wipe (only for WipeDisk)
@@ -121,6 +125,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
         emit progressChanged(kProgressWipe);
         if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
         if (auto r = backend_->wipeDisk(plan.targetDiskNumber); !r) return r;
+        if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
     }
 
     // 5. Create layout
@@ -131,6 +136,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     if (auto r = backend_->createLayout(plan, bootMount, refindMount); !r) return r;
     plan.bootPartitionMount = bootMount;
     if (!refindMount.empty()) plan.refindPartitionMount = refindMount;
+    if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     // 6. Mount ISO + copy
     emit stageChanged("Copying live ISO contents");
@@ -143,10 +149,12 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
         backend_->unmountIso(isoMount.value());
         if (!copyR) return copyR;
     }
+    if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     // 7. Distro-specific patches
     emit stageChanged("Patching distro boot configuration");
     emit progressChanged(kProgressPatch);
+    if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
     if (auto r = backend_->patchDistroBootConfig(*distro, plan); !r) {
         log_->append(QString("Distro config patch failed: %1")
                          .arg(r.error().qmessage()),
@@ -157,6 +165,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     if (plan.bootMode == BootMode::Refind) {
         emit stageChanged("Installing rEFInd");
         emit progressChanged(kProgressRefind);
+        if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
         if (auto r = backend_->installRefind(plan); !r) {
             log_->append(QString("rEFInd install failed: %1")
                              .arg(r.error().qmessage()),
@@ -167,6 +176,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     // 9. UEFI boot entry
     emit stageChanged("Creating UEFI boot entry");
     emit progressChanged(kProgressBootEntry);
+    if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
     if (auto r = backend_->createBootEntry(plan); !r) {
         return r;  // engine.run will roll back via bcdGuid if set
     }
@@ -174,6 +184,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     // 10. Cleanup
     emit stageChanged("Cleaning up");
     emit progressChanged(kProgressCleanup);
+    if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     return makeOk();
 }

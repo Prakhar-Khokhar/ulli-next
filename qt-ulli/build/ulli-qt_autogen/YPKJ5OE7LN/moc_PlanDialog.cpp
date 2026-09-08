@@ -1,7 +1,7 @@
 /****************************************************************************
 ** Meta object code from reading C++ file 'PlanDialog.h'
 **
-** Created by: The Qt Meta Object Compiler version 68 (Qt 6.7.3)
+** Created by: The Qt Meta Object Compiler version 69 (Qt 6.10.2)
 **
 ** WARNING! All changes made in this file will be lost!
 *****************************************************************************/
@@ -17,8 +17,8 @@
 #include <QtCore/qxptype_traits.h>
 #if !defined(Q_MOC_OUTPUT_REVISION)
 #error "The header file 'PlanDialog.h' doesn't include <QObject>."
-#elif Q_MOC_OUTPUT_REVISION != 68
-#error "This file was generated using the moc from 6.7.3. It"
+#elif Q_MOC_OUTPUT_REVISION != 69
+#error "This file was generated using the moc from 6.10.2. It"
 #error "cannot be used with the include files from this version of Qt."
 #error "(The moc has changed too much.)"
 #endif
@@ -31,71 +31,71 @@ QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 QT_WARNING_DISABLE_GCC("-Wuseless-cast")
 namespace {
-
-#ifdef QT_MOC_HAS_STRINGDATA
-struct qt_meta_stringdata_CLASSulliSCOPEuiSCOPEPlanDialogENDCLASS_t {};
-constexpr auto qt_meta_stringdata_CLASSulliSCOPEuiSCOPEPlanDialogENDCLASS = QtMocHelpers::stringData(
-    "ulli::ui::PlanDialog",
-    "onDiskChanged",
-    "",
-    "index",
-    "updateSizeBounds"
-);
-#else  // !QT_MOC_HAS_STRINGDATA
-#error "qtmochelpers.h not found or too old."
-#endif // !QT_MOC_HAS_STRINGDATA
+struct qt_meta_tag_ZN4ulli2ui10PlanDialogE_t {};
 } // unnamed namespace
 
-Q_CONSTINIT static const uint qt_meta_data_CLASSulliSCOPEuiSCOPEPlanDialogENDCLASS[] = {
+template <> constexpr inline auto ulli::ui::PlanDialog::qt_create_metaobjectdata<qt_meta_tag_ZN4ulli2ui10PlanDialogE_t>()
+{
+    namespace QMC = QtMocConstants;
+    QtMocHelpers::StringRefStorage qt_stringData {
+        "ulli::ui::PlanDialog",
+        "onDiskChanged",
+        "",
+        "index",
+        "onStrategyChanged",
+        "onLinuxSizeChanged",
+        "value",
+        "updatePlanPreview",
+        "updateOkButtonState",
+        "onAcceptClicked"
+    };
 
- // content:
-      12,       // revision
-       0,       // classname
-       0,    0, // classinfo
-       2,   14, // methods
-       0,    0, // properties
-       0,    0, // enums/sets
-       0,    0, // constructors
-       0,       // flags
-       0,       // signalCount
-
- // slots: name, argc, parameters, tag, flags, initial metatype offsets
-       1,    1,   26,    2, 0x08,    1 /* Private */,
-       4,    0,   29,    2, 0x08,    3 /* Private */,
-
- // slots: parameters
-    QMetaType::Void, QMetaType::Int,    3,
-    QMetaType::Void,
-
-       0        // eod
-};
-
+    QtMocHelpers::UintData qt_methods {
+        // Slot 'onDiskChanged'
+        QtMocHelpers::SlotData<void(int)>(1, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 3 },
+        }}),
+        // Slot 'onStrategyChanged'
+        QtMocHelpers::SlotData<void()>(4, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onLinuxSizeChanged'
+        QtMocHelpers::SlotData<void(int)>(5, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 6 },
+        }}),
+        // Slot 'updatePlanPreview'
+        QtMocHelpers::SlotData<void()>(7, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'updateOkButtonState'
+        QtMocHelpers::SlotData<void()>(8, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onAcceptClicked'
+        QtMocHelpers::SlotData<void()>(9, 2, QMC::AccessPrivate, QMetaType::Void),
+    };
+    QtMocHelpers::UintData qt_properties {
+    };
+    QtMocHelpers::UintData qt_enums {
+    };
+    return QtMocHelpers::metaObjectData<PlanDialog, qt_meta_tag_ZN4ulli2ui10PlanDialogE_t>(QMC::MetaObjectFlag{}, qt_stringData,
+            qt_methods, qt_properties, qt_enums);
+}
 Q_CONSTINIT const QMetaObject ulli::ui::PlanDialog::staticMetaObject = { {
     QMetaObject::SuperData::link<QDialog::staticMetaObject>(),
-    qt_meta_stringdata_CLASSulliSCOPEuiSCOPEPlanDialogENDCLASS.offsetsAndSizes,
-    qt_meta_data_CLASSulliSCOPEuiSCOPEPlanDialogENDCLASS,
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli2ui10PlanDialogE_t>.stringdata,
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli2ui10PlanDialogE_t>.data,
     qt_static_metacall,
     nullptr,
-    qt_incomplete_metaTypeArray<qt_meta_stringdata_CLASSulliSCOPEuiSCOPEPlanDialogENDCLASS_t,
-        // Q_OBJECT / Q_GADGET
-        QtPrivate::TypeAndForceComplete<PlanDialog, std::true_type>,
-        // method 'onDiskChanged'
-        QtPrivate::TypeAndForceComplete<void, std::false_type>,
-        QtPrivate::TypeAndForceComplete<int, std::false_type>,
-        // method 'updateSizeBounds'
-        QtPrivate::TypeAndForceComplete<void, std::false_type>
-    >,
+    qt_staticMetaObjectRelocatingContent<qt_meta_tag_ZN4ulli2ui10PlanDialogE_t>.metaTypes,
     nullptr
 } };
 
 void ulli::ui::PlanDialog::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
 {
+    auto *_t = static_cast<PlanDialog *>(_o);
     if (_c == QMetaObject::InvokeMetaMethod) {
-        auto *_t = static_cast<PlanDialog *>(_o);
-        (void)_t;
         switch (_id) {
-        case 0: _t->onDiskChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 1: _t->updateSizeBounds(); break;
+        case 0: _t->onDiskChanged((*reinterpret_cast<std::add_pointer_t<int>>(_a[1]))); break;
+        case 1: _t->onStrategyChanged(); break;
+        case 2: _t->onLinuxSizeChanged((*reinterpret_cast<std::add_pointer_t<int>>(_a[1]))); break;
+        case 3: _t->updatePlanPreview(); break;
+        case 4: _t->updateOkButtonState(); break;
+        case 5: _t->onAcceptClicked(); break;
         default: ;
         }
     }
@@ -109,7 +109,7 @@ const QMetaObject *ulli::ui::PlanDialog::metaObject() const
 void *ulli::ui::PlanDialog::qt_metacast(const char *_clname)
 {
     if (!_clname) return nullptr;
-    if (!strcmp(_clname, qt_meta_stringdata_CLASSulliSCOPEuiSCOPEPlanDialogENDCLASS.stringdata0))
+    if (!strcmp(_clname, qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli2ui10PlanDialogE_t>.strings))
         return static_cast<void*>(this);
     return QDialog::qt_metacast(_clname);
 }
@@ -120,13 +120,14 @@ int ulli::ui::PlanDialog::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 2)
+        if (_id < 6)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 2;
-    } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 2)
+        _id -= 6;
+    }
+    if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
+        if (_id < 6)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 2;
+        _id -= 6;
     }
     return _id;
 }

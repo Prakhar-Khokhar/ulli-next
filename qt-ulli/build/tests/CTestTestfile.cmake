@@ -10,3 +10,5 @@ add_test("catalog" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_
 set_tests_properties("catalog" PROPERTIES  _BACKTRACE_TRIPLES "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;5;add_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;9;add_ulli_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;0;")
 add_test("plan" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan")
 set_tests_properties("plan" PROPERTIES  _BACKTRACE_TRIPLES "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;5;add_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;10;add_ulli_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;0;")
+add_test("engine" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine")
+set_tests_properties("engine" PROPERTIES  _BACKTRACE_TRIPLES "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;5;add_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;11;add_ulli_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;0;")

@@ -23,6 +23,13 @@ core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro&) {
         "resolveIso: not implemented (Phase 2)");
 }
 
+core::Result<std::filesystem::path> DiskOps::downloadIso(
+    const core::Distro&, const std::filesystem::path&,
+    std::function<void(int, const QString&)>) {
+    return core::makeError<std::filesystem::path>(core::Error::Kind::Internal,
+        "downloadIso: not implemented (Phase 2)");
+}
+
 core::Result<std::uint64_t> DiskOps::shrinkPartition(char, std::uint64_t) {
     return core::makeError<std::uint64_t>(core::Error::Kind::Internal,
         "shrinkPartition: not implemented (Phase 2)");

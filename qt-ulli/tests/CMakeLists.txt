@@ -8,6 +8,7 @@ endfunction()
 add_ulli_test(result)
 add_ulli_test(catalog)
 add_ulli_test(plan)
+add_ulli_test(engine)
 # sha256 test only built on Windows where Sha256 implementation exists
 if (WIN32)
     add_ulli_test(sha256)

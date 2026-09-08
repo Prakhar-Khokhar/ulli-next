@@ -4,6 +4,8 @@ set(__QT_DEPLOY_TARGET_test_catalog_FILE /home/prakhark/ULLI beta/ulli-next/qt-u
 set(__QT_DEPLOY_TARGET_test_catalog_TYPE EXECUTABLE)
 set(__QT_DEPLOY_TARGET_test_plan_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan)
 set(__QT_DEPLOY_TARGET_test_plan_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_test_engine_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine)
+set(__QT_DEPLOY_TARGET_test_engine_TYPE EXECUTABLE)
 set(__QT_DEPLOY_TARGET_ulli-core_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/libulli-core.a)
 set(__QT_DEPLOY_TARGET_ulli-core_TYPE STATIC_LIBRARY)
 set(__QT_DEPLOY_TARGET_ulli-qt_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/ulli-qt)

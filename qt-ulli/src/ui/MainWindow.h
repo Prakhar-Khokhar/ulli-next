@@ -36,7 +36,7 @@ private slots:
     void onExitClicked();
     void onEngineStageChanged(QString stage);
     void onEngineProgressChanged(int percent);
-    void onEngineFinished(bool success, QString message);
+    void onEngineFinished(bool success, QString message, bool autoRestart);
     void onRestartCountdownFinished();
     void onRestartCountdownCancelled();
 

@@ -61,6 +61,13 @@ public:
     // ISO download / verification. Returns the resolved ISO path.
     virtual Result<std::filesystem::path> resolveIso(const Distro& distro) = 0;
 
+    // Download ISO from mirrors with progress reporting. Returns the
+    // path to the downloaded file on success.
+    virtual Result<std::filesystem::path> downloadIso(
+        const Distro& distro,
+        const std::filesystem::path& destPath,
+        std::function<void(int percent, const QString& status)> progressCallback) = 0;
+
     // Resize a partition (shrink only). Returns the new size.
     virtual Result<std::uint64_t> shrinkPartition(char driveLetter,
                                                  std::uint64_t newSizeBytes) = 0;
@@ -125,7 +132,7 @@ public:
 signals:
     void stageChanged(QString stage);
     void progressChanged(int percent);          // 0..100
-    void finished(bool success, QString message);
+    void finished(bool success, QString message, bool autoRestart);
 
 private:
     Result<void> runStages(InstallPlan& plan);
