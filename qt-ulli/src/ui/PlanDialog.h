@@ -1,7 +1,7 @@
 // ui/PlanDialog.h
 //
-// The plan dialog: pick target disk, strategy, and Linux size. Validates
-// inputs before allowing OK. Shows detailed disk partition layout,
+// The plan dialog: pick target disk, allocation mode, strategy, and Linux size.
+// Validates inputs before allowing OK. Shows detailed disk partition layout,
 // unallocated space, and planned result. The output is a complete
 // InstallPlan (minus ISO path / distro which come from the main window).
 
@@ -20,6 +20,7 @@ class QLabel;
 class QPushButton;
 class QDialogButtonBox;
 class QCheckBox;
+class QButtonGroup;
 
 namespace ulli::ui {
 
@@ -35,7 +36,9 @@ public:
 private slots:
     void onDiskChanged(int index);
     void onStrategyChanged();
+    void onAllocationModeChanged();
     void onLinuxSizeChanged(int value);
+    void onShrinkPartitionChanged(int index);
     void updatePlanPreview();
     void updateOkButtonState();
     void onAcceptClicked();
@@ -43,6 +46,7 @@ private slots:
 private:
     void populateDiskPartitions(const core::Disk& disk);
     void updateStrategyAvailability(const core::Disk& disk);
+    void updateShrinkPartitionCombo(const core::Disk& disk);
     void updateSizeBounds();
     void updatePlanPreviewLabels();
     QString partitionKindToString(core::PartitionKind kind) const;
@@ -53,9 +57,22 @@ private:
     QComboBox* diskCombo_ = nullptr;
     QTreeWidget* partitionTree_ = nullptr;
     QLabel* unallocatedLabel_ = nullptr;
+    
+    // Allocation mode
+    QRadioButton* liveOnlyRadio_ = nullptr;
+    QRadioButton* fullInstallRadio_ = nullptr;
+    QButtonGroup* allocationModeGroup_ = nullptr;
+    
+    // Strategy
     QRadioButton* shrinkRadio_ = nullptr;
     QRadioButton* freeRadio_ = nullptr;
     QRadioButton* wipeRadio_ = nullptr;
+    QButtonGroup* strategyGroup_ = nullptr;
+    
+    // Shrink partition selection
+    QComboBox* shrinkPartitionCombo_ = nullptr;
+    QLabel* shrinkPartitionLabel_ = nullptr;
+    
     QSpinBox* linuxSizeSpin_ = nullptr;
     QCheckBox* autoRestartCheck_ = nullptr;
     QLabel* strategyDescription_ = nullptr;

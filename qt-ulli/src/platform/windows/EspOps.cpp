@@ -22,18 +22,18 @@ EspOps::LetterGuard::~LetterGuard() {
 }
 
 core::Result<EspOps::LetterGuard> EspOps::acquireLetter() {
-    // Use PowerShell to find the ESP by GPT type and assign a letter.
-    // Falls back to mountvol for the rare case PowerShell can't.
+    // Use PowerShell to find the ESP by GPT type and check if it already has a letter.
     QProcess proc;
     proc.start("powershell", {"-NoProfile", "-Command",
         QString("(Get-Partition | Where-Object { $_.GptType -eq '%1' } | "
                 "Select-Object -First 1) | ForEach-Object { "
-                "if ($_.DriveLetter) { $_.DriveLetter } else { "
-                "Add-PartitionAccessPath -DiskNumber $_.DiskNumber "
+                "if ($_.DriveLetter) { "
+                "  $_.DriveLetter + '|EXISTING' } else { "
+                "  Add-PartitionAccessPath -DiskNumber $_.DiskNumber "
                 "-PartitionNumber $_.PartitionNumber -AssignDriveLetter; "
-                "Start-Sleep -Seconds 2; "
-                "(Get-Partition -DiskNumber $_.DiskNumber "
-                "-PartitionNumber $_.PartitionNumber).DriveLetter } }")
+                "  Start-Sleep -Seconds 2; "
+                "  (Get-Partition -DiskNumber $_.DiskNumber "
+                "-PartitionNumber $_.PartitionNumber).DriveLetter + '|ASSIGNED' } }")
             .arg(kEspGuid)});
     if (!proc.waitForFinished(20000)) {
         return core::makeError<EspOps::LetterGuard>(core::Error::Kind::Platform,
@@ -44,9 +44,14 @@ core::Result<EspOps::LetterGuard> EspOps::acquireLetter() {
         return core::makeError<EspOps::LetterGuard>(core::Error::Kind::NotFound,
             "Could not find or assign a drive letter to the Windows ESP");
     }
+    
+    // Parse "X|EXISTING" or "X|ASSIGNED"
+    const QString letter = raw.section('|', 0, 0);
+    const QString source = raw.section('|', 1, 1);
+    
     LetterGuard g;
-    g.letter = raw.at(0).toLatin1();
-    g.wasAdded = true;  // simplified — we don't track whether it was pre-existing
+    g.letter = letter.at(0).toLatin1();
+    g.wasAdded = (source.compare("ASSIGNED", Qt::CaseInsensitive) == 0);
     return core::makeOk(g);
 }
 

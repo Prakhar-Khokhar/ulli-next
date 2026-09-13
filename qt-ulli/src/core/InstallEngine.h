@@ -77,9 +77,12 @@ public:
 
     // Create the install layout (boot partition + linux free space,
     // optionally rEFInd). Returns the mount paths.
+    // The cancelCallback is invoked between major steps to check for
+    // user cancellation. Return true to abort, false to continue.
     virtual Result<void> createLayout(const InstallPlan& plan,
                                       std::filesystem::path& bootMount,
-                                      std::filesystem::path& refindMount) = 0;
+                                      std::filesystem::path& refindMount,
+                                      std::function<bool()> cancelCallback = nullptr) = 0;
 
     // Mount the ISO and return the mount path.
     virtual Result<std::filesystem::path> mountIso(

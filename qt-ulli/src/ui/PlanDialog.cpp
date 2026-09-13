@@ -2,8 +2,10 @@
 #include "ui/PlanDialog.h"
 
 #include "core/DiskInfo.h"
+#include "core/InstallPlan.h"
 
 #include <QBrush>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -22,9 +24,12 @@
 
 namespace ulli::ui {
 
+constexpr std::uint64_t kStagingSizeBytes = 7ull * 1024 * 1024 * 1024;
+constexpr std::uint64_t kMinFullInstallShrinkBytes = 30ull * 1024 * 1024 * 1024;
+
 PlanDialog::PlanDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle(tr("Install plan"));
-    setMinimumSize(720, 600);
+    setMinimumSize(720, 650);
 
     // ─── Disk section ────────────────────────────────────────────────────
     auto* diskGroup = new QGroupBox(tr("Target disk"), this);
@@ -55,27 +60,58 @@ PlanDialog::PlanDialog(QWidget* parent) : QDialog(parent) {
     diskLayout->addWidget(partitionTree_, 1);
     diskLayout->addWidget(unallocatedLabel_);
 
+    // ─── Allocation Mode section ──────────────────────────────────────────
+    auto* modeGroup = new QGroupBox(tr("Allocation mode"), this);
+    liveOnlyRadio_ = new QRadioButton(tr("Live environment only (~7 GB staging, no Linux installation)"), modeGroup);
+    fullInstallRadio_ = new QRadioButton(tr("Full Linux installation (staging + Linux unallocated space, min 30 GB)"), modeGroup);
+    fullInstallRadio_->setChecked(true);
+    
+    allocationModeGroup_ = new QButtonGroup(this);
+    allocationModeGroup_->addButton(liveOnlyRadio_);
+    allocationModeGroup_->addButton(fullInstallRadio_);
+
+    auto* modeLayout = new QVBoxLayout(modeGroup);
+    modeLayout->addWidget(liveOnlyRadio_);
+    modeLayout->addWidget(fullInstallRadio_);
+
     // ─── Strategy section ────────────────────────────────────────────────
     auto* strategyGroup = new QGroupBox(tr("Installation strategy"), this);
     shrinkRadio_ = new QRadioButton(tr("Shrink target partition (Linux + boot + rEFInd)"), strategyGroup);
     freeRadio_   = new QRadioButton(tr("Use existing free space (no shrink)"), strategyGroup);
     wipeRadio_   = new QRadioButton(tr("Wipe the target disk (DESTRUCTIVE — all data lost)"), strategyGroup);
     shrinkRadio_->setChecked(true);
+    
+    strategyGroup_ = new QButtonGroup(this);
+    strategyGroup_->addButton(shrinkRadio_);
+    strategyGroup_->addButton(freeRadio_);
+    strategyGroup_->addButton(wipeRadio_);
 
     strategyDescription_ = new QLabel(strategyGroup);
     strategyDescription_->setWordWrap(true);
     strategyDescription_->setStyleSheet("color: #666; font-style: italic;");
 
+    // Shrink partition selection
+    shrinkPartitionLabel_ = new QLabel(tr("Partition to shrink:"), strategyGroup);
+    shrinkPartitionCombo_ = new QComboBox(strategyGroup);
+    shrinkPartitionCombo_->setEnabled(false);
+    
+    auto* shrinkSelectLayout = new QHBoxLayout;
+    shrinkSelectLayout->addWidget(shrinkPartitionLabel_);
+    shrinkSelectLayout->addWidget(shrinkPartitionCombo_, 1);
+    shrinkPartitionLabel_->setVisible(false);
+    shrinkPartitionCombo_->setVisible(false);
+
     auto* strategyLayout = new QVBoxLayout(strategyGroup);
     strategyLayout->addWidget(shrinkRadio_);
     strategyLayout->addWidget(freeRadio_);
     strategyLayout->addWidget(wipeRadio_);
+    strategyLayout->addLayout(shrinkSelectLayout);
     strategyLayout->addWidget(strategyDescription_);
 
     // ─── Size section ────────────────────────────────────────────────────
-    auto* sizeGroup = new QGroupBox(tr("Linux partition size (GB)"), this);
+    auto* sizeGroup = new QGroupBox(tr("Total space to remove from NTFS (GB)"), this);
     linuxSizeSpin_ = new QSpinBox(sizeGroup);
-    linuxSizeSpin_->setRange(20, 10000);
+    linuxSizeSpin_->setRange(7, 10000);
     linuxSizeSpin_->setValue(30);
     linuxSizeSpin_->setSuffix(" GB");
     auto* sizeLayout = new QHBoxLayout(sizeGroup);
@@ -111,6 +147,7 @@ PlanDialog::PlanDialog(QWidget* parent) : QDialog(parent) {
 
     auto* root = new QVBoxLayout(this);
     root->addWidget(diskGroup, 1);
+    root->addWidget(modeGroup);
     root->addWidget(strategyGroup);
     root->addWidget(sizeGroup);
     root->addWidget(optionsGroup);
@@ -120,9 +157,13 @@ PlanDialog::PlanDialog(QWidget* parent) : QDialog(parent) {
 
     connect(diskCombo_, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &PlanDialog::onDiskChanged);
+    connect(liveOnlyRadio_, &QRadioButton::toggled, this, &PlanDialog::onAllocationModeChanged);
+    connect(fullInstallRadio_, &QRadioButton::toggled, this, &PlanDialog::onAllocationModeChanged);
     connect(shrinkRadio_, &QRadioButton::toggled, this, &PlanDialog::onStrategyChanged);
     connect(freeRadio_, &QRadioButton::toggled, this, &PlanDialog::onStrategyChanged);
     connect(wipeRadio_, &QRadioButton::toggled, this, &PlanDialog::onStrategyChanged);
+    connect(shrinkPartitionCombo_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &PlanDialog::onShrinkPartitionChanged);
     connect(linuxSizeSpin_, qOverload<int>(&QSpinBox::valueChanged),
             this, &PlanDialog::onLinuxSizeChanged);
     connect(autoRestartCheck_, &QCheckBox::toggled, this, &PlanDialog::updateOkButtonState);
@@ -147,8 +188,6 @@ void PlanDialog::onAcceptClicked() {
                 QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Cancel);
 
             if (reply == QMessageBox::Ok) {
-                // For a real implementation, we'd show a text input dialog to type "WIPE"
-                // For now, use a simpler double-confirm
                 reply = QMessageBox::question(this, tr("ULLI — Final Confirmation"),
                     tr("Are you absolutely sure you want to wipe Disk %1?\n\n"
                        "ALL DATA WILL BE LOST.").arg(d.number),
@@ -222,6 +261,7 @@ void PlanDialog::populateDiskPartitions(const core::Disk& disk) {
 
 void PlanDialog::updateStrategyAvailability(const core::Disk& disk) {
     const bool isSystem = disk.isSystem();
+    const bool isLiveOnly = liveOnlyRadio_->isChecked();
 
     // WipeDisk: only on non-system disks
     wipeRadio_->setEnabled(!isSystem);
@@ -244,17 +284,71 @@ void PlanDialog::updateStrategyAvailability(const core::Disk& disk) {
     }
 
     // UseFreeAll: only if there's unallocated space
-    freeRadio_->setEnabled(disk.unallocatedBytes >= (20ull * 1024 * 1024 * 1024 + 7ull * 1024 * 1024 * 1024));
+    // For LiveOnly: need at least 7 GB unallocated
+    // For FullInstall: need at least 37 GB unallocated (30 GB + 7 GB)
+    const std::uint64_t minUnallocated = isLiveOnly 
+        ? (kStagingSizeBytes + kStagingSizeBytes)  // 14 GB minimum (7 GB staging + some buffer)
+        : (kMinFullInstallShrinkBytes + kStagingSizeBytes); // 37 GB minimum
+    freeRadio_->setEnabled(disk.unallocatedBytes >= minUnallocated);
     if (!freeRadio_->isEnabled() && freeRadio_->isChecked()) {
         shrinkRadio_->setChecked(true);
+    }
+
+    // Populate shrink partition combo if shrink is selected
+    if (shrinkRadio_->isChecked()) {
+        updateShrinkPartitionCombo(disk);
     }
 
     updatePlanPreview();
 }
 
+void PlanDialog::updateShrinkPartitionCombo(const core::Disk& disk) {
+    shrinkPartitionCombo_->clear();
+    for (const auto& p : disk.partitions) {
+        if (p.driveLetter.has_value() && (p.fs == core::FileSystem::Ntfs || p.kind == core::PartitionKind::WindowsNtfs)) {
+            const QString label = QString("%1: (%2, %3, %4)")
+                .arg(p.driveLetter.value())
+                .arg(partitionKindToString(p.kind))
+                .arg(filesystemToString(p.fs))
+                .arg(formatPartitionSize(p.sizeBytes));
+            shrinkPartitionCombo_->addItem(label, QVariant::fromValue(p.driveLetter.value()));
+        }
+    }
+    // Default to C: if available
+    for (int i = 0; i < shrinkPartitionCombo_->count(); ++i) {
+        if (shrinkPartitionCombo_->itemData(i).toChar() == 'C') {
+            shrinkPartitionCombo_->setCurrentIndex(i);
+            break;
+        }
+    }
+}
+
 void PlanDialog::onStrategyChanged() {
     wipeConfirmed_ = false;
+    const bool shrinkSelected = shrinkRadio_->isChecked();
+    shrinkPartitionLabel_->setVisible(shrinkSelected);
+    shrinkPartitionCombo_->setVisible(shrinkSelected);
+    if (shrinkSelected) {
+        const int idx = diskCombo_->currentIndex();
+        if (idx >= 0 && static_cast<std::size_t>(idx) < disks_.size()) {
+            updateShrinkPartitionCombo(disks_[static_cast<std::size_t>(idx)]);
+        }
+    }
     updateOkButtonState();
+    updatePlanPreview();
+}
+
+void PlanDialog::onShrinkPartitionChanged(int index) {
+    Q_UNUSED(index);
+    updatePlanPreview();
+}
+
+void PlanDialog::onAllocationModeChanged() {
+    const int idx = diskCombo_->currentIndex();
+    if (idx >= 0 && static_cast<std::size_t>(idx) < disks_.size()) {
+        updateStrategyAvailability(disks_[static_cast<std::size_t>(idx)]);
+    }
+    updateSizeBounds();
     updatePlanPreview();
 }
 
@@ -272,18 +366,29 @@ void PlanDialog::updateSizeBounds() {
     const int idx = diskCombo_->currentIndex();
     if (idx < 0 || static_cast<std::size_t>(idx) >= disks_.size()) return;
     const auto& d = disks_[static_cast<std::size_t>(idx)];
+    const bool isLiveOnly = liveOnlyRadio_->isChecked();
 
-    uint64_t maxLinuxBytes = 0;
-    if (freeRadio_->isChecked() || shrinkRadio_->isChecked()) {
-        maxLinuxBytes = d.unallocatedBytes;
+    // Determine available space for shrink
+    uint64_t maxShrinkBytes = 0;
+    if (shrinkRadio_->isChecked()) {
+        // For shrink, find the largest NTFS partition with a drive letter
+        for (const auto& p : d.partitions) {
+            if (p.driveLetter.has_value() && (p.fs == core::FileSystem::Ntfs || p.kind == core::PartitionKind::WindowsNtfs)) {
+                maxShrinkBytes = std::max(maxShrinkBytes, p.sizeBytes);
+            }
+        }
+    } else if (freeRadio_->isChecked()) {
+        maxShrinkBytes = d.unallocatedBytes;
     } else if (wipeRadio_->isChecked()) {
-        maxLinuxBytes = d.sizeBytes;
+        maxShrinkBytes = d.sizeBytes;
     }
 
-    const int minSize = 20;
+    // Minimum size based on allocation mode
+    const int minSize = isLiveOnly ? 7 : 30;
+    
     int maxSize = 0;
-    if (maxLinuxBytes > 0) {
-        maxSize = static_cast<int>((maxLinuxBytes - 7ull * 1024 * 1024 * 1024) / (1024ull * 1024 * 1024));
+    if (maxShrinkBytes > 0) {
+        maxSize = static_cast<int>(maxShrinkBytes / (1024ull * 1024 * 1024));
     }
     if (maxSize < minSize) maxSize = minSize;
     if (maxSize > 10000) maxSize = 10000;
@@ -296,6 +401,7 @@ void PlanDialog::updatePlanPreview() {
     const int idx = diskCombo_->currentIndex();
     if (idx < 0 || static_cast<std::size_t>(idx) >= disks_.size()) return;
     const auto& d = disks_[static_cast<std::size_t>(idx)];
+    const bool isLiveOnly = liveOnlyRadio_->isChecked();
 
     QString html;
     html += QString("<b>Disk %1</b> (%2, %3)<br>")
@@ -327,31 +433,43 @@ void PlanDialog::updatePlanPreview() {
 
     html += "<br><b>After installation:</b><br>";
 
-    const uint64_t linuxBytes = static_cast<uint64_t>(linuxSizeSpin_->value()) * 1024 * 1024 * 1024;
+    const uint64_t totalShrinkBytes = static_cast<uint64_t>(linuxSizeSpin_->value()) * 1024 * 1024 * 1024;
     const uint64_t bootBytes = 7ull * 1024 * 1024 * 1024;
     const uint64_t refindBytes = 100ull * 1024 * 1024;
 
     if (wipeRadio_->isChecked()) {
         html += QString("  ├─ EFI System Partition: %1 (FAT32)<br>").arg(formatPartitionSize(bootBytes));
-        html += QString("  ├─ Linux partition: %1 (free space for distro)<br>").arg(formatPartitionSize(linuxBytes));
+        html += QString("  ├─ Linux partition: %1 (free space for distro)<br>").arg(formatPartitionSize(totalShrinkBytes));
         html += QString("  └─ (rEFInd partition: %1 if selected)<br>").arg(formatPartitionSize(refindBytes));
         safetyWarningLabel_->setText(tr("⚠ WARNING: This will ERASE ALL DATA on disk %1!").arg(d.number));
         safetyWarningLabel_->setStyleSheet("color: #c00; font-weight: bold;");
         safetyWarningLabel_->setVisible(true);
     } else if (shrinkRadio_->isChecked()) {
         html += QString("  ├─ Existing partitions preserved<br>");
-        html += QString("  ├─ Shrink selected NTFS partition by %1<br>").arg(formatPartitionSize(linuxBytes + bootBytes + refindBytes));
-        html += QString("  ├─ New boot partition: %1 (FAT32)<br>").arg(formatPartitionSize(bootBytes));
-        html += QString("  ├─ New Linux partition: %1 (free space)<br>").arg(formatPartitionSize(linuxBytes));
-        html += QString("  └─ (rEFInd partition: %1 if selected)<br>").arg(formatPartitionSize(refindBytes));
-        safetyWarningLabel_->setText(tr("⚠ Modifying existing partition — ensure you have backups."));
-        safetyWarningLabel_->setStyleSheet("color: #c60; font-weight: bold;");
+        if (isLiveOnly) {
+            html += QString("  ├─ Shrink selected NTFS partition by %1<br>").arg(formatPartitionSize(totalShrinkBytes));
+            html += QString("  └─ New staging partition: %1 (FAT32, live environment)<br>").arg(formatPartitionSize(totalShrinkBytes));
+            safetyWarningLabel_->setText(tr("⚠ Modifying existing partition — ensure you have backups."));
+            safetyWarningLabel_->setStyleSheet("color: #c60; font-weight: bold;");
+        } else {
+            const uint64_t unallocated = (totalShrinkBytes > kStagingSizeBytes) ? (totalShrinkBytes - kStagingSizeBytes) : 0;
+            html += QString("  ├─ Shrink selected NTFS partition by %1<br>").arg(formatPartitionSize(totalShrinkBytes));
+            html += QString("  ├─ New staging partition: %1 (FAT32, live installer)<br>").arg(formatPartitionSize(kStagingSizeBytes));
+            html += QString("  └─ Linux unallocated space: %1 (for Linux installer)<br>").arg(formatPartitionSize(unallocated));
+            safetyWarningLabel_->setText(tr("⚠ Modifying existing partition — ensure you have backups."));
+            safetyWarningLabel_->setStyleSheet("color: #c60; font-weight: bold;");
+        }
         safetyWarningLabel_->setVisible(true);
     } else if (freeRadio_->isChecked()) {
-        html += QString("  ├─ Existing partitions untouched<br>");
-        html += QString("  ├─ New boot partition: %1 (FAT32) from unallocated<br>").arg(formatPartitionSize(bootBytes));
-        html += QString("  ├─ New Linux partition: %1 (free space) from unallocated<br>").arg(formatPartitionSize(linuxBytes));
-        html += QString("  └─ (rEFInd partition: %1 if selected)<br>").arg(formatPartitionSize(refindBytes));
+        if (isLiveOnly) {
+            html += QString("  ├─ Existing partitions untouched<br>");
+            html += QString("  └─ New staging partition: %1 (FAT32, live environment) from unallocated<br>").arg(formatPartitionSize(totalShrinkBytes));
+        } else {
+            const uint64_t unallocated = (totalShrinkBytes > kStagingSizeBytes) ? (totalShrinkBytes - kStagingSizeBytes) : 0;
+            html += QString("  ├─ Existing partitions untouched<br>");
+            html += QString("  ├─ New staging partition: %1 (FAT32, live installer) from unallocated<br>").arg(formatPartitionSize(kStagingSizeBytes));
+            html += QString("  └─ Linux unallocated space: %1 (for Linux installer) from unallocated<br>").arg(formatPartitionSize(unallocated));
+        }
         safetyWarningLabel_->setText(tr("✓ Safest option — no existing partitions modified."));
         safetyWarningLabel_->setStyleSheet("color: #2a7; font-weight: bold;");
         safetyWarningLabel_->setVisible(true);
@@ -396,11 +514,12 @@ QString PlanDialog::formatPartitionSize(uint64_t bytes) const {
 }
 
 core::InstallPlan PlanDialog::buildPlan(const std::string& distroKey,
-                                          const std::filesystem::path& isoPath) const {
+                                           const std::filesystem::path& isoPath) const {
     core::InstallPlan p;
     p.distroKey = distroKey;
     p.isoPath = isoPath;
     p.autoRestart = autoRestartCheck_->isChecked();
+    p.allocationMode = liveOnlyRadio_->isChecked() ? core::AllocationMode::LiveOnly : core::AllocationMode::FullInstall;
 
     const int idx = diskCombo_->currentIndex();
     if (idx >= 0 && idx < static_cast<int>(disks_.size())) {
@@ -414,8 +533,13 @@ core::InstallPlan PlanDialog::buildPlan(const std::string& distroKey,
         p.strategy = core::Strategy::UseFreeAll;
     } else {
         p.strategy = core::Strategy::ShrinkAll;
-        // TODO: In a real implementation, we'd track which NTFS partition to shrink
-        // For now, the backend will need to pick an appropriate one
+        // shrinkAmountBytes is the TOTAL amount to remove from NTFS
+        // This equals linuxSizeBytes (user-requested total)
+        p.shrinkAmountBytes = p.linuxSizeBytes;
+        // Get selected shrink partition drive letter
+        if (shrinkPartitionCombo_->currentIndex() >= 0) {
+            p.shrinkDriveLetter = shrinkPartitionCombo_->currentData().value<char>();
+        }
     }
     return p;
 }

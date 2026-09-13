@@ -19,6 +19,9 @@
 
 namespace ulli::core {
 
+constexpr std::uint64_t kStagingSizeBytes = 7ull * 1024 * 1024 * 1024;
+constexpr std::uint64_t kMinFullInstallShrinkBytes = 30ull * 1024 * 1024 * 1024;
+
 enum class Strategy {
     ShrinkAll,        // shrink C: by LinuxSize + boot + rEFInd
     UseFreeAll,       // use existing unallocated, do not touch C:
@@ -32,6 +35,11 @@ enum class BootMode {
     Direct,    // boot directly from the new FAT32 partition's
                // \EFI\BOOT\BOOTx64.EFI (works on most UEFI firmwares)
     Refind,    // install rEFInd on a separate 100 MB FAT32 partition
+};
+
+enum class AllocationMode {
+    LiveOnly,   // Only create ~7 GB FAT32 staging partition for live environment
+    FullInstall // Shrink for staging (~7 GB) + unallocated Linux space (min 30 GB total)
 };
 
 struct InstallPlan {
@@ -52,6 +60,7 @@ struct InstallPlan {
     // Strategy
     Strategy strategy = Strategy::ShrinkAll;
     BootMode bootMode = BootMode::Direct;
+    AllocationMode allocationMode = AllocationMode::FullInstall;
 
     // After-success
     bool deleteIsoAfter = false;
@@ -66,6 +75,7 @@ struct InstallPlan {
                                                           // platform backend
                                                           // can clear it
                                                           // after delete)
+    std::uint64_t actualFreedBytes = 0;  // Actual bytes freed by shrink (may differ from linuxSizeBytes due to alignment)
 
     QString summary() const;
     bool valid() const;

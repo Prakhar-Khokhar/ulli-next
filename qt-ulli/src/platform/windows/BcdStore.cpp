@@ -92,11 +92,21 @@ core::Result<void> BcdStore::createLinuxEntry(core::InstallPlan& plan) {
 void BcdStore::deleteEntry(const core::InstallPlan& plan) {
     if (!plan.bcdGuid.has_value()) return;
     const QString g = QString::fromStdString("{" + plan.bcdGuid.value() + "}");
+
+    // Check if this entry is in fwbootmgr displayorder before deleting
+    QProcess checkProc;
+    checkProc.start("bcdedit.exe", {"/enum", "{fwbootmgr}"});
+    if (checkProc.waitForFinished(5000)) {
+        const QString out = QString::fromLocal8Bit(checkProc.readAll());
+        if (out.contains(g)) {
+            // This entry is in fwbootmgr - restore default to Windows bootmgr
+            QProcess::execute("bcdedit.exe", {"/set", "{fwbootmgr}", "default", "{bootmgr}"});
+        }
+    }
+
+    // Delete the entry
     QProcess::execute("bcdedit.exe", {"/delete", g});
-    // Reset fwbootmgr default to the original Windows boot entry.
-    // Best-effort: bcdedit doesn't fail gracefully here, so we ignore
-    // the exit code.
-    QProcess::execute("bcdedit.exe", {"/set", "{fwbootmgr}", "default", "{bootmgr}"});
+
     plan.bcdGuid.reset();
 }
 

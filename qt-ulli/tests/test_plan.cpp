@@ -17,6 +17,7 @@ private slots:
         p.targetDiskNumber = 1;
         p.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
         p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        p.strategy = ulli::core::Strategy::UseFreeAll;  // Doesn't require shrink
         QVERIFY(p.valid());
     }
     void tooSmallLinuxInvalid() {
@@ -36,6 +37,36 @@ private slots:
         p.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
         p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
         QVERIFY(p.summary().contains("ubuntu"));
+    }
+    void shrinkAllRequiresShrinkAmount() {
+        ulli::core::InstallPlan p;
+        p.distroKey = "mint";
+        p.isoPath = "/tmp/x.iso";
+        p.targetDiskNumber = 1;
+        p.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;  // 30 GB - meets FullInstall minimum
+        p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        p.strategy = ulli::core::Strategy::ShrinkAll;
+        p.allocationMode = ulli::core::AllocationMode::FullInstall;
+        // No shrinkAmountBytes set - should be invalid
+        QVERIFY(!p.valid());
+        
+        // With proper shrinkAmountBytes (must equal linuxSizeBytes for ShrinkAll) - should be valid
+        p.shrinkAmountBytes = p.linuxSizeBytes;  // 30 GB
+        QVERIFY(p.valid());
+        
+        // Test LiveOnly mode with 7 GB
+        p.allocationMode = ulli::core::AllocationMode::LiveOnly;
+        p.linuxSizeBytes = 7ull * 1024 * 1024 * 1024;
+        p.shrinkAmountBytes = 0;
+        QVERIFY(!p.valid());
+        p.shrinkAmountBytes = p.linuxSizeBytes;  // 7 GB
+        QVERIFY(p.valid());
+        
+        // Test FullInstall mode with less than 30 GB - should be invalid
+        p.allocationMode = ulli::core::AllocationMode::FullInstall;
+        p.linuxSizeBytes = 20ull * 1024 * 1024 * 1024;  // 20 GB - below 30 GB minimum
+        p.shrinkAmountBytes = p.linuxSizeBytes;
+        QVERIFY(!p.valid());
     }
 };
 

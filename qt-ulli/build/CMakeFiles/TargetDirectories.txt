@@ -15,6 +15,7 @@
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_catalog.dir
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_plan.dir
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_engine.dir
+/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_allocation.dir
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test.dir
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/edit_cache.dir
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/rebuild_cache.dir
@@ -30,3 +31,5 @@
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_plan_autogen.dir
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_engine_autogen_timestamp_deps.dir
 /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_engine_autogen.dir
+/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_allocation_autogen_timestamp_deps.dir
+/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_allocation_autogen.dir

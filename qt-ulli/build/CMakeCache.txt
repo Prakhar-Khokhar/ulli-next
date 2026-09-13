@@ -22,7 +22,7 @@ CMAKE_AR:FILEPATH=/usr/bin/ar
 
 //Choose the type of build, options are: None Debug Release RelWithDebInfo
 // MinSizeRel ...
-CMAKE_BUILD_TYPE:STRING=RelWithDebInfo
+CMAKE_BUILD_TYPE:STRING=Release
 
 //CXX compiler
 CMAKE_CXX_COMPILER:FILEPATH=/usr/bin/c++
@@ -36,7 +36,7 @@ CMAKE_CXX_COMPILER_AR:FILEPATH=/usr/bin/gcc-ar-15
 CMAKE_CXX_COMPILER_RANLIB:FILEPATH=/usr/bin/gcc-ranlib-15
 
 //Flags used by the CXX compiler during all build types.
-CMAKE_CXX_FLAGS:STRING=-O2 -g1
+CMAKE_CXX_FLAGS:STRING=
 
 //Flags used by the CXX compiler during DEBUG builds.
 CMAKE_CXX_FLAGS_DEBUG:STRING=-g
@@ -162,12 +162,6 @@ CMAKE_OBJCOPY:FILEPATH=/usr/bin/objcopy
 
 //Path to a program.
 CMAKE_OBJDUMP:FILEPATH=/usr/bin/objdump
-
-//Semicolon-separated list of installation prefixes searched by
-// find_package(), find_program(), find_library(), find_file(),
-// and find_path(). Empty by default; intended to be set by the
-// project or the user.
-CMAKE_PREFIX_PATH:UNINITIALIZED=/tmp/qt6/6.7.3/gcc_64
 
 //Value Computed by CMake
 CMAKE_PROJECT_COMPAT_VERSION:STATIC=
@@ -303,12 +297,6 @@ OPENGL_opengl_LIBRARY:FILEPATH=/usr/lib/x86_64-linux-gnu/libOpenGL.so
 //Path to a file.
 OPENGL_xmesa_INCLUDE_DIR:PATH=OPENGL_xmesa_INCLUDE_DIR-NOTFOUND
 
-//Arguments to supply to pkg-config
-PKG_CONFIG_ARGN:STRING=
-
-//pkg-config executable
-PKG_CONFIG_EXECUTABLE:FILEPATH=/usr/bin/pkg-config
-
 //Additional directories where find(Qt6 ...) host Qt components
 // are searched
 QT_ADDITIONAL_HOST_PACKAGES_PREFIX_PATH:STRING=
@@ -366,12 +354,6 @@ Vulkan_INCLUDE_DIR:PATH=/usr/include
 
 //Path to a library.
 Vulkan_LIBRARY:FILEPATH=/usr/lib/x86_64-linux-gnu/libvulkan.so
-
-//Path to a file.
-XKB_INCLUDE_DIR:PATH=XKB_INCLUDE_DIR-NOTFOUND
-
-//Path to a library.
-XKB_LIBRARY:FILEPATH=XKB_LIBRARY-NOTFOUND
 
 //Value Computed by CMake
 ulli-qt_BINARY_DIR:STATIC=/home/prakhark/ULLI beta/ulli-next/qt-ulli/build
@@ -597,35 +579,6 @@ OPENGL_glx_LIBRARY-ADVANCED:INTERNAL=1
 OPENGL_opengl_LIBRARY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: OPENGL_xmesa_INCLUDE_DIR
 OPENGL_xmesa_INCLUDE_DIR-ADVANCED:INTERNAL=1
-//ADVANCED property for variable: PKG_CONFIG_ARGN
-PKG_CONFIG_ARGN-ADVANCED:INTERNAL=1
-//ADVANCED property for variable: PKG_CONFIG_EXECUTABLE
-PKG_CONFIG_EXECUTABLE-ADVANCED:INTERNAL=1
-PKG_XKB_CFLAGS:INTERNAL=
-PKG_XKB_CFLAGS_I:INTERNAL=
-PKG_XKB_CFLAGS_OTHER:INTERNAL=
-PKG_XKB_FOUND:INTERNAL=
-PKG_XKB_INCLUDEDIR:INTERNAL=
-PKG_XKB_LIBDIR:INTERNAL=
-PKG_XKB_LIBS:INTERNAL=
-PKG_XKB_LIBS_L:INTERNAL=
-PKG_XKB_LIBS_OTHER:INTERNAL=
-PKG_XKB_LIBS_PATHS:INTERNAL=
-PKG_XKB_MODULE_NAME:INTERNAL=
-PKG_XKB_PREFIX:INTERNAL=
-PKG_XKB_STATIC_CFLAGS:INTERNAL=
-PKG_XKB_STATIC_CFLAGS_I:INTERNAL=
-PKG_XKB_STATIC_CFLAGS_OTHER:INTERNAL=
-PKG_XKB_STATIC_LIBDIR:INTERNAL=
-PKG_XKB_STATIC_LIBS:INTERNAL=
-PKG_XKB_STATIC_LIBS_L:INTERNAL=
-PKG_XKB_STATIC_LIBS_OTHER:INTERNAL=
-PKG_XKB_STATIC_LIBS_PATHS:INTERNAL=
-PKG_XKB_VERSION:INTERNAL=
-PKG_XKB_xkbcommon_INCLUDEDIR:INTERNAL=
-PKG_XKB_xkbcommon_LIBDIR:INTERNAL=
-PKG_XKB_xkbcommon_PREFIX:INTERNAL=
-PKG_XKB_xkbcommon_VERSION:INTERNAL=
 //Qt feature: abstractbutton (from target Qt6::Widgets)
 QT_FEATURE_abstractbutton:INTERNAL=ON
 //Qt feature: abstractslider (from target Qt6::Widgets)
@@ -640,12 +593,6 @@ QT_FEATURE_accessibility_atspi_bridge:INTERNAL=ON
 QT_FEATURE_action:INTERNAL=ON
 //Qt feature: aesni (from target Qt6::Core)
 QT_FEATURE_aesni:INTERNAL=ON
-//Qt feature: alloca (from target Qt6::Core)
-QT_FEATURE_alloca:INTERNAL=ON
-//Qt feature: alloca_h (from target Qt6::Core)
-QT_FEATURE_alloca_h:INTERNAL=ON
-//Qt feature: alloca_malloc_h (from target Qt6::Core)
-QT_FEATURE_alloca_malloc_h:INTERNAL=OFF
 //Qt feature: android_style_assets (from target Qt6::Core)
 QT_FEATURE_android_style_assets:INTERNAL=OFF
 //Qt feature: animation (from target Qt6::Core)
@@ -706,8 +653,6 @@ QT_FEATURE_clipboard:INTERNAL=ON
 QT_FEATURE_clock_gettime:INTERNAL=ON
 //Qt feature: clock_monotonic (from target Qt6::Core)
 QT_FEATURE_clock_monotonic:INTERNAL=ON
-//Qt feature: close_range (from target Qt6::Core)
-QT_FEATURE_close_range:INTERNAL=OFF
 //Qt feature: colordialog (from target Qt6::Widgets)
 QT_FEATURE_colordialog:INTERNAL=ON
 //Qt feature: colornames (from target Qt6::Gui)
@@ -880,8 +825,6 @@ QT_FEATURE_fontdialog:INTERNAL=ON
 QT_FEATURE_force_asserts:INTERNAL=OFF
 //Qt feature: force_bundled_libs (from target Qt6::Core)
 QT_FEATURE_force_bundled_libs:INTERNAL=OFF
-//Qt feature: force_debug_info (from target Qt6::Core)
-QT_FEATURE_force_debug_info:INTERNAL=ON
 //Qt feature: force_system_libs (from target Qt6::Core)
 QT_FEATURE_force_system_libs:INTERNAL=OFF
 //Qt feature: forkfd_pidfd (from target Qt6::Core)
@@ -932,8 +875,6 @@ QT_FEATURE_gtk3:INTERNAL=ON
 QT_FEATURE_gui:INTERNAL=ON
 //Qt feature: harfbuzz (from target Qt6::Gui)
 QT_FEATURE_harfbuzz:INTERNAL=ON
-//Qt feature: headersclean (from target Qt6::Core)
-QT_FEATURE_headersclean:INTERNAL=ON
 //Qt feature: highdpiscaling (from target Qt6::Gui)
 QT_FEATURE_highdpiscaling:INTERNAL=ON
 //Qt feature: hijricalendar (from target Qt6::Core)
@@ -1146,8 +1087,6 @@ QT_FEATURE_posix_fallocate:INTERNAL=ON
 QT_FEATURE_posix_sem:INTERNAL=ON
 //Qt feature: posix_shm (from target Qt6::Core)
 QT_FEATURE_posix_shm:INTERNAL=ON
-//Qt feature: precompile_header (from target Qt6::Core)
-QT_FEATURE_precompile_header:INTERNAL=ON
 //Qt feature: printsupport (from target Qt6::Core)
 QT_FEATURE_printsupport:INTERNAL=ON
 //Qt feature: private_tests (from target Qt6::Core)
@@ -1280,8 +1219,6 @@ QT_FEATURE_ssse3:INTERNAL=ON
 QT_FEATURE_stack_clash_protection:INTERNAL=ON
 //Qt feature: stack_protector (from target Qt6::Core)
 QT_FEATURE_stack_protector:INTERNAL=ON
-//Qt feature: stack_protector_strong (from target Qt6::Core)
-QT_FEATURE_stack_protector_strong:INTERNAL=OFF
 //Qt feature: stackedwidget (from target Qt6::Widgets)
 QT_FEATURE_stackedwidget:INTERNAL=ON
 //Qt feature: standarditemmodel (from target Qt6::Gui)
@@ -1548,5 +1485,4 @@ Vulkan_INCLUDE_DIR-ADVANCED:INTERNAL=1
 Vulkan_LIBRARY-ADVANCED:INTERNAL=1
 //CMAKE_INSTALL_PREFIX during last run
 _GNUInstallDirs_LAST_CMAKE_INSTALL_PREFIX:INTERNAL=/usr/local
-__pkg_config_checked_PKG_XKB:INTERNAL=1
 

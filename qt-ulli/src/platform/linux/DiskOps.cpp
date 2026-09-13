@@ -41,8 +41,9 @@ core::Result<void> DiskOps::wipeDisk(int) {
 }
 
 core::Result<void> DiskOps::createLayout(const core::InstallPlan&,
-                                         std::filesystem::path&,
-                                         std::filesystem::path&) {
+                                          std::filesystem::path&,
+                                          std::filesystem::path&,
+                                          std::function<bool()>) {
     return core::makeError(core::Error::Kind::Internal,
         "createLayout: not implemented (Phase 2)");
 }

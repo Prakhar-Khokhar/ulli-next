@@ -75,7 +75,8 @@ public:
     }
 
     Result<void> createLayout(const InstallPlan&, std::filesystem::path& bootMount,
-                              std::filesystem::path& refindMount) override {
+                              std::filesystem::path& refindMount,
+                              std::function<bool()>) override {
         auto r = checkExpectation("layout");
         if (!r) return r;
         bootMount = "/mnt/boot";
@@ -417,11 +418,12 @@ private slots:
         plan.distroKey = "test";
         plan.isoPath = "/tmp/test.iso";
         plan.targetDiskNumber = 1;
-        plan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        plan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;  // 30 GB - meets FullInstall minimum
         plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
         plan.strategy = Strategy::ShrinkAll;
         plan.shrinkDriveLetter = 'C';
-        plan.shrinkAmountBytes = plan.linuxSizeBytes + plan.bootSizeBytes + plan.refindSizeBytes;
+        plan.shrinkAmountBytes = plan.linuxSizeBytes;  // Must equal linuxSizeBytes for ShrinkAll
+        plan.allocationMode = AllocationMode::FullInstall;
 
         engine.run(std::move(plan));
 
@@ -468,6 +470,178 @@ private slots:
         auto args = finishedSpy.first();
         QVERIFY(args[0].toBool() == false);
         QVERIFY(args[1].toString().contains("validation"));
+    }
+
+    // Test cancellation during createLayout stage
+    void testCancellationDuringLayout() {
+        MockBackend backend;
+        backend.setExpectations({
+            {"preflight", true, 10},
+            {"validate", true, 10},
+            {"iso", true, 10},
+            {"layout", true, 500},  // Long delay in layout
+        });
+
+        Disk disk;
+        disk.number = 1;
+        disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
+        backend.setDisks({disk});
+
+        ProgressLog log;
+        QThread engineThread;
+        InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
+        engine.moveToThread(&engineThread);
+
+        QSignalSpy finishedSpy(&engine, &InstallEngine::finished);
+
+        InstallPlan plan;
+        plan.distroKey = "test";
+        plan.isoPath = "/tmp/test.iso";
+        plan.targetDiskNumber = 1;
+        plan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        plan.strategy = Strategy::UseFreeAll;
+
+        QEventLoop loop;
+        connect(&engineThread, &QThread::started, &engine, [&engine, plan = std::move(plan)]() mutable {
+            engine.run(std::move(plan));
+        });
+        connect(&engine, &InstallEngine::finished, &loop, &QEventLoop::quit);
+        engineThread.start();
+
+        // Wait for layout stage to start, then cancel
+        QThread::msleep(200);
+        engine.requestCancel();
+
+        QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+        loop.exec();
+
+        engineThread.quit();
+        engineThread.wait(1000);
+
+        QVERIFY(finishedSpy.count() == 1);
+        auto args = finishedSpy.first();
+        QVERIFY(args[0].toBool() == false);
+        QVERIFY(args[1].toString().contains("Cancelled"));
+    }
+
+    // Test LiveOnly allocation mode
+    void testLiveOnlyAllocation() {
+        MockBackend backend;
+        backend.setExpectations({
+            {"preflight", true},
+            {"validate", true},
+            {"iso", true},
+            {"layout", true},
+            {"mount", true},
+            {"copy", true},
+            {"patch", true},
+            {"bootentry", true},
+        });
+
+        Disk disk;
+        disk.number = 1;
+        disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
+        backend.setDisks({disk});
+
+        ProgressLog log;
+        InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
+
+        QSignalSpy finishedSpy(&engine, &InstallEngine::finished);
+
+        InstallPlan plan;
+        plan.distroKey = "test";
+        plan.isoPath = "/tmp/test.iso";
+        plan.targetDiskNumber = 1;
+        plan.linuxSizeBytes = 7ull * 1024 * 1024 * 1024;  // 7 GB for LiveOnly
+        plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        plan.strategy = Strategy::UseFreeAll;
+        plan.allocationMode = AllocationMode::LiveOnly;
+
+        engine.run(std::move(plan));
+
+        waitForFinished(&engine, finishedSpy);
+
+        auto args = finishedSpy.first();
+        QVERIFY(args[0].toBool() == true);
+    }
+
+    // Test FullInstall with larger size (50 GB)
+    void testFullInstall50GB() {
+        MockBackend backend;
+        backend.setExpectations({
+            {"preflight", true},
+            {"validate", true},
+            {"iso", true},
+            {"layout", true},
+            {"mount", true},
+            {"copy", true},
+            {"patch", true},
+            {"bootentry", true},
+        });
+
+        Disk disk;
+        disk.number = 1;
+        disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
+        backend.setDisks({disk});
+
+        ProgressLog log;
+        InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
+
+        QSignalSpy finishedSpy(&engine, &InstallEngine::finished);
+
+        InstallPlan plan;
+        plan.distroKey = "test";
+        plan.isoPath = "/tmp/test.iso";
+        plan.targetDiskNumber = 1;
+        plan.linuxSizeBytes = 50ull * 1024 * 1024 * 1024;  // 50 GB
+        plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        plan.strategy = Strategy::UseFreeAll;
+        plan.allocationMode = AllocationMode::FullInstall;
+
+        engine.run(std::move(plan));
+
+        waitForFinished(&engine, finishedSpy);
+
+        auto args = finishedSpy.first();
+        QVERIFY(args[0].toBool() == true);
+    }
+
+    // Test layout failure (simulated)
+    void testLayoutFailure() {
+        MockBackend backend;
+        backend.setExpectations({
+            {"preflight", true},
+            {"validate", true},
+            {"iso", true},
+            {"layout", false},  // Fail at layout
+        });
+
+        Disk disk;
+        disk.number = 1;
+        disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
+        backend.setDisks({disk});
+
+        ProgressLog log;
+        InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
+
+        QSignalSpy finishedSpy(&engine, &InstallEngine::finished);
+
+        InstallPlan plan;
+        plan.distroKey = "test";
+        plan.isoPath = "/tmp/test.iso";
+        plan.targetDiskNumber = 1;
+        plan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        plan.strategy = Strategy::UseFreeAll;
+
+        engine.run(std::move(plan));
+
+        waitForFinished(&engine, finishedSpy);
+
+        auto args = finishedSpy.first();
+        QVERIFY(args[0].toBool() == false);
+        QVERIFY(args[1].toString().contains("Simulated failure"));
     }
 
 private:

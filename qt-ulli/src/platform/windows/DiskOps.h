@@ -35,11 +35,12 @@ public:
         const std::filesystem::path& destPath,
         std::function<void(int percent, const QString& status)> progressCallback) override;
     core::Result<std::uint64_t> shrinkPartition(char driveLetter,
-                                                std::uint64_t newSizeBytes) override;
+                                                std::uint64_t requestedShrinkBytes) override;
     core::Result<void> wipeDisk(int diskNumber) override;
-    core::Result<void> createLayout(const core::InstallPlan& plan,
-                                    std::filesystem::path& bootMount,
-                                    std::filesystem::path& refindMount) override;
+core::Result<void> createLayout(const core::InstallPlan& plan,
+                                     std::filesystem::path& bootMount,
+                                     std::filesystem::path& refindMount,
+                                     std::function<bool()> cancelCallback = nullptr) override;
     core::Result<std::filesystem::path> mountIso(
         const std::filesystem::path& iso) override;
     void unmountIso(const std::filesystem::path& mount) override;
@@ -51,6 +52,9 @@ public:
     core::Result<void> createBootEntry(const core::InstallPlan& plan) override;
     void rollbackBootEntry(const core::InstallPlan& plan) override;
     void restartSystem() override;
+
+private:
+    static std::optional<char> findFreeLetter(char startFrom = 'Z');
 };
 
 }  // namespace ulli::platform::windows

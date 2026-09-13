@@ -7,14 +7,14 @@
 
 # =============================================================================
 # Project: ulli-qt
-# Configurations: RelWithDebInfo
+# Configurations: Release
 # =============================================================================
 # =============================================================================
 
 #############################################
 # Rule for generating CXX dependencies.
 
-rule CXX_SCAN__ulli-core_RelWithDebInfo
+rule CXX_SCAN__ulli-core_Release
   depfile = $DEP_FILE
   command = /usr/bin/c++ $DEFINES $INCLUDES $FLAGS -E -x c++ $in -MT $DYNDEP_INTERMEDIATE_FILE -MD -MF $DEP_FILE -fmodules-ts -fdeps-file=$DYNDEP_INTERMEDIATE_FILE -fdeps-target=$OBJ_FILE -fdeps-format=p1689r5 -o $PREPROCESSED_OUTPUT_FILE
   description = Scanning $in for CXX dependencies
@@ -23,7 +23,7 @@ rule CXX_SCAN__ulli-core_RelWithDebInfo
 #############################################
 # Rule to generate ninja dyndep files for CXX.
 
-rule CXX_DYNDEP__ulli-core_RelWithDebInfo
+rule CXX_DYNDEP__ulli-core_Release
   command = /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_ninja_dyndep --tdi=CMakeFiles/ulli-core.dir/CXXDependInfo.json --lang=CXX --modmapfmt=gcc --dd=$out @$out.rsp
   description = Generating CXX dyndep file $out
   rspfile = $out.rsp
@@ -34,7 +34,7 @@ rule CXX_DYNDEP__ulli-core_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__ulli-core_scanned_RelWithDebInfo
+rule CXX_COMPILER__ulli-core_scanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -fmodules-ts -fmodule-mapper=$DYNDEP_MODULE_MAP_FILE -MD -fdeps-format=p1689r5 -x c++ -o $out -c $in
@@ -44,7 +44,7 @@ rule CXX_COMPILER__ulli-core_scanned_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__ulli-core_unscanned_RelWithDebInfo
+rule CXX_COMPILER__ulli-core_unscanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
@@ -54,7 +54,7 @@ rule CXX_COMPILER__ulli-core_unscanned_RelWithDebInfo
 #############################################
 # Rule for linking CXX static library.
 
-rule CXX_STATIC_LIBRARY_LINKER__ulli-core_RelWithDebInfo
+rule CXX_STATIC_LIBRARY_LINKER__ulli-core_Release
   command = $PRE_LINK && /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E rm -f $TARGET_FILE && /usr/bin/ar qc $TARGET_FILE $LINK_FLAGS $in && /usr/bin/ranlib $TARGET_FILE && $POST_BUILD
   description = Linking CXX static library $TARGET_FILE
   restat = $RESTAT
@@ -63,7 +63,7 @@ rule CXX_STATIC_LIBRARY_LINKER__ulli-core_RelWithDebInfo
 #############################################
 # Rule for generating CXX dependencies.
 
-rule CXX_SCAN__ulli-qt_RelWithDebInfo
+rule CXX_SCAN__ulli-qt_Release
   depfile = $DEP_FILE
   command = /usr/bin/c++ $DEFINES $INCLUDES $FLAGS -E -x c++ $in -MT $DYNDEP_INTERMEDIATE_FILE -MD -MF $DEP_FILE -fmodules-ts -fdeps-file=$DYNDEP_INTERMEDIATE_FILE -fdeps-target=$OBJ_FILE -fdeps-format=p1689r5 -o $PREPROCESSED_OUTPUT_FILE
   description = Scanning $in for CXX dependencies
@@ -72,7 +72,7 @@ rule CXX_SCAN__ulli-qt_RelWithDebInfo
 #############################################
 # Rule to generate ninja dyndep files for CXX.
 
-rule CXX_DYNDEP__ulli-qt_RelWithDebInfo
+rule CXX_DYNDEP__ulli-qt_Release
   command = /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_ninja_dyndep --tdi=CMakeFiles/ulli-qt.dir/CXXDependInfo.json --lang=CXX --modmapfmt=gcc --dd=$out @$out.rsp
   description = Generating CXX dyndep file $out
   rspfile = $out.rsp
@@ -83,7 +83,7 @@ rule CXX_DYNDEP__ulli-qt_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__ulli-qt_scanned_RelWithDebInfo
+rule CXX_COMPILER__ulli-qt_scanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -fmodules-ts -fmodule-mapper=$DYNDEP_MODULE_MAP_FILE -MD -fdeps-format=p1689r5 -x c++ -o $out -c $in
@@ -93,7 +93,7 @@ rule CXX_COMPILER__ulli-qt_scanned_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__ulli-qt_unscanned_RelWithDebInfo
+rule CXX_COMPILER__ulli-qt_unscanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
@@ -103,7 +103,7 @@ rule CXX_COMPILER__ulli-qt_unscanned_RelWithDebInfo
 #############################################
 # Rule for linking CXX executable.
 
-rule CXX_EXECUTABLE_LINKER__ulli-qt_RelWithDebInfo
+rule CXX_EXECUTABLE_LINKER__ulli-qt_Release
   depfile = $DEP_FILE
   deps = gcc
   command = $PRE_LINK && /usr/bin/c++ $FLAGS $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD
@@ -122,7 +122,7 @@ rule CUSTOM_COMMAND
 #############################################
 # Rule for generating CXX dependencies.
 
-rule CXX_SCAN__test_result_RelWithDebInfo
+rule CXX_SCAN__test_result_Release
   depfile = $DEP_FILE
   command = /usr/bin/c++ $DEFINES $INCLUDES $FLAGS -E -x c++ $in -MT $DYNDEP_INTERMEDIATE_FILE -MD -MF $DEP_FILE -fmodules-ts -fdeps-file=$DYNDEP_INTERMEDIATE_FILE -fdeps-target=$OBJ_FILE -fdeps-format=p1689r5 -o $PREPROCESSED_OUTPUT_FILE
   description = Scanning $in for CXX dependencies
@@ -131,7 +131,7 @@ rule CXX_SCAN__test_result_RelWithDebInfo
 #############################################
 # Rule to generate ninja dyndep files for CXX.
 
-rule CXX_DYNDEP__test_result_RelWithDebInfo
+rule CXX_DYNDEP__test_result_Release
   command = /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_ninja_dyndep --tdi=tests/CMakeFiles/test_result.dir/CXXDependInfo.json --lang=CXX --modmapfmt=gcc --dd=$out @$out.rsp
   description = Generating CXX dyndep file $out
   rspfile = $out.rsp
@@ -142,7 +142,7 @@ rule CXX_DYNDEP__test_result_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_result_scanned_RelWithDebInfo
+rule CXX_COMPILER__test_result_scanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -fmodules-ts -fmodule-mapper=$DYNDEP_MODULE_MAP_FILE -MD -fdeps-format=p1689r5 -x c++ -o $out -c $in
@@ -152,7 +152,7 @@ rule CXX_COMPILER__test_result_scanned_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_result_unscanned_RelWithDebInfo
+rule CXX_COMPILER__test_result_unscanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
@@ -162,7 +162,7 @@ rule CXX_COMPILER__test_result_unscanned_RelWithDebInfo
 #############################################
 # Rule for linking CXX executable.
 
-rule CXX_EXECUTABLE_LINKER__test_result_RelWithDebInfo
+rule CXX_EXECUTABLE_LINKER__test_result_Release
   depfile = $DEP_FILE
   deps = gcc
   command = $PRE_LINK && /usr/bin/c++ $FLAGS $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD
@@ -173,7 +173,7 @@ rule CXX_EXECUTABLE_LINKER__test_result_RelWithDebInfo
 #############################################
 # Rule for generating CXX dependencies.
 
-rule CXX_SCAN__test_catalog_RelWithDebInfo
+rule CXX_SCAN__test_catalog_Release
   depfile = $DEP_FILE
   command = /usr/bin/c++ $DEFINES $INCLUDES $FLAGS -E -x c++ $in -MT $DYNDEP_INTERMEDIATE_FILE -MD -MF $DEP_FILE -fmodules-ts -fdeps-file=$DYNDEP_INTERMEDIATE_FILE -fdeps-target=$OBJ_FILE -fdeps-format=p1689r5 -o $PREPROCESSED_OUTPUT_FILE
   description = Scanning $in for CXX dependencies
@@ -182,7 +182,7 @@ rule CXX_SCAN__test_catalog_RelWithDebInfo
 #############################################
 # Rule to generate ninja dyndep files for CXX.
 
-rule CXX_DYNDEP__test_catalog_RelWithDebInfo
+rule CXX_DYNDEP__test_catalog_Release
   command = /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_ninja_dyndep --tdi=tests/CMakeFiles/test_catalog.dir/CXXDependInfo.json --lang=CXX --modmapfmt=gcc --dd=$out @$out.rsp
   description = Generating CXX dyndep file $out
   rspfile = $out.rsp
@@ -193,7 +193,7 @@ rule CXX_DYNDEP__test_catalog_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_catalog_scanned_RelWithDebInfo
+rule CXX_COMPILER__test_catalog_scanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -fmodules-ts -fmodule-mapper=$DYNDEP_MODULE_MAP_FILE -MD -fdeps-format=p1689r5 -x c++ -o $out -c $in
@@ -203,7 +203,7 @@ rule CXX_COMPILER__test_catalog_scanned_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_catalog_unscanned_RelWithDebInfo
+rule CXX_COMPILER__test_catalog_unscanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
@@ -213,7 +213,7 @@ rule CXX_COMPILER__test_catalog_unscanned_RelWithDebInfo
 #############################################
 # Rule for linking CXX executable.
 
-rule CXX_EXECUTABLE_LINKER__test_catalog_RelWithDebInfo
+rule CXX_EXECUTABLE_LINKER__test_catalog_Release
   depfile = $DEP_FILE
   deps = gcc
   command = $PRE_LINK && /usr/bin/c++ $FLAGS $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD
@@ -224,7 +224,7 @@ rule CXX_EXECUTABLE_LINKER__test_catalog_RelWithDebInfo
 #############################################
 # Rule for generating CXX dependencies.
 
-rule CXX_SCAN__test_plan_RelWithDebInfo
+rule CXX_SCAN__test_plan_Release
   depfile = $DEP_FILE
   command = /usr/bin/c++ $DEFINES $INCLUDES $FLAGS -E -x c++ $in -MT $DYNDEP_INTERMEDIATE_FILE -MD -MF $DEP_FILE -fmodules-ts -fdeps-file=$DYNDEP_INTERMEDIATE_FILE -fdeps-target=$OBJ_FILE -fdeps-format=p1689r5 -o $PREPROCESSED_OUTPUT_FILE
   description = Scanning $in for CXX dependencies
@@ -233,7 +233,7 @@ rule CXX_SCAN__test_plan_RelWithDebInfo
 #############################################
 # Rule to generate ninja dyndep files for CXX.
 
-rule CXX_DYNDEP__test_plan_RelWithDebInfo
+rule CXX_DYNDEP__test_plan_Release
   command = /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_ninja_dyndep --tdi=tests/CMakeFiles/test_plan.dir/CXXDependInfo.json --lang=CXX --modmapfmt=gcc --dd=$out @$out.rsp
   description = Generating CXX dyndep file $out
   rspfile = $out.rsp
@@ -244,7 +244,7 @@ rule CXX_DYNDEP__test_plan_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_plan_scanned_RelWithDebInfo
+rule CXX_COMPILER__test_plan_scanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -fmodules-ts -fmodule-mapper=$DYNDEP_MODULE_MAP_FILE -MD -fdeps-format=p1689r5 -x c++ -o $out -c $in
@@ -254,7 +254,7 @@ rule CXX_COMPILER__test_plan_scanned_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_plan_unscanned_RelWithDebInfo
+rule CXX_COMPILER__test_plan_unscanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
@@ -264,7 +264,7 @@ rule CXX_COMPILER__test_plan_unscanned_RelWithDebInfo
 #############################################
 # Rule for linking CXX executable.
 
-rule CXX_EXECUTABLE_LINKER__test_plan_RelWithDebInfo
+rule CXX_EXECUTABLE_LINKER__test_plan_Release
   depfile = $DEP_FILE
   deps = gcc
   command = $PRE_LINK && /usr/bin/c++ $FLAGS $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD
@@ -275,7 +275,7 @@ rule CXX_EXECUTABLE_LINKER__test_plan_RelWithDebInfo
 #############################################
 # Rule for generating CXX dependencies.
 
-rule CXX_SCAN__test_engine_RelWithDebInfo
+rule CXX_SCAN__test_engine_Release
   depfile = $DEP_FILE
   command = /usr/bin/c++ $DEFINES $INCLUDES $FLAGS -E -x c++ $in -MT $DYNDEP_INTERMEDIATE_FILE -MD -MF $DEP_FILE -fmodules-ts -fdeps-file=$DYNDEP_INTERMEDIATE_FILE -fdeps-target=$OBJ_FILE -fdeps-format=p1689r5 -o $PREPROCESSED_OUTPUT_FILE
   description = Scanning $in for CXX dependencies
@@ -284,7 +284,7 @@ rule CXX_SCAN__test_engine_RelWithDebInfo
 #############################################
 # Rule to generate ninja dyndep files for CXX.
 
-rule CXX_DYNDEP__test_engine_RelWithDebInfo
+rule CXX_DYNDEP__test_engine_Release
   command = /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_ninja_dyndep --tdi=tests/CMakeFiles/test_engine.dir/CXXDependInfo.json --lang=CXX --modmapfmt=gcc --dd=$out @$out.rsp
   description = Generating CXX dyndep file $out
   rspfile = $out.rsp
@@ -295,7 +295,7 @@ rule CXX_DYNDEP__test_engine_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_engine_scanned_RelWithDebInfo
+rule CXX_COMPILER__test_engine_scanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -fmodules-ts -fmodule-mapper=$DYNDEP_MODULE_MAP_FILE -MD -fdeps-format=p1689r5 -x c++ -o $out -c $in
@@ -305,7 +305,7 @@ rule CXX_COMPILER__test_engine_scanned_RelWithDebInfo
 #############################################
 # Rule for compiling CXX files.
 
-rule CXX_COMPILER__test_engine_unscanned_RelWithDebInfo
+rule CXX_COMPILER__test_engine_unscanned_Release
   depfile = $DEP_FILE
   deps = gcc
   command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
@@ -315,7 +315,58 @@ rule CXX_COMPILER__test_engine_unscanned_RelWithDebInfo
 #############################################
 # Rule for linking CXX executable.
 
-rule CXX_EXECUTABLE_LINKER__test_engine_RelWithDebInfo
+rule CXX_EXECUTABLE_LINKER__test_engine_Release
+  depfile = $DEP_FILE
+  deps = gcc
+  command = $PRE_LINK && /usr/bin/c++ $FLAGS $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD
+  description = Linking CXX executable $TARGET_FILE
+  restat = $RESTAT
+
+
+#############################################
+# Rule for generating CXX dependencies.
+
+rule CXX_SCAN__test_allocation_Release
+  depfile = $DEP_FILE
+  command = /usr/bin/c++ $DEFINES $INCLUDES $FLAGS -E -x c++ $in -MT $DYNDEP_INTERMEDIATE_FILE -MD -MF $DEP_FILE -fmodules-ts -fdeps-file=$DYNDEP_INTERMEDIATE_FILE -fdeps-target=$OBJ_FILE -fdeps-format=p1689r5 -o $PREPROCESSED_OUTPUT_FILE
+  description = Scanning $in for CXX dependencies
+
+
+#############################################
+# Rule to generate ninja dyndep files for CXX.
+
+rule CXX_DYNDEP__test_allocation_Release
+  command = /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_ninja_dyndep --tdi=tests/CMakeFiles/test_allocation.dir/CXXDependInfo.json --lang=CXX --modmapfmt=gcc --dd=$out @$out.rsp
+  description = Generating CXX dyndep file $out
+  rspfile = $out.rsp
+  rspfile_content = $in
+  restat = 1
+
+
+#############################################
+# Rule for compiling CXX files.
+
+rule CXX_COMPILER__test_allocation_scanned_Release
+  depfile = $DEP_FILE
+  deps = gcc
+  command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -fmodules-ts -fmodule-mapper=$DYNDEP_MODULE_MAP_FILE -MD -fdeps-format=p1689r5 -x c++ -o $out -c $in
+  description = Building CXX object $out
+
+
+#############################################
+# Rule for compiling CXX files.
+
+rule CXX_COMPILER__test_allocation_unscanned_Release
+  depfile = $DEP_FILE
+  deps = gcc
+  command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
+  description = Building CXX object $out
+
+
+#############################################
+# Rule for linking CXX executable.
+
+rule CXX_EXECUTABLE_LINKER__test_allocation_Release
   depfile = $DEP_FILE
   deps = gcc
   command = $PRE_LINK && /usr/bin/c++ $FLAGS $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD

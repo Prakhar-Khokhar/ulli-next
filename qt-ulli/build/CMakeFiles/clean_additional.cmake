@@ -1,12 +1,14 @@
 # Additional clean files
 cmake_minimum_required(VERSION 3.16)
 
-if("${CONFIG}" STREQUAL "" OR "${CONFIG}" STREQUAL "RelWithDebInfo")
+if("${CONFIG}" STREQUAL "" OR "${CONFIG}" STREQUAL "Release")
   file(REMOVE_RECURSE
   "CMakeFiles/ulli-core_autogen.dir/AutogenUsed.txt"
   "CMakeFiles/ulli-core_autogen.dir/ParseCache.txt"
   "CMakeFiles/ulli-qt_autogen.dir/AutogenUsed.txt"
   "CMakeFiles/ulli-qt_autogen.dir/ParseCache.txt"
+  "tests/CMakeFiles/test_allocation_autogen.dir/AutogenUsed.txt"
+  "tests/CMakeFiles/test_allocation_autogen.dir/ParseCache.txt"
   "tests/CMakeFiles/test_catalog_autogen.dir/AutogenUsed.txt"
   "tests/CMakeFiles/test_catalog_autogen.dir/ParseCache.txt"
   "tests/CMakeFiles/test_engine_autogen.dir/AutogenUsed.txt"
@@ -15,6 +17,7 @@ if("${CONFIG}" STREQUAL "" OR "${CONFIG}" STREQUAL "RelWithDebInfo")
   "tests/CMakeFiles/test_plan_autogen.dir/ParseCache.txt"
   "tests/CMakeFiles/test_result_autogen.dir/AutogenUsed.txt"
   "tests/CMakeFiles/test_result_autogen.dir/ParseCache.txt"
+  "tests/test_allocation_autogen"
   "tests/test_catalog_autogen"
   "tests/test_engine_autogen"
   "tests/test_plan_autogen"

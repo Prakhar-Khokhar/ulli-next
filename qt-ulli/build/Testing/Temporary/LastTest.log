@@ -1,10 +1,10 @@
-Start testing: Sep 08 12:31 IST
+Start testing: Sep 09 23:00 IST
 ----------------------------------------------------------
-1/4 Testing: result
-1/4 Test: result
+1/5 Testing: result
+1/5 Test: result
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"result" start time: Sep 08 12:31 IST
+"result" start time: Sep 09 23:00 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestResult *********
@@ -20,18 +20,18 @@ PASS   : TestResult::cleanupTestCase()
 Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of TestResult *********
 <end of output>
-Test time =   0.00 sec
+Test time =   0.16 sec
 ----------------------------------------------------------
 Test Passed.
-"result" end time: Sep 08 12:31 IST
+"result" end time: Sep 09 23:00 IST
 "result" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-2/4 Testing: catalog
-2/4 Test: catalog
+2/5 Testing: catalog
+2/5 Test: catalog
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"catalog" start time: Sep 08 12:31 IST
+"catalog" start time: Sep 09 23:00 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestCatalog *********
@@ -49,15 +49,15 @@ Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"catalog" end time: Sep 08 12:31 IST
+"catalog" end time: Sep 09 23:00 IST
 "catalog" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-3/4 Testing: plan
-3/4 Test: plan
+3/5 Testing: plan
+3/5 Test: plan
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"plan" start time: Sep 08 12:31 IST
+"plan" start time: Sep 09 23:00 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestPlan *********
@@ -67,22 +67,23 @@ PASS   : TestPlan::emptyPlanInvalid()
 PASS   : TestPlan::minimalValid()
 PASS   : TestPlan::tooSmallLinuxInvalid()
 PASS   : TestPlan::summaryContainsDistro()
+PASS   : TestPlan::shrinkAllRequiresShrinkAmount()
 PASS   : TestPlan::cleanupTestCase()
-Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of TestPlan *********
 <end of output>
-Test time =   0.01 sec
+Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"plan" end time: Sep 08 12:31 IST
+"plan" end time: Sep 09 23:00 IST
 "plan" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-4/4 Testing: engine
-4/4 Test: engine
+4/5 Testing: engine
+4/5 Test: engine
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"engine" start time: Sep 08 12:31 IST
+"engine" start time: Sep 09 23:00 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of ulli::core::TestEngine *********
@@ -164,14 +165,50 @@ QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "booten
 PASS   : ulli::core::TestEngine::testShrinkAllStrategy()
 PASS   : ulli::core::TestEngine::testInvalidPlanRejected()
 PASS   : ulli::core::TestEngine::cleanupTestCase()
-Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 20575ms
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 21041ms
 ********* Finished testing of ulli::core::TestEngine *********
 <end of output>
-Test time =  20.58 sec
+Test time =  21.04 sec
 ----------------------------------------------------------
 Test Passed.
-"engine" end time: Sep 08 12:31 IST
-"engine" time elapsed: 00:00:20
+"engine" end time: Sep 09 23:00 IST
+"engine" time elapsed: 00:00:21
 ----------------------------------------------------------
 
-End testing: Sep 08 12:31 IST
+5/5 Testing: allocation
+5/5 Test: allocation
+Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_allocation"
+Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
+"allocation" start time: Sep 09 23:00 IST
+Output:
+----------------------------------------------------------
+********* Start testing of TestAllocation *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 15.2.0), ubuntu 26.04
+PASS   : TestAllocation::initTestCase()
+PASS   : TestAllocation::liveOnlyDefaultIsSevenGB()
+PASS   : TestAllocation::liveOnlyBelowSevenGBInvalid()
+PASS   : TestAllocation::fullInstallBelow30GBInvalid()
+PASS   : TestAllocation::fullInstallExactly30GBValid()
+PASS   : TestAllocation::fullInstallAbove30GBValid()
+PASS   : TestAllocation::allocationCalculation()
+PASS   : TestAllocation::zeroRequestInvalid()
+PASS   : TestAllocation::shrinkAllRequiresShrinkDriveLetter()
+PASS   : TestAllocation::shrinkAllShrinkAmountMustEqualLinuxSize()
+PASS   : TestAllocation::liveOnlyShrinkAmountMustEqualLinuxSize()
+PASS   : TestAllocation::useFreeBootRequiresShrinkAmount()
+PASS   : TestAllocation::otherDriveShrinkRequiresShrinkAmount()
+PASS   : TestAllocation::wipeDiskDoesNotRequireShrinkAmount()
+PASS   : TestAllocation::useFreeAllDoesNotRequireShrinkAmount()
+PASS   : TestAllocation::bootSizeMustBeAtLeast1GB()
+PASS   : TestAllocation::cleanupTestCase()
+Totals: 17 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
+********* Finished testing of TestAllocation *********
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"allocation" end time: Sep 09 23:00 IST
+"allocation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 09 23:00 IST
