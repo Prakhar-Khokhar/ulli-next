@@ -1,10 +1,10 @@
-Start testing: Sep 09 23:00 IST
+Start testing: Sep 13 23:12 IST
 ----------------------------------------------------------
 1/5 Testing: result
 1/5 Test: result
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"result" start time: Sep 09 23:00 IST
+"result" start time: Sep 13 23:12 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestResult *********
@@ -20,10 +20,10 @@ PASS   : TestResult::cleanupTestCase()
 Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of TestResult *********
 <end of output>
-Test time =   0.16 sec
+Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"result" end time: Sep 09 23:00 IST
+"result" end time: Sep 13 23:12 IST
 "result" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -31,7 +31,7 @@ Test Passed.
 2/5 Test: catalog
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"catalog" start time: Sep 09 23:00 IST
+"catalog" start time: Sep 13 23:12 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestCatalog *********
@@ -49,7 +49,7 @@ Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"catalog" end time: Sep 09 23:00 IST
+"catalog" end time: Sep 13 23:12 IST
 "catalog" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -57,7 +57,7 @@ Test Passed.
 3/5 Test: plan
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"plan" start time: Sep 09 23:00 IST
+"plan" start time: Sep 13 23:12 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestPlan *********
@@ -69,13 +69,13 @@ PASS   : TestPlan::tooSmallLinuxInvalid()
 PASS   : TestPlan::summaryContainsDistro()
 PASS   : TestPlan::shrinkAllRequiresShrinkAmount()
 PASS   : TestPlan::cleanupTestCase()
-Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
+Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
 ********* Finished testing of TestPlan *********
 <end of output>
-Test time =   0.00 sec
+Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"plan" end time: Sep 09 23:00 IST
+"plan" end time: Sep 13 23:12 IST
 "plan" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -83,7 +83,7 @@ Test Passed.
 4/5 Test: engine
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"engine" start time: Sep 09 23:00 IST
+"engine" start time: Sep 13 23:12 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of ulli::core::TestEngine *********
@@ -164,22 +164,74 @@ QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Mock called with stage:
 QDEBUG : ulli::core::TestEngine::testShrinkAllStrategy() Expected stage: "bootentry" shouldSucceed: true
 PASS   : ulli::core::TestEngine::testShrinkAllStrategy()
 PASS   : ulli::core::TestEngine::testInvalidPlanRejected()
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testCancellationDuringLayout() Expected stage: "layout" shouldSucceed: true
+PASS   : ulli::core::TestEngine::testCancellationDuringLayout()
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "copy" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "patch" currentExpectation: 6
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "patch" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Mock called with stage: "bootentry" currentExpectation: 7
+QDEBUG : ulli::core::TestEngine::testLiveOnlyAllocation() Expected stage: "bootentry" shouldSucceed: true
+PASS   : ulli::core::TestEngine::testLiveOnlyAllocation()
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "copy" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "patch" currentExpectation: 6
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "patch" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Mock called with stage: "bootentry" currentExpectation: 7
+QDEBUG : ulli::core::TestEngine::testFullInstall50GB() Expected stage: "bootentry" shouldSucceed: true
+PASS   : ulli::core::TestEngine::testFullInstall50GB()
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestEngine::testLayoutFailure() Expected stage: "layout" shouldSucceed: false
+PASS   : ulli::core::TestEngine::testLayoutFailure()
 PASS   : ulli::core::TestEngine::cleanupTestCase()
-Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 21041ms
+Totals: 12 passed, 0 failed, 0 skipped, 0 blacklisted, 37256ms
 ********* Finished testing of ulli::core::TestEngine *********
 <end of output>
-Test time =  21.04 sec
+Test time =  37.26 sec
 ----------------------------------------------------------
 Test Passed.
-"engine" end time: Sep 09 23:00 IST
-"engine" time elapsed: 00:00:21
+"engine" end time: Sep 13 23:13 IST
+"engine" time elapsed: 00:00:37
 ----------------------------------------------------------
 
 5/5 Testing: allocation
 5/5 Test: allocation
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_allocation"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"allocation" start time: Sep 09 23:00 IST
+"allocation" start time: Sep 13 23:13 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestAllocation *********
@@ -200,15 +252,24 @@ PASS   : TestAllocation::otherDriveShrinkRequiresShrinkAmount()
 PASS   : TestAllocation::wipeDiskDoesNotRequireShrinkAmount()
 PASS   : TestAllocation::useFreeAllDoesNotRequireShrinkAmount()
 PASS   : TestAllocation::bootSizeMustBeAtLeast1GB()
+PASS   : TestAllocation::liveOnlyAllocationSemantics()
+PASS   : TestAllocation::fullInstall30GBAllocation()
+PASS   : TestAllocation::fullInstall50GBAllocation()
+PASS   : TestAllocation::fullInstallMinimumBoundary()
+PASS   : TestAllocation::invalidStagingSize()
+PASS   : TestAllocation::liveOnlyInvalidStagingSize()
+PASS   : TestAllocation::shrinkAllShrinkAmountMismatch()
+PASS   : TestAllocation::liveOnlyShrinkAmountMatches()
+PASS   : TestAllocation::liveOnlyShrinkAmountMismatch()
 PASS   : TestAllocation::cleanupTestCase()
-Totals: 17 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
+Totals: 26 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of TestAllocation *********
 <end of output>
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"allocation" end time: Sep 09 23:00 IST
+"allocation" end time: Sep 13 23:13 IST
 "allocation" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Sep 09 23:00 IST
+End testing: Sep 13 23:13 IST

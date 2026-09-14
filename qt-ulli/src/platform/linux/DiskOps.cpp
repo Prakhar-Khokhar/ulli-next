@@ -56,7 +56,9 @@ core::Result<std::filesystem::path> DiskOps::mountIso(const std::filesystem::pat
 void DiskOps::unmountIso(const std::filesystem::path&) {}
 
 core::Result<void> DiskOps::copyFiles(const std::filesystem::path&,
-                                       const std::filesystem::path&) {
+                                        const std::filesystem::path&,
+                                        const core::Distro*,
+                                        std::function<bool()>) {
     return core::makeError(core::Error::Kind::Internal,
         "copyFiles: not implemented (Phase 2)");
 }

@@ -90,7 +90,8 @@ public:
 
     void unmountIso(const std::filesystem::path&) override {}
 
-    Result<void> copyFiles(const std::filesystem::path&, const std::filesystem::path&) override {
+    Result<void> copyFiles(const std::filesystem::path&, const std::filesystem::path&,
+                           const Distro*, std::function<bool()>) override {
         return checkExpectation("copy");
     }
 

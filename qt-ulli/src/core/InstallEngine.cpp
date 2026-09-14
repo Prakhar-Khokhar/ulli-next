@@ -171,7 +171,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     auto isoMount = backend_->mountIso(plan.isoPath);
     if (!isoMount) return makeError(isoMount.error().kind(), isoMount.error().message());
     {
-        auto copyR = backend_->copyFiles(isoMount.value(), bootMount);
+        auto copyR = backend_->copyFiles(isoMount.value(), bootMount, distro, cancelCallback);
         backend_->unmountIso(isoMount.value());
         if (!copyR) return copyR;
     }

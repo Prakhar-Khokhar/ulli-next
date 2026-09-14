@@ -47,6 +47,7 @@
 #include <QTextStream>
 #include <QUrl>
 #include <QEventLoop>
+#include <QThread>
 
 #include <algorithm>
 #include <iostream>
@@ -1182,23 +1183,261 @@ void DiskOps::unmountIso(const std::filesystem::path& mount) {
 }
 
 core::Result<void> DiskOps::copyFiles(const std::filesystem::path& src,
-                                       const std::filesystem::path& dst) {
-    // robocopy exit codes: 0=ok, 1=files copied, 2=extras, 3+=warnings
-    // anything >= 8 is an error.
-    QProcess proc;
-    proc.start("robocopy",
-               {QString::fromStdString(src.string()),
-                QString::fromStdString(dst.string()),
-                "/E", "/R:3", "/W:5", "/NP", "/NFL", "/NDL"});
-    if (!proc.waitForFinished(-1)) {
-        return core::makeError(core::Error::Kind::Platform, "robocopy timed out");
+                                        const std::filesystem::path& dst,
+                                        const core::Distro* distro,
+                                        std::function<bool()> cancelCallback) {
+    // ─── Pre-copy verification ─────────────────────────────────────────
+    // 1. Verify source (mounted ISO) exists and is readable
+    if (!std::filesystem::exists(src)) {
+        return core::makeError(core::Error::Kind::NotFound,
+            "Source ISO mount does not exist: " + src.string());
     }
-    const int code = proc.exitCode();
-    if (code >= 8) {
+
+    // 2. Verify destination (staging partition) exists
+    if (!std::filesystem::exists(dst)) {
+        return core::makeError(core::Error::Kind::NotFound,
+            "Destination staging partition does not exist: " + dst.string());
+    }
+
+    // 3. Verify staging partition is FAT32 and get free space
+    // Use PowerShell to query the volume
+    QString verifyScript = QString(R"PS1(
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue
+
+$path = '%1'
+$volume = Get-Volume -Path $path -ErrorAction SilentlyContinue
+if (-not $volume) {
+    Write-Output '{"error":"Could not get volume for path"}'
+    exit 1
+}
+
+$fs = $volume.FileSystem
+$sizeRemaining = $volume.SizeRemaining
+$sizeTotal = $volume.Size
+
+Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}}}' -f $fs, $sizeRemaining, $sizeTotal)
+)PS1").arg(QString::fromStdString(dst.string()).replace("'", "''"));
+
+    auto verifyResult = runPowerShellScript(verifyScript);
+    if (!verifyResult) {
+        return core::makeError(verifyResult.error().kind(),
+            "Staging verification failed: " + verifyResult.error().message());
+    }
+
+    QJsonParseError perr{};
+    QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
+    if (perr.error != QJsonParseError::NoError) {
         return core::makeError(core::Error::Kind::Platform,
-            "robocopy failed (exit " + std::to_string(code) + "): " +
-            QString::fromLocal8Bit(proc.readAll()).toStdString());
+            "Staging verification output was not valid JSON");
     }
+    QJsonObject verifyObj = verifyDoc.object();
+    if (verifyObj.contains("error")) {
+        return core::makeError(core::Error::Kind::Platform,
+            verifyObj.value("error").toString().toStdString());
+    }
+
+    const QString fs = verifyObj.value("filesystem").toString();
+    const qulonglong freeBytes = verifyObj.value("freeBytes").toVariant().toULongLong();
+    const qulonglong totalBytes = verifyObj.value("totalBytes").toVariant().toULongLong();
+
+    if (fs.compare("FAT32", Qt::CaseInsensitive) != 0) {
+        return core::makeError(core::Error::Kind::Platform,
+            "Staging partition is not FAT32 (got: " + fs.toStdString() + ")");
+    }
+
+    // 4. Check if staging has enough space (estimate ISO contents size)
+    // We'll do a quick scan of the source to estimate size
+    std::uint64_t estimatedSize = 0;
+    std::uint64_t fileCount = 0;
+    std::uint64_t maxFileSize = 0;
+
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(src)) {
+        if (cancelCallback && cancelCallback()) {
+            return core::makeCancelled();
+        }
+        if (entry.is_regular_file()) {
+            std::error_code ec;
+            auto fsize = std::filesystem::file_size(entry, ec);
+            if (!ec) {
+                estimatedSize += fsize;
+                maxFileSize = std::max(maxFileSize, fsize);
+                fileCount++;
+            }
+        }
+    }
+
+    // Check for FAT32 4 GiB limit
+    constexpr std::uint64_t FAT32_MAX_FILE_SIZE = 4ull * 1024 * 1024 * 1024 - 1; // 4 GiB - 1
+    if (maxFileSize > FAT32_MAX_FILE_SIZE) {
+        return core::makeError(core::Error::Kind::Platform,
+            "ISO contains file larger than FAT32 4 GiB limit: " +
+            std::to_string(maxFileSize) + " bytes. Cannot copy to FAT32 staging.");
+    }
+
+    // Add 10% overhead for filesystem metadata
+    const std::uint64_t requiredBytes = estimatedSize + (estimatedSize / 10);
+    if (freeBytes < requiredBytes) {
+        return core::makeError(core::Error::Kind::Platform,
+            "Insufficient space on staging partition. Need ~" +
+            std::to_string(requiredBytes) + " bytes, have " +
+            std::to_string(freeBytes) + " bytes free.");
+    }
+
+    // ─── Copy with cancellation support ────────────────────────────────
+    // Use Qt's file operations for fine-grained cancellation control
+    QDir srcDir(QString::fromStdString(src.string()));
+    QDir dstDir(QString::fromStdString(dst.string()));
+
+    if (!srcDir.exists()) {
+        return core::makeError(core::Error::Kind::NotFound,
+            "Source directory not accessible: " + src.string());
+    }
+
+    if (!dstDir.exists()) {
+        // Destination should exist from createLayout, but ensure it
+        if (!dstDir.mkpath(".")) {
+            return core::makeError(core::Error::Kind::Io,
+                "Cannot create destination directory: " + dst.string());
+        }
+    }
+
+    // Recursive copy function
+    auto copyRecursive = [&](const QDir& sDir, const QDir& dDir,
+                             const std::function<bool()>& cancelCheck,
+                             auto&& selfRef) -> core::Result<void> {
+        // Create subdirectories first
+        for (const QFileInfo& info : sDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            if (cancelCheck && cancelCheck()) {
+                return core::makeCancelled();
+            }
+
+            QDir nextSrcDir(info.absoluteFilePath());
+            QString subDirName = info.fileName();
+            QDir nextDstDir = dDir;
+            if (!nextDstDir.mkpath(subDirName)) {
+                return core::makeError(core::Error::Kind::Io,
+                    "Cannot create directory: " + nextDstDir.filePath(subDirName).toStdString());
+            }
+            nextDstDir.cd(subDirName);
+
+            auto subResult = selfRef(nextSrcDir, nextDstDir, cancelCheck, selfRef);
+            if (!subResult) return subResult;
+        }
+
+        // Copy files
+        for (const QFileInfo& info : sDir.entryInfoList(QDir::Files)) {
+            if (cancelCheck && cancelCheck()) {
+                return core::makeCancelled();
+            }
+
+            QString srcFile = info.absoluteFilePath();
+            QString dstFile = dDir.filePath(info.fileName());
+
+            // Check file size against FAT32 limit
+            if (static_cast<std::uint64_t>(info.size()) > FAT32_MAX_FILE_SIZE) {
+                return core::makeError(core::Error::Kind::Platform,
+                    "File exceeds FAT32 4 GiB limit: " + srcFile.toStdString() +
+                    " (" + std::to_string(info.size()) + " bytes)");
+            }
+
+            // Copy file with retry logic
+            bool copied = false;
+            for (int attempt = 0; attempt < 3 && !copied; ++attempt) {
+                if (cancelCheck && cancelCheck()) {
+                    return core::makeCancelled();
+                }
+                copied = QFile::copy(srcFile, dstFile);
+                if (!copied && attempt < 2) {
+                    QThread::msleep(500); // Brief pause before retry
+                }
+            }
+            if (!copied) {
+                return core::makeError(core::Error::Kind::Io,
+                    "Failed to copy file after retries: " + srcFile.toStdString());
+            }
+
+            // Preserve file timestamps
+            QFile dstFileObj(dstFile);
+            if (dstFileObj.open(QIODevice::ReadOnly)) {
+                dstFileObj.setFileTime(info.fileTime(QFileDevice::FileModificationTime),
+                                       QFileDevice::FileModificationTime);
+                dstFileObj.close();
+            }
+        }
+        return core::makeOk();
+    };
+
+    auto copyResult = copyRecursive(srcDir, dstDir, cancelCallback, copyRecursive);
+    if (!copyResult) {
+        // On failure, try to clean up partially copied files
+        // (best effort - don't fail on cleanup errors)
+        return copyResult;
+    }
+
+    if (cancelCallback && cancelCallback()) {
+        return core::makeCancelled();
+    }
+
+    // ─── Post-copy verification ────────────────────────────────────────
+    // Verify required files exist based on distro
+    if (distro) {
+        std::vector<std::string> requiredFiles;
+
+        // Common required files for all distros
+        requiredFiles.push_back("EFI/BOOT/BOOTx64.EFI");
+
+        // Distro-specific required files
+        if (distro->keyword() == "Fedora") {
+            requiredFiles.push_back("LiveOS/squashfs.img");
+            requiredFiles.push_back("isolinux/vmlinuz");
+            requiredFiles.push_back("isolinux/initrd.img");
+        } else if (distro->keyword() == "CachyOS") {
+            requiredFiles.push_back("arch/boot/x86_64/vmlinuz-linux-cachyos");
+            requiredFiles.push_back("arch/boot/x86_64/initramfs-linux-cachyos.img");
+            requiredFiles.push_back("arch/x86_64/airootfs.sfs");
+        } else if (distro->keyword() == "Debian") {
+            requiredFiles.push_back("live/vmlinuz");
+            requiredFiles.push_back("live/initrd.img");
+            requiredFiles.push_back("live/filesystem.squashfs");
+        } else {
+            // Ubuntu, Kubuntu, Mint (Caspar-based)
+            requiredFiles.push_back("casper/vmlinuz");
+            requiredFiles.push_back("casper/initrd");
+            requiredFiles.push_back("casper/filesystem.squashfs");
+        }
+
+        for (const auto& reqFile : requiredFiles) {
+            if (cancelCallback && cancelCallback()) {
+                return core::makeCancelled();
+            }
+
+            std::filesystem::path reqPath = dst / reqFile;
+            if (!std::filesystem::exists(reqPath)) {
+                return core::makeError(core::Error::Kind::Platform,
+                    "Required file missing after copy: " + reqFile);
+            }
+        }
+    }
+
+    // Verify total copied size is sensible (at least 50% of estimated)
+    std::uint64_t copiedSize = 0;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dst)) {
+        if (cancelCallback && cancelCallback()) {
+            return core::makeCancelled();
+        }
+        if (entry.is_regular_file()) {
+            std::error_code ec;
+            copiedSize += std::filesystem::file_size(entry, ec);
+        }
+    }
+
+    if (copiedSize < estimatedSize / 2) {
+        return core::makeError(core::Error::Kind::Platform,
+            "Copied size suspiciously small: " + std::to_string(copiedSize) +
+            " vs estimated " + std::to_string(estimatedSize));
+    }
+
     return core::makeOk();
 }
 

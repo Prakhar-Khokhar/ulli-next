@@ -44,8 +44,10 @@ core::Result<void> createLayout(const core::InstallPlan& plan,
     core::Result<std::filesystem::path> mountIso(
         const std::filesystem::path& iso) override;
     void unmountIso(const std::filesystem::path& mount) override;
-    core::Result<void> copyFiles(const std::filesystem::path& src,
-                                 const std::filesystem::path& dst) override;
+core::Result<void> copyFiles(const std::filesystem::path& src,
+                                 const std::filesystem::path& dst,
+                                 const core::Distro* distro,
+                                 std::function<bool()> cancelCallback = nullptr) override;
     core::Result<void> patchDistroBootConfig(const core::Distro& d,
                                              const core::InstallPlan& plan) override;
     core::Result<void> installRefind(const core::InstallPlan& plan) override;

@@ -93,8 +93,12 @@ public:
     virtual void unmountIso(const std::filesystem::path& mount) = 0;
 
     // Recursive copy from src to dst. Windows: robocopy /E. Linux: cp -a.
+    // cancelCallback is invoked between files to check for user cancellation.
+    // distro is provided for post-copy verification of required files.
     virtual Result<void> copyFiles(const std::filesystem::path& src,
-                                   const std::filesystem::path& dst) = 0;
+                                   const std::filesystem::path& dst,
+                                   const Distro* distro,
+                                   std::function<bool()> cancelCallback = nullptr) = 0;
 
     // Distro-specific config patches (LABEL= etc.). On Windows the
     // patches happen on the FAT32 boot partition; on Linux they
