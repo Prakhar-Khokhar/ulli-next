@@ -106,7 +106,6 @@ Linux files are placed on a disk partition and the machine is configured to boot
 
 This is particularly useful for quickly trying a Linux distribution or beginning a Linux installation from an existing Windows system.
 
-Custom ISOs: Install distributions outside the built-in catalog using your own Linux ISO, with Live ISOs preferred. Current limits are 7 GB per ISO and 4 GB per individual file; larger-image support is planned.
 ---
 
 ## 💿 Distribution catalog
@@ -130,6 +129,9 @@ Because this information is kept outside the installation engine, distro updates
 
 ---
 
+Custom ISOs: Install distributions outside the built-in catalog using your own Linux ISO, with Live ISOs preferred. Current limits are 7 GB per ISO and 4 GB per individual file; larger-image support is planned.
+
+---
 ## 🌐 Multiple ISO mirrors
 
 Supported distributions can have multiple download mirrors.
