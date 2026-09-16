@@ -118,6 +118,10 @@ public:
 
     // Restart the system.
     virtual void restartSystem() = 0;
+
+    // Rollback the staging partition created during createLayout.
+    // Called when a later stage fails after partition creation.
+    virtual void rollbackStagingPartition(const InstallPlan& plan) = 0;
 };
 
 class InstallEngine : public QObject {

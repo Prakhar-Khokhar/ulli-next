@@ -77,6 +77,12 @@ struct InstallPlan {
                                                           // after delete)
     std::uint64_t actualFreedBytes = 0;  // Actual bytes freed by shrink (may differ from linuxSizeBytes due to alignment)
 
+    // Staging partition identity for re-verification before boot entry creation
+    std::optional<int> stagingPartitionNumber;
+    std::optional<std::uint64_t> stagingPartitionOffset;
+    std::optional<std::uint64_t> stagingPartitionSize;
+    std::optional<std::string> stagingPartitionGptGuid;
+
     QString summary() const;
     bool valid() const;
 };

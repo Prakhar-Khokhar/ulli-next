@@ -81,6 +81,8 @@ core::Result<void> DiskOps::createBootEntry(const core::InstallPlan&) {
 
 void DiskOps::rollbackBootEntry(const core::InstallPlan&) {}
 
+void DiskOps::rollbackStagingPartition(const core::InstallPlan&) {}
+
 void DiskOps::restartSystem() {}
 
 }  // namespace ulli::platform::linux

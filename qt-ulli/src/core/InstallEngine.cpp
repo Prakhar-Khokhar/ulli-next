@@ -173,7 +173,11 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     {
         auto copyR = backend_->copyFiles(isoMount.value(), bootMount, distro, cancelCallback);
         backend_->unmountIso(isoMount.value());
-        if (!copyR) return copyR;
+        if (!copyR) {
+            // Rollback staging partition on copy failure
+            backend_->rollbackStagingPartition(plan);
+            return copyR;
+        }
     }
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
@@ -204,6 +208,8 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     emit progressChanged(kProgressBootEntry);
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
     if (auto r = backend_->createBootEntry(plan); !r) {
+        // Rollback staging partition on boot entry failure
+        backend_->rollbackStagingPartition(plan);
         return r;  // engine.run will roll back via bcdGuid if set
     }
 

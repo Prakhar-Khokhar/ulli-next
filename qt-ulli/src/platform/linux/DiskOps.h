@@ -44,6 +44,7 @@ core::Result<void> copyFiles(const std::filesystem::path& src,
     core::Result<void> installRefind(const core::InstallPlan& plan) override;
     core::Result<void> createBootEntry(const core::InstallPlan& plan) override;
     void rollbackBootEntry(const core::InstallPlan& plan) override;
+    void rollbackStagingPartition(const core::InstallPlan& plan) override;
     void restartSystem() override;
 };
 

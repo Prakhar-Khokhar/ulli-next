@@ -1,6 +1,6 @@
-result 3 0.00105159
-catalog 3 0.00106391
-plan 3 0.00274573
-engine 3 12.4201
-allocation 3 0.00156921
+result 8 0.000522043
+catalog 8 0.000732158
+plan 8 0.000553432
+engine 8 4.66423
+allocation 8 0.000466844
 ---
