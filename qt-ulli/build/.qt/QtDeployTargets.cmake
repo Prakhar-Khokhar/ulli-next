@@ -8,6 +8,8 @@ set(__QT_DEPLOY_TARGET_test_engine_FILE /home/prakhark/ULLI beta/ulli-next/qt-ul
 set(__QT_DEPLOY_TARGET_test_engine_TYPE EXECUTABLE)
 set(__QT_DEPLOY_TARGET_test_allocation_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_allocation)
 set(__QT_DEPLOY_TARGET_test_allocation_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_test_boothandoff_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_boothandoff)
+set(__QT_DEPLOY_TARGET_test_boothandoff_TYPE EXECUTABLE)
 set(__QT_DEPLOY_TARGET_ulli-core_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/libulli-core.a)
 set(__QT_DEPLOY_TARGET_ulli-core_TYPE STATIC_LIBRARY)
 set(__QT_DEPLOY_TARGET_ulli-qt_FILE /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/ulli-qt)

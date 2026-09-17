@@ -1,5 +1,5 @@
 /****************************************************************************
-** Meta object code from reading C++ file 'test_engine.cpp'
+** Meta object code from reading C++ file 'test_boothandoff.cpp'
 **
 ** Created by: The Qt Meta Object Compiler version 69 (Qt 6.10.2)
 **
@@ -15,7 +15,7 @@
 
 #include <QtCore/qxptype_traits.h>
 #if !defined(Q_MOC_OUTPUT_REVISION)
-#error "The header file 'test_engine.cpp' doesn't include <QObject>."
+#error "The header file 'test_boothandoff.cpp' doesn't include <QObject>."
 #elif Q_MOC_OUTPUT_REVISION != 69
 #error "This file was generated using the moc from 6.10.2. It"
 #error "cannot be used with the include files from this version of Qt."
@@ -30,14 +30,14 @@ QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 QT_WARNING_DISABLE_GCC("-Wuseless-cast")
 namespace {
-struct qt_meta_tag_ZN4ulli4core10TestEngineE_t {};
+struct qt_meta_tag_ZN4ulli4core15TestBootHandoffE_t {};
 } // unnamed namespace
 
-template <> constexpr inline auto ulli::core::TestEngine::qt_create_metaobjectdata<qt_meta_tag_ZN4ulli4core10TestEngineE_t>()
+template <> constexpr inline auto ulli::core::TestBootHandoff::qt_create_metaobjectdata<qt_meta_tag_ZN4ulli4core15TestBootHandoffE_t>()
 {
     namespace QMC = QtMocConstants;
     QtMocHelpers::StringRefStorage qt_stringData {
-        "ulli::core::TestEngine",
+        "ulli::core::TestBootHandoff",
         "initTestCase",
         "",
         "waitForFinished",
@@ -46,16 +46,11 @@ template <> constexpr inline auto ulli::core::TestEngine::qt_create_metaobjectda
         "QSignalSpy&",
         "finishedSpy",
         "timeoutMs",
-        "testSuccessfulInstall",
-        "testFailurePropagation",
-        "testCancellation",
-        "testWipeDiskStrategy",
-        "testShrinkAllStrategy",
-        "testInvalidPlanRejected",
-        "testCancellationDuringLayout",
-        "testLiveOnlyAllocation",
-        "testFullInstall50GB",
-        "testLayoutFailure"
+        "testSuccessfulBootHandoff",
+        "testCopyFailureRollsBackStagingPartition",
+        "testBootEntryFailureRollsBackStagingPartition",
+        "testCancellationAtLayout",
+        "testCancellationAfterLayout"
     };
 
     QtMocHelpers::UintData qt_methods {
@@ -69,62 +64,47 @@ template <> constexpr inline auto ulli::core::TestEngine::qt_create_metaobjectda
         QtMocHelpers::SlotData<void(InstallEngine *, QSignalSpy &)>(3, 2, QMC::AccessPrivate | QMC::MethodCloned, QMetaType::Void, {{
             { 0x80000000 | 4, 5 }, { 0x80000000 | 6, 7 },
         }}),
-        // Slot 'testSuccessfulInstall'
+        // Slot 'testSuccessfulBootHandoff'
         QtMocHelpers::SlotData<void()>(9, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testFailurePropagation'
+        // Slot 'testCopyFailureRollsBackStagingPartition'
         QtMocHelpers::SlotData<void()>(10, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testCancellation'
+        // Slot 'testBootEntryFailureRollsBackStagingPartition'
         QtMocHelpers::SlotData<void()>(11, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testWipeDiskStrategy'
+        // Slot 'testCancellationAtLayout'
         QtMocHelpers::SlotData<void()>(12, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testShrinkAllStrategy'
+        // Slot 'testCancellationAfterLayout'
         QtMocHelpers::SlotData<void()>(13, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testInvalidPlanRejected'
-        QtMocHelpers::SlotData<void()>(14, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testCancellationDuringLayout'
-        QtMocHelpers::SlotData<void()>(15, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testLiveOnlyAllocation'
-        QtMocHelpers::SlotData<void()>(16, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testFullInstall50GB'
-        QtMocHelpers::SlotData<void()>(17, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'testLayoutFailure'
-        QtMocHelpers::SlotData<void()>(18, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
     QtMocHelpers::UintData qt_enums {
     };
-    return QtMocHelpers::metaObjectData<TestEngine, qt_meta_tag_ZN4ulli4core10TestEngineE_t>(QMC::MetaObjectFlag{}, qt_stringData,
+    return QtMocHelpers::metaObjectData<TestBootHandoff, qt_meta_tag_ZN4ulli4core15TestBootHandoffE_t>(QMC::MetaObjectFlag{}, qt_stringData,
             qt_methods, qt_properties, qt_enums);
 }
-Q_CONSTINIT const QMetaObject ulli::core::TestEngine::staticMetaObject = { {
+Q_CONSTINIT const QMetaObject ulli::core::TestBootHandoff::staticMetaObject = { {
     QMetaObject::SuperData::link<QObject::staticMetaObject>(),
-    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli4core10TestEngineE_t>.stringdata,
-    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli4core10TestEngineE_t>.data,
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli4core15TestBootHandoffE_t>.stringdata,
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli4core15TestBootHandoffE_t>.data,
     qt_static_metacall,
     nullptr,
-    qt_staticMetaObjectRelocatingContent<qt_meta_tag_ZN4ulli4core10TestEngineE_t>.metaTypes,
+    qt_staticMetaObjectRelocatingContent<qt_meta_tag_ZN4ulli4core15TestBootHandoffE_t>.metaTypes,
     nullptr
 } };
 
-void ulli::core::TestEngine::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
+void ulli::core::TestBootHandoff::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
 {
-    auto *_t = static_cast<TestEngine *>(_o);
+    auto *_t = static_cast<TestBootHandoff *>(_o);
     if (_c == QMetaObject::InvokeMetaMethod) {
         switch (_id) {
         case 0: _t->initTestCase(); break;
         case 1: _t->waitForFinished((*reinterpret_cast<std::add_pointer_t<InstallEngine*>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<QSignalSpy&>>(_a[2])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[3]))); break;
         case 2: _t->waitForFinished((*reinterpret_cast<std::add_pointer_t<InstallEngine*>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<QSignalSpy&>>(_a[2]))); break;
-        case 3: _t->testSuccessfulInstall(); break;
-        case 4: _t->testFailurePropagation(); break;
-        case 5: _t->testCancellation(); break;
-        case 6: _t->testWipeDiskStrategy(); break;
-        case 7: _t->testShrinkAllStrategy(); break;
-        case 8: _t->testInvalidPlanRejected(); break;
-        case 9: _t->testCancellationDuringLayout(); break;
-        case 10: _t->testLiveOnlyAllocation(); break;
-        case 11: _t->testFullInstall50GB(); break;
-        case 12: _t->testLayoutFailure(); break;
+        case 3: _t->testSuccessfulBootHandoff(); break;
+        case 4: _t->testCopyFailureRollsBackStagingPartition(); break;
+        case 5: _t->testBootEntryFailureRollsBackStagingPartition(); break;
+        case 6: _t->testCancellationAtLayout(); break;
+        case 7: _t->testCancellationAfterLayout(); break;
         default: ;
         }
     }
@@ -149,33 +129,33 @@ void ulli::core::TestEngine::qt_static_metacall(QObject *_o, QMetaObject::Call _
     }
 }
 
-const QMetaObject *ulli::core::TestEngine::metaObject() const
+const QMetaObject *ulli::core::TestBootHandoff::metaObject() const
 {
     return QObject::d_ptr->metaObject ? QObject::d_ptr->dynamicMetaObject() : &staticMetaObject;
 }
 
-void *ulli::core::TestEngine::qt_metacast(const char *_clname)
+void *ulli::core::TestBootHandoff::qt_metacast(const char *_clname)
 {
     if (!_clname) return nullptr;
-    if (!strcmp(_clname, qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli4core10TestEngineE_t>.strings))
+    if (!strcmp(_clname, qt_staticMetaObjectStaticContent<qt_meta_tag_ZN4ulli4core15TestBootHandoffE_t>.strings))
         return static_cast<void*>(this);
     return QObject::qt_metacast(_clname);
 }
 
-int ulli::core::TestEngine::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
+int ulli::core::TestBootHandoff::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 {
     _id = QObject::qt_metacall(_c, _id, _a);
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 13)
+        if (_id < 8)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 13;
+        _id -= 8;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 13)
+        if (_id < 8)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 13;
+        _id -= 8;
     }
     return _id;
 }

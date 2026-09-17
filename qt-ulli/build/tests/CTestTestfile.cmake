@@ -14,3 +14,5 @@ add_test("engine" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_e
 set_tests_properties("engine" PROPERTIES  _BACKTRACE_TRIPLES "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;5;add_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;11;add_ulli_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;0;")
 add_test("allocation" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_allocation")
 set_tests_properties("allocation" PROPERTIES  _BACKTRACE_TRIPLES "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;5;add_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;12;add_ulli_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;0;")
+add_test("boothandoff" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_boothandoff")
+set_tests_properties("boothandoff" PROPERTIES  _BACKTRACE_TRIPLES "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;5;add_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;13;add_ulli_test;/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests/CMakeLists.txt;0;")

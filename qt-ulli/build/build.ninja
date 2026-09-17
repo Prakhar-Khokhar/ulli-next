@@ -637,6 +637,56 @@ build tests/test_allocation: CXX_EXECUTABLE_LINKER__test_allocation_RelWithDebIn
   TARGET_PDB = test_allocation.dbg
   TARGET_SUPPORT_DIR = tests/CMakeFiles/test_allocation.dir
 
+# =============================================================================
+# Object build statements for EXECUTABLE target test_boothandoff
+
+
+#############################################
+# Order-only phony target for test_boothandoff
+
+build cmake_object_order_depends_target_test_boothandoff: phony || cmake_object_order_depends_target_ulli-core tests/test_boothandoff_autogen tests/test_boothandoff_autogen/mocs_compilation.cpp tests/test_boothandoff_autogen/timestamp tests/test_boothandoff_autogen_timestamp_deps
+
+build tests/CMakeFiles/test_boothandoff.dir/test_boothandoff_autogen/mocs_compilation.cpp.o: CXX_COMPILER__test_boothandoff_unscanned_RelWithDebInfo /home/prakhark/ULLI$ beta/ulli-next/qt-ulli/build/tests/test_boothandoff_autogen/mocs_compilation.cpp || cmake_object_order_depends_target_test_boothandoff
+  CONFIG = RelWithDebInfo
+  DEFINES = -DQT_CORE_LIB -DQT_NETWORK_LIB -DQT_NO_DEBUG -DQT_TESTCASE_BUILDDIR="\"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests\"" -DQT_TESTCASE_SOURCEDIR="\"/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests\"" -DQT_TESTLIB_LIB
+  DEP_FILE = tests/CMakeFiles/test_boothandoff.dir/test_boothandoff_autogen/mocs_compilation.cpp.o.d
+  FLAGS = -O2 -g -DNDEBUG -std=c++20 -fPIE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion
+  INCLUDES = -I"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_boothandoff_autogen/include" -I"/home/prakhark/ULLI beta/ulli-next/qt-ulli/src" -isystem /usr/include/x86_64-linux-gnu/qt6/QtCore -isystem /usr/include/x86_64-linux-gnu/qt6 -isystem /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -isystem /usr/include/x86_64-linux-gnu/qt6/QtNetwork -isystem /usr/include/x86_64-linux-gnu/qt6/QtTest
+  OBJECT_DIR = tests/CMakeFiles/test_boothandoff.dir
+  OBJECT_FILE_DIR = tests/CMakeFiles/test_boothandoff.dir/test_boothandoff_autogen
+  TARGET_SUPPORT_DIR = tests/CMakeFiles/test_boothandoff.dir
+
+build tests/CMakeFiles/test_boothandoff.dir/test_boothandoff.cpp.o: CXX_COMPILER__test_boothandoff_unscanned_RelWithDebInfo /home/prakhark/ULLI$ beta/ulli-next/qt-ulli/tests/test_boothandoff.cpp || cmake_object_order_depends_target_test_boothandoff
+  CONFIG = RelWithDebInfo
+  DEFINES = -DQT_CORE_LIB -DQT_NETWORK_LIB -DQT_NO_DEBUG -DQT_TESTCASE_BUILDDIR="\"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests\"" -DQT_TESTCASE_SOURCEDIR="\"/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests\"" -DQT_TESTLIB_LIB
+  DEP_FILE = tests/CMakeFiles/test_boothandoff.dir/test_boothandoff.cpp.o.d
+  FLAGS = -O2 -g -DNDEBUG -std=c++20 -fPIE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion
+  INCLUDES = -I"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_boothandoff_autogen/include" -I"/home/prakhark/ULLI beta/ulli-next/qt-ulli/src" -isystem /usr/include/x86_64-linux-gnu/qt6/QtCore -isystem /usr/include/x86_64-linux-gnu/qt6 -isystem /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -isystem /usr/include/x86_64-linux-gnu/qt6/QtNetwork -isystem /usr/include/x86_64-linux-gnu/qt6/QtTest
+  OBJECT_DIR = tests/CMakeFiles/test_boothandoff.dir
+  OBJECT_FILE_DIR = tests/CMakeFiles/test_boothandoff.dir
+  TARGET_SUPPORT_DIR = tests/CMakeFiles/test_boothandoff.dir
+
+
+# =============================================================================
+# Link build statements for EXECUTABLE target test_boothandoff
+
+
+#############################################
+# Link the executable tests/test_boothandoff
+
+build tests/test_boothandoff: CXX_EXECUTABLE_LINKER__test_boothandoff_RelWithDebInfo tests/CMakeFiles/test_boothandoff.dir/test_boothandoff_autogen/mocs_compilation.cpp.o tests/CMakeFiles/test_boothandoff.dir/test_boothandoff.cpp.o | libulli-core.a /usr/lib/x86_64-linux-gnu/libQt6Test.so.6.10.2 /usr/lib/x86_64-linux-gnu/libQt6Network.so.6.10.2 /usr/lib/x86_64-linux-gnu/libQt6Core.so.6.10.2 || libulli-core.a tests/test_boothandoff_autogen tests/test_boothandoff_autogen_timestamp_deps
+  CONFIG = RelWithDebInfo
+  DEP_FILE = tests/CMakeFiles/test_boothandoff.dir/link.d
+  FLAGS = -O2 -g -DNDEBUG
+  LINK_FLAGS = -Wl,--dependency-file=tests/CMakeFiles/test_boothandoff.dir/link.d
+  LINK_LIBRARIES = libulli-core.a  /usr/lib/x86_64-linux-gnu/libQt6Test.so.6.10.2  /usr/lib/x86_64-linux-gnu/libQt6Network.so.6.10.2  /usr/lib/x86_64-linux-gnu/libQt6Core.so.6.10.2
+  OBJECT_DIR = tests/CMakeFiles/test_boothandoff.dir
+  POST_BUILD = :
+  PRE_LINK = :
+  TARGET_FILE = tests/test_boothandoff
+  TARGET_PDB = test_boothandoff.dbg
+  TARGET_SUPPORT_DIR = tests/CMakeFiles/test_boothandoff.dir
+
 
 #############################################
 # Utility command for test
@@ -776,6 +826,18 @@ build tests/test_allocation_autogen: phony tests/CMakeFiles/test_allocation_auto
 
 
 #############################################
+# Utility command for test_boothandoff_autogen_timestamp_deps
+
+build tests/test_boothandoff_autogen_timestamp_deps: phony libulli-core.a
+
+
+#############################################
+# Utility command for test_boothandoff_autogen
+
+build tests/test_boothandoff_autogen: phony tests/CMakeFiles/test_boothandoff_autogen tests/test_boothandoff_autogen/timestamp tests/test_boothandoff_autogen/mocs_compilation.cpp tests/test_boothandoff_autogen_timestamp_deps
+
+
+#############################################
 # Custom command for tests/test_result_autogen/timestamp
 
 build tests/test_result_autogen/timestamp tests/test_result_autogen/mocs_compilation.cpp | ${cmake_ninja_workdir}tests/test_result_autogen/timestamp ${cmake_ninja_workdir}tests/test_result_autogen/mocs_compilation.cpp: CUSTOM_COMMAND /usr/lib/qt6/libexec/moc /usr/lib/qt6/libexec/uic || libulli-core.a tests/test_result_autogen_timestamp_deps ulli-core_autogen ulli-core_autogen_timestamp_deps
@@ -831,6 +893,17 @@ build tests/test_allocation_autogen/timestamp tests/test_allocation_autogen/mocs
 
 
 #############################################
+# Custom command for tests/test_boothandoff_autogen/timestamp
+
+build tests/test_boothandoff_autogen/timestamp tests/test_boothandoff_autogen/mocs_compilation.cpp | ${cmake_ninja_workdir}tests/test_boothandoff_autogen/timestamp ${cmake_ninja_workdir}tests/test_boothandoff_autogen/mocs_compilation.cpp: CUSTOM_COMMAND /usr/lib/qt6/libexec/moc /usr/lib/qt6/libexec/uic || libulli-core.a tests/test_boothandoff_autogen_timestamp_deps ulli-core_autogen ulli-core_autogen_timestamp_deps
+  COMMAND = cd "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests" && /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_autogen "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/CMakeFiles/test_boothandoff_autogen.dir/AutogenInfo.json" RelWithDebInfo && /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E touch "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_boothandoff_autogen/timestamp" && /home/prakhark/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -E cmake_transform_depfile Ninja gccdepfile "/home/prakhark/ULLI beta/ulli-next/qt-ulli" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/tests" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_boothandoff_autogen/deps" "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/CMakeFiles/d/63012e19639b0ab8036a18ee55cfc4980c2d7f7f12e2dcee567638bbb01227c5.d"
+  DESC = Automatic MOC and UIC for target test_boothandoff
+  depfile = CMakeFiles/d/63012e19639b0ab8036a18ee55cfc4980c2d7f7f12e2dcee567638bbb01227c5.d
+  deps = gcc
+  restat = 1
+
+
+#############################################
 # Phony custom command for tests/CMakeFiles/test_result_autogen
 
 build tests/CMakeFiles/test_result_autogen | ${cmake_ninja_workdir}tests/CMakeFiles/test_result_autogen: phony tests/test_result_autogen/timestamp || libulli-core.a tests/test_result_autogen_timestamp_deps ulli-core_autogen ulli-core_autogen_timestamp_deps
@@ -859,6 +932,12 @@ build tests/CMakeFiles/test_engine_autogen | ${cmake_ninja_workdir}tests/CMakeFi
 
 build tests/CMakeFiles/test_allocation_autogen | ${cmake_ninja_workdir}tests/CMakeFiles/test_allocation_autogen: phony tests/test_allocation_autogen/timestamp || libulli-core.a tests/test_allocation_autogen_timestamp_deps ulli-core_autogen ulli-core_autogen_timestamp_deps
 
+
+#############################################
+# Phony custom command for tests/CMakeFiles/test_boothandoff_autogen
+
+build tests/CMakeFiles/test_boothandoff_autogen | ${cmake_ninja_workdir}tests/CMakeFiles/test_boothandoff_autogen: phony tests/test_boothandoff_autogen/timestamp || libulli-core.a tests/test_boothandoff_autogen_timestamp_deps ulli-core_autogen ulli-core_autogen_timestamp_deps
+
 # =============================================================================
 # Target aliases.
 
@@ -867,6 +946,12 @@ build test_allocation: phony tests/test_allocation
 build test_allocation_autogen: phony tests/test_allocation_autogen
 
 build test_allocation_autogen_timestamp_deps: phony tests/test_allocation_autogen_timestamp_deps
+
+build test_boothandoff: phony tests/test_boothandoff
+
+build test_boothandoff_autogen: phony tests/test_boothandoff_autogen
+
+build test_boothandoff_autogen_timestamp_deps: phony tests/test_boothandoff_autogen_timestamp_deps
 
 build test_catalog: phony tests/test_catalog
 
@@ -909,7 +994,7 @@ build all: phony libulli-core.a ulli-qt tests/all
 #############################################
 # Folder: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
 
-build tests/all: phony tests/test_result tests/test_catalog tests/test_plan tests/test_engine tests/test_allocation
+build tests/all: phony tests/test_result tests/test_catalog tests/test_plan tests/test_engine tests/test_allocation tests/test_boothandoff
 
 # =============================================================================
 # Built-in targets

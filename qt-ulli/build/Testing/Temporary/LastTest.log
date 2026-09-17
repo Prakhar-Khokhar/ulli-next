@@ -1,10 +1,10 @@
-Start testing: Sep 16 20:06 IST
+Start testing: Sep 16 22:52 IST
 ----------------------------------------------------------
-1/5 Testing: result
-1/5 Test: result
+1/6 Testing: result
+1/6 Test: result
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_result"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"result" start time: Sep 16 20:06 IST
+"result" start time: Sep 16 22:52 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestResult *********
@@ -17,21 +17,21 @@ PASS   : TestResult::mapPreservesError()
 PASS   : TestResult::voidOkAndError()
 PASS   : TestResult::onErrorCanSwallow()
 PASS   : TestResult::cleanupTestCase()
-Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 113ms
 ********* Finished testing of TestResult *********
 <end of output>
-Test time =   0.00 sec
+Test time =   0.19 sec
 ----------------------------------------------------------
 Test Passed.
-"result" end time: Sep 16 20:06 IST
+"result" end time: Sep 16 22:52 IST
 "result" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-2/5 Testing: catalog
-2/5 Test: catalog
+2/6 Testing: catalog
+2/6 Test: catalog
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_catalog"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"catalog" start time: Sep 16 20:06 IST
+"catalog" start time: Sep 16 22:52 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestCatalog *********
@@ -43,21 +43,21 @@ WARN: distros.json not found; using built-in catalog
 PASS   : TestCatalog::keysOrdered()
 PASS   : TestCatalog::fromDistros()
 PASS   : TestCatalog::cleanupTestCase()
-Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of TestCatalog *********
 <end of output>
-Test time =   0.01 sec
+Test time =   0.04 sec
 ----------------------------------------------------------
 Test Passed.
-"catalog" end time: Sep 16 20:06 IST
+"catalog" end time: Sep 16 22:52 IST
 "catalog" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-3/5 Testing: plan
-3/5 Test: plan
+3/6 Testing: plan
+3/6 Test: plan
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_plan"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"plan" start time: Sep 16 20:06 IST
+"plan" start time: Sep 16 22:52 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestPlan *********
@@ -69,21 +69,21 @@ PASS   : TestPlan::tooSmallLinuxInvalid()
 PASS   : TestPlan::summaryContainsDistro()
 PASS   : TestPlan::shrinkAllRequiresShrinkAmount()
 PASS   : TestPlan::cleanupTestCase()
-Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of TestPlan *********
 <end of output>
-Test time =   0.00 sec
+Test time =   0.08 sec
 ----------------------------------------------------------
 Test Passed.
-"plan" end time: Sep 16 20:06 IST
+"plan" end time: Sep 16 22:52 IST
 "plan" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-4/5 Testing: engine
-4/5 Test: engine
+4/6 Testing: engine
+4/6 Test: engine
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_engine"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"engine" start time: Sep 16 20:06 IST
+"engine" start time: Sep 16 22:52 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of ulli::core::TestEngine *********
@@ -217,21 +217,21 @@ QDEBUG : ulli::core::TestEngine::testLayoutFailure() Mock called with stage: "la
 QDEBUG : ulli::core::TestEngine::testLayoutFailure() Expected stage: "layout" shouldSucceed: false
 PASS   : ulli::core::TestEngine::testLayoutFailure()
 PASS   : ulli::core::TestEngine::cleanupTestCase()
-Totals: 12 passed, 0 failed, 0 skipped, 0 blacklisted, 37308ms
+Totals: 12 passed, 0 failed, 0 skipped, 0 blacklisted, 37038ms
 ********* Finished testing of ulli::core::TestEngine *********
 <end of output>
-Test time =  37.31 sec
+Test time =  37.04 sec
 ----------------------------------------------------------
 Test Passed.
-"engine" end time: Sep 16 20:07 IST
+"engine" end time: Sep 16 22:53 IST
 "engine" time elapsed: 00:00:37
 ----------------------------------------------------------
 
-5/5 Testing: allocation
-5/5 Test: allocation
+5/6 Testing: allocation
+5/6 Test: allocation
 Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_allocation"
 Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
-"allocation" start time: Sep 16 20:07 IST
+"allocation" start time: Sep 16 22:53 IST
 Output:
 ----------------------------------------------------------
 ********* Start testing of TestAllocation *********
@@ -262,14 +262,104 @@ PASS   : TestAllocation::shrinkAllShrinkAmountMismatch()
 PASS   : TestAllocation::liveOnlyShrinkAmountMatches()
 PASS   : TestAllocation::liveOnlyShrinkAmountMismatch()
 PASS   : TestAllocation::cleanupTestCase()
-Totals: 26 passed, 0 failed, 0 skipped, 0 blacklisted, 0ms
+Totals: 26 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
 ********* Finished testing of TestAllocation *********
 <end of output>
-Test time =   0.00 sec
+Test time =   0.04 sec
 ----------------------------------------------------------
 Test Passed.
-"allocation" end time: Sep 16 20:07 IST
+"allocation" end time: Sep 16 22:53 IST
 "allocation" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Sep 16 20:07 IST
+6/6 Testing: boothandoff
+6/6 Test: boothandoff
+Command: "/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/test_boothandoff"
+Directory: /home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests
+"boothandoff" start time: Sep 16 22:53 IST
+Output:
+----------------------------------------------------------
+********* Start testing of ulli::core::TestBootHandoff *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 15.2.0), ubuntu 26.04
+PASS   : ulli::core::TestBootHandoff::initTestCase()
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "copy" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "patch" currentExpectation: 6
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "patch" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Mock called with stage: "bootentry" currentExpectation: 7
+QDEBUG : ulli::core::TestBootHandoff::testSuccessfulBootHandoff() Expected stage: "bootentry" shouldSucceed: true
+PASS   : ulli::core::TestBootHandoff::testSuccessfulBootHandoff()
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition() Expected stage: "copy" shouldSucceed: false
+PASS   : ulli::core::TestBootHandoff::testCopyFailureRollsBackStagingPartition()
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "copy" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "patch" currentExpectation: 6
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "patch" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Mock called with stage: "bootentry" currentExpectation: 7
+QDEBUG : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition() Expected stage: "bootentry" shouldSucceed: false
+PASS   : ulli::core::TestBootHandoff::testBootEntryFailureRollsBackStagingPartition()
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAtLayout() Expected stage: "layout" shouldSucceed: true
+PASS   : ulli::core::TestBootHandoff::testCancellationAtLayout()
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Mock called with stage: "preflight" currentExpectation: 0
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Expected stage: "preflight" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Mock called with stage: "validate" currentExpectation: 1
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Expected stage: "validate" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Mock called with stage: "iso" currentExpectation: 2
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Expected stage: "iso" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Mock called with stage: "layout" currentExpectation: 3
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Expected stage: "layout" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Mock called with stage: "mount" currentExpectation: 4
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Expected stage: "mount" shouldSucceed: true
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Mock called with stage: "copy" currentExpectation: 5
+QDEBUG : ulli::core::TestBootHandoff::testCancellationAfterLayout() Expected stage: "copy" shouldSucceed: true
+PASS   : ulli::core::TestBootHandoff::testCancellationAfterLayout()
+PASS   : ulli::core::TestBootHandoff::cleanupTestCase()
+Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 16078ms
+********* Finished testing of ulli::core::TestBootHandoff *********
+<end of output>
+Test time =  16.08 sec
+----------------------------------------------------------
+Test Passed.
+"boothandoff" end time: Sep 16 22:53 IST
+"boothandoff" time elapsed: 00:00:16
+----------------------------------------------------------
+
+End testing: Sep 16 22:53 IST
