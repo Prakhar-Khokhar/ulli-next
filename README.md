@@ -117,8 +117,9 @@ The current catalog contains:
 | Distribution | Edition |
 |---|---|
 | Linux Mint 22.3 "Zena" | Cinnamon |
-| Ubuntu 24.04.4 LTS | GNOME |
-| Kubuntu 24.04.4 LTS | KDE Plasma |
+| Ubuntu 26.04 LTS | GNOME |
+| Kubuntu 26.04 LTS | KDE Plasma 6 |
+| Linux Lite 8.0 | Xfce |
 | Debian Live 13.6.0 | KDE |
 | CachyOS | Desktop |
 | Fedora 43 | KDE Plasma Desktop |
@@ -138,7 +139,7 @@ Supported distributions can have multiple download mirrors.
 
 This makes the downloader less dependent on a single server and allows the catalog to provide alternative sources when a particular mirror is slow or unavailable.
 
-The current catalog contains multiple mirrors for several distributions, including Linux Mint, Ubuntu, Kubuntu, Debian, and Fedora. fileciteturn2file0
+The current catalog contains multiple mirrors for several distributions, including Linux Mint, Ubuntu, Kubuntu, Linux Lite, Debian, and Fedora. fileciteturn2file0
 
 ---
 
@@ -588,8 +589,9 @@ You can also support the project without donating by:
 | Distribution | Edition | ISO | SHA-256 |
 |---|---|---|---|
 | Linux Mint 22.3 "Zena" | Cinnamon | `linuxmint-22.3-cinnamon-64bit.iso` | `a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4` |
-| Ubuntu 24.04.4 LTS | GNOME | `ubuntu-24.04.4-desktop-amd64.iso` | `3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e` |
-| Kubuntu 24.04.4 LTS | KDE Plasma | `kubuntu-24.04.4-desktop-amd64.iso` | `02cda2568cb96c090b0438a31a7d2e7b07357fde16217c215e7c3f45263bcc49` |
+| Ubuntu 26.04 LTS | GNOME | `ubuntu-26.04-desktop-amd64.iso` | `487f87faaf547ea30e0aba4d5b53346292571256b25333a978db1692bcee9dd2` |
+| Kubuntu 26.04 LTS | KDE Plasma 6 | `kubuntu-26.04-desktop-amd64.iso` | `95ce9cf68f13015b9a88bd1ef86fcf7eda77c99979fda48c69e28aa0a84f88ac` |
+| Linux Lite 8.0 | Xfce | `linux-lite-8.0-64bit.iso` | `7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e` |
 | Debian Live 13.6.0 | KDE | `debian-live-13.6.0-amd64-kde.iso` | `426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639` |
 | CachyOS | Desktop | `cachyos-desktop-linux-260809.iso` | `959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c` |
 | Fedora 43 | KDE Plasma Desktop | `Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso` | `181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab` |
