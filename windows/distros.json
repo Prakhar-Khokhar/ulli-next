@@ -1,8 +1,8 @@
 {
     "mint": {
-        "label":    "Linux Mint 22.3 \"Zena\" - Cinnamon Edition (approx. 2.9 GB)",
+        "label": "Linux Mint 22.3 \"Zena\" - Cinnamon Edition (approx. 2.9 GB)",
         "filename": "linuxmint-22.3-cinnamon-64bit.iso",
-        "sha256":   "a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4",
+        "sha256": "a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4",
         "mirrors": [
             "https://mirrors.kernel.org/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
             "https://mirror.csclub.uwaterloo.ca/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
@@ -10,82 +10,96 @@
             "https://mirror.arizona.edu/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso"
         ],
         "download_page": "https://linuxmint.com/edition.php?id=326",
-        "download_msg":  "Please download Linux Mint 22.3 Cinnamon (64-bit) and save it as:",
-        "keyword":        "Mint",
+        "download_msg": "Please download Linux Mint 22.3 Cinnamon (64-bit) and save it as:",
+        "keyword": "Mint",
         "validation_file": "casper\\vmlinuz",
         "is_hybrid": false
     },
     "cachyos": {
-        "label":    "CachyOS Desktop (approx. 3 GB)",
+        "label": "CachyOS Desktop (approx. 3 GB)",
         "filename": "cachyos-desktop-linux-260809.iso",
-        "sha256":   "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c",
+        "sha256": "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c",
         "mirrors": [
             "https://cdn77.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso"
         ],
         "download_page": "https://cachyos.org/download/",
-        "download_msg":  "Please download CachyOS Desktop and save it as:",
-        "keyword":        "CachyOS",
+        "download_msg": "Please download CachyOS Desktop and save it as:",
+        "keyword": "CachyOS",
         "validation_file": "arch\\boot\\x86_64\\vmlinuz-linux-cachyos",
         "is_hybrid": true
     },
     "ubuntu": {
-        "label":    "Ubuntu 24.04.4 LTS - GNOME Edition (approx. 6.2GB)",
-        "filename": "ubuntu-24.04.4-desktop-amd64.iso",
-        "sha256":   "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e",
+        "label": "Ubuntu 26.04 LTS - GNOME Edition (approx. 6.1 GB)",
+        "filename": "ubuntu-26.04-desktop-amd64.iso",
+        "sha256": "487f87faaf547ea30e0aba4d5b53346292571256b25333a978db1692bcee9dd2",
         "mirrors": [
-            "https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirror.cs.uchicago.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirrors.mit.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://ubuntu.osuosl.org/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso"
+            "https://gsl-syd.mm.fcix.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
+            "https://mirror.xenyth.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
+            "https://ftp.udx.icscoe.jp/Linux/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso"
         ],
         "download_page": "https://ubuntu.com/download/desktop",
-        "download_msg":  "Please download Ubuntu 24.04.4 LTS (64-bit) and save it as:",
-        "keyword":        "Ubuntu",
+        "download_msg": "Please download Ubuntu 26.04 LTS (64-bit) and save it as:",
+        "keyword": "Ubuntu",
         "validation_file": "casper\\vmlinuz",
         "is_hybrid": false
     },
     "kubuntu": {
-        "label":    "Kubuntu 24.04.4 LTS - KDE Plasma 5 Edition (approx. 4.5 GB)",
-        "filename": "kubuntu-24.04.4-desktop-amd64.iso",
-        "sha256":   "02cda2568cb96c090b0438a31a7d2e7b07357fde16217c215e7c3f45263bcc49",
+        "label": "Kubuntu 26.04 LTS - KDE Plasma 6 Edition (approx. 4.7 GB)",
+        "filename": "kubuntu-26.04-desktop-amd64.iso",
+        "sha256": "95ce9cf68f13015b9a88bd1ef86fcf7eda77c99979fda48c69e28aa0a84f88ac",
         "mirrors": [
-            "https://cdimage.ubuntu.com/kubuntu/releases/24.04.4/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirror.netzwerge.de/ubuntu-dvd/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://ftpmirror.your.org/pub/ubuntu/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso"
+            "https://ftp.linux.org.tr/kubuntu/26.04/release/kubuntu-26.04-desktop-amd64.iso",
+            "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso",
+            "https://cdimage.ubuntu.com/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso"
         ],
         "download_page": "https://kubuntu.org/getkubuntu/",
-        "download_msg":  "Please download Kubuntu 24.04.4 LTS (64-bit) and save it as:",
-        "keyword":        "Kubuntu",
+        "download_msg": "Please download Kubuntu 26.04 LTS (64-bit) and save it as:",
+        "keyword": "Kubuntu",
         "validation_file": "casper\\vmlinuz",
         "is_hybrid": false
     },
+    "linux-lite": {
+        "label": "Linux Lite 8.0 - Xfce Edition (approx. 2.36 GB)",
+        "filename": "linux-lite-8.0-64bit.iso",
+        "sha256": "7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e",
+        "mirrors": [
+            "https://sourceforge.net/projects/linux-lite/files/8.0/linux-lite-8.0-64bit.iso/download",
+            "https://mirror.freedif.org/LinuxLiteOS/isos/linux-lite-8.0-64bit.iso",
+            "https://www.mirrorservice.org/sites/repo.linuxliteos.com/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
+            "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso"
+        ],
+        "download_page": "https://www.linuxliteos.com/download.php",
+        "download_msg": "Please download Linux Lite 8.0 (64-bit) and save it as:",
+        "keyword": "Linux Lite",
+        "validation_file": "casper\\vmlinuz",
+        "is_hybrid": true
+    },
     "debian": {
-        "label":    "Debian Live 13.6.0 - KDE Edition (approx. 3.9 GB)",
+        "label": "Debian Live 13.6.0 - KDE Edition (approx. 3.9 GB)",
         "filename": "debian-live-13.6.0-amd64-kde.iso",
-        "sha256":   "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639",
+        "sha256": "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639",
         "mirrors": [
             "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
             "https://mirrors.edge.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
             "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso"
         ],
         "download_page": "https://www.debian.org/CD/live/",
-        "download_msg":  "Please download Debian Live 13.6.0 KDE (amd64) and save it as:",
-        "keyword":        "Debian",
+        "download_msg": "Please download Debian Live 13.6.0 KDE (amd64) and save it as:",
+        "keyword": "Debian",
         "validation_file": "live\\vmlinuz",
         "is_hybrid": true
     },
     "fedora": {
-        "label":    "Fedora 43 - KDE Plasma Desktop (approx. 3.0 GB)",
+        "label": "Fedora 43 - KDE Plasma Desktop (approx. 3.0 GB)",
         "filename": "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-        "sha256":   "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab",
+        "sha256": "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab",
         "mirrors": [
             "https://mirror.telepoint.bg/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
             "https://mirrors.netix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"
         ],
         "download_page": "https://fedoraproject.org/kde/download/",
-        "download_msg":  "Please download Fedora 43 KDE Plasma Desktop (x86_64) and save it as:",
-        "keyword":        "Fedora",
+        "download_msg": "Please download Fedora 43 KDE Plasma Desktop (x86_64) and save it as:",
+        "keyword": "Fedora",
         "validation_file": "LiveOS\\squashfs.img",
         "is_hybrid": true
     }
