@@ -3,8 +3,8 @@
 Linux-to-Linux Installer
 A GUI tool to install a second Linux distribution alongside an existing one.
 
-Supported targets: Linux Mint 22.3, Ubuntu 24.04.4, Kubuntu 24.04.4,
-                   Debian Live 13.3.0 KDE, Fedora 43 KDE
+Supported targets: Linux Mint 22.3, Ubuntu 26.04 LTS, Kubuntu 26.04 LTS,
+                   Linux Lite 8.0, Debian Live 13.6.0 KDE, Fedora 43 KDE
 
 Filesystem strategy:
   - btrfs:  Shrink the existing partition and install into new unallocated space
@@ -194,27 +194,42 @@ FALLBACK_DISTROS = {
         "hybrid": True,
     },
     "ubuntu": {
-        "label":    "Ubuntu 24.04.4 LTS – GNOME  (~5.9 GB)",
-        "filename": "ubuntu-24.04.4-desktop-amd64.iso",
-        "sha256":   "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e",
-        "size_gb":  5.9,
+        "label":    "Ubuntu 26.04 LTS – GNOME  (~6.1 GB)",
+        "filename": "ubuntu-26.04-desktop-amd64.iso",
+        "sha256":   "487f87faaf547ea30e0aba4d5b53346292571256b25333a978db1692bcee9dd2",
+        "size_gb":  6.1,
         "mirrors": [
-            "https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirror.cs.uchicago.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
-            "https://mirrors.mit.edu/ubuntu-releases/24.04.4/ubuntu-24.04.4-desktop-amd64.iso",
+            "https://gsl-syd.mm.fcix.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
+            "https://mirror.xenyth.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
+            "https://ftp.udx.icscoe.jp/Linux/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
         ],
         "live_path": "casper/vmlinuz",
     },
     "kubuntu": {
-        "label":    "Kubuntu 24.04.4 LTS – KDE Plasma  (~4.2 GB)",
-        "filename": "kubuntu-24.04.4-desktop-amd64.iso",
-        "sha256":   "02cda2568cb96c090b0438a31a7d2e7b07357fde16217c215e7c3f45263bcc49",
-        "size_gb":  4.2,
+        "label":    "Kubuntu 26.04 LTS – KDE Plasma 6  (~4.7 GB)",
+        "filename": "kubuntu-26.04-desktop-amd64.iso",
+        "sha256":   "95ce9cf68f13015b9a88bd1ef86fcf7eda77c99979fda48c69e28aa0a84f88ac",
+        "size_gb":  4.7,
         "mirrors": [
-            "https://cdimage.ubuntu.com/kubuntu/releases/24.04.4/release/kubuntu-24.04.4-desktop-amd64.iso",
-            "https://ftpmirror.your.org/pub/ubuntu/cdimage/kubuntu/releases/24.04/release/kubuntu-24.04.4-desktop-amd64.iso",
+            "https://ftp.linux.org.tr/kubuntu/26.04/release/kubuntu-26.04-desktop-amd64.iso",
+            "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso",
+            "https://cdimage.ubuntu.com/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso",
         ],
         "live_path": "casper/vmlinuz",
+    },
+    "linux-lite": {
+        "label":    "Linux Lite 8.0 – Xfce  (~2.36 GB)",
+        "filename": "linux-lite-8.0-64bit.iso",
+        "sha256":   "7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e",
+        "size_gb":  2.36,
+        "mirrors": [
+            "https://sourceforge.net/projects/linux-lite/files/8.0/linux-lite-8.0-64bit.iso/download",
+            "https://mirror.freedif.org/LinuxLiteOS/isos/linux-lite-8.0-64bit.iso",
+            "https://www.mirrorservice.org/sites/repo.linuxliteos.com/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
+            "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso",
+        ],
+        "live_path": "casper/vmlinuz",
+        "hybrid": True,
     },
     "debian": {
         "label":    "Debian Live 13.6.0 – KDE  (~3.9 GB)",
