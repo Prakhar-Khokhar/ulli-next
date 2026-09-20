@@ -14,8 +14,11 @@ private slots:
         QVERIFY(c.find("mint") != nullptr);
         QVERIFY(c.find("ubuntu") != nullptr);
         QVERIFY(c.find("cachyos") != nullptr);
+        QVERIFY(c.find("linux-lite") != nullptr);
         QCOMPARE(c.find("mint")->label(),
                  std::string("Linux Mint 22.3"));
+        QCOMPARE(c.find("linux-lite")->label(),
+                 std::string("Linux Lite 8.0 - Xfce"));
         QVERIFY(!c.find("mint")->mirrors().empty());
     }
     void keysOrdered() {
