@@ -1,7 +1,7 @@
 # Linux Installer for Windows 10/11 UEFI Systems - Enhanced Edition with Auto-Restart
 # PowerShell GUI Version - Fixed unit conversions for proper partition placement
 # Run as Administrator: powershell -ExecutionPolicy Bypass -File linux_installer.ps1
-# Distributions: Linux Mint 22.3 "Zena" (Cinnamon Edition), CachyOS Desktop, Ubuntu 24.04.4 LTS, Kubuntu 24.04.4 LTS, Debian Live 13.6.0 KDE, Fedora 43 KDE
+# Distributions: Linux Mint 22.3 "Zena" (Cinnamon Edition), CachyOS Desktop, Ubuntu 26.04 LTS, Kubuntu 26.04 LTS, Linux Lite 8.0, Debian Live 13.6.0 KDE, Fedora 43 KDE
 # Optional rEFInd boot manager on a dedicated FAT32 partition with ext4 driver
 #
 # ─── Table of Contents ───────────────────────────────────────────────────────
@@ -295,7 +295,7 @@ $form.Controls.Add($headerLabel)
 
 # Sub-header label
 $subHeaderLabel = New-Object System.Windows.Forms.Label
-$subHeaderLabel.Text = "Mint 22.3, Ubuntu 24.04.4, Kubuntu 24.04.4, Debian 13.3.0, or Fedora 43  |  No USB required"
+$subHeaderLabel.Text = "Mint 22.3, Ubuntu 26.04, Kubuntu 26.04, Linux Lite 8.0, Debian 13.6.0, or Fedora 43  |  No USB required"
 $subHeaderLabel.Font = $normalFont
 $subHeaderLabel.ForeColor = [System.Drawing.Color]::DimGray
 $subHeaderLabel.Location = New-Object System.Drawing.Point(10, 42)
