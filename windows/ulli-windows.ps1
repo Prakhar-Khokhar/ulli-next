@@ -203,7 +203,7 @@ function Get-FallbackDistroCatalog {
             RadioLabel    = "Linux Lite 8.0 - Xfce Edition (approx. 2.36 GB)"
             ExpectedSize  = "approximately 2.36 GB"
             Mirrors       = @(
-                "https://sourceforge.net/projects/linux-lite/files/8.0/linux-lite-8.0-64bit.iso/download",
+                "https://mirror.freedif.org/LinuxLiteOS/isos/linux-lite-8.0-64bit.iso",
                 "https://mirror.freedif.org/LinuxLiteOS/isos/linux-lite-8.0-64bit.iso",
                 "https://www.mirrorservice.org/sites/repo.linuxliteos.com/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
                 "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso"
