@@ -3,8 +3,8 @@
 Linux-to-Linux Installer
 A GUI tool to install a second Linux distribution alongside an existing one.
 
-Supported targets: Linux Mint 22.3, Ubuntu 26.04 LTS, Kubuntu 26.04 LTS,
-                   Linux Lite 8.0, Debian Live 13.6.0 KDE, Fedora 43 KDE
+Supported targets: Linux Mint 22.3, Ubuntu 24.04.4, Kubuntu 24.04.4,
+                   Debian Live 13.3.0 KDE, Fedora 43 KDE
 
 Filesystem strategy:
   - btrfs:  Shrink the existing partition and install into new unallocated space
@@ -133,43 +133,7 @@ REFIND_URL      = "https://sourceforge.net/projects/refind/files/0.14.2/refind-b
 REFIND_FILENAME = "refind-bin-0.14.2.zip"
 REFIND_MIB      = 100          # 100 MiB FAT32 partition for rEFInd
 
-# ─── Distro catalog ──────────────────────────────────────────────────────────
-# Shared with the Windows script via distros.json. Falls back to FALLBACK_DISTROS
-# if the file is missing or malformed.
-def load_distros_from_json():
-    """Return the distro catalog.
-
-    Tries distros.json first in the script's own directory (release layout:
-    the .json sits next to the .py), then at the repository root. Falls back to
-    FALLBACK_DISTROS if both lookups fail or the file is malformed.
-    """
-    try:
-        import json
-        here = Path(__file__).resolve().parent
-        candidates = [here / "distros.json", here.parent / "distros.json"]
-        for path in candidates:
-            if path.is_file():
-                with open(path, "r", encoding="utf-8") as f:
-                    raw = json.load(f)
-                if isinstance(raw, dict) and raw:
-                    # Translate shared schema (snake_case) -> Linux field names.
-                    out = {}
-                    for key, e in raw.items():
-                        out[key] = {
-                            "label":    e.get("label", key),
-                            "filename": e["filename"],
-                            "sha256":   e["sha256"],
-                            "size_gb":  0.0,
-                            "mirrors":  list(e.get("mirrors", [])),
-                            "live_path": e.get("validation_file", "").replace("\\", "/"),
-                            "hybrid":   bool(e.get("is_hybrid", False)),
-                        }
-                    return out
-    except Exception as exc:
-        print(f"WARN: failed to load distros.json ({exc}); using built-in catalog")
-    return FALLBACK_DISTROS
-
-FALLBACK_DISTROS = {
+DISTROS = {
     "mint": {
         "label":    "Linux Mint 22.3 \"Zena\" – Cinnamon  (~2.9 GB)",
         "filename": "linuxmint-22.3-cinnamon-64bit.iso",
@@ -194,10 +158,10 @@ FALLBACK_DISTROS = {
         "hybrid": True,
     },
     "ubuntu": {
-        "label":    "Ubuntu 26.04 LTS – GNOME  (~6.1 GB)",
+        "label":    "Ubuntu 26.04 LTS – GNOME  (~5.9 GB)",
         "filename": "ubuntu-26.04-desktop-amd64.iso",
         "sha256":   "487f87faaf547ea30e0aba4d5b53346292571256b25333a978db1692bcee9dd2",
-        "size_gb":  6.1,
+        "size_gb":  5.9,
         "mirrors": [
             "https://gsl-syd.mm.fcix.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
             "https://mirror.xenyth.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
@@ -206,7 +170,7 @@ FALLBACK_DISTROS = {
         "live_path": "casper/vmlinuz",
     },
     "kubuntu": {
-        "label":    "Kubuntu 26.04 LTS – KDE Plasma 6  (~4.7 GB)",
+        "label":    "Kubuntu 26.04 LTS – KDE Plasma  (~4.2 GB)",
         "filename": "kubuntu-26.04-desktop-amd64.iso",
         "sha256":   "95ce9cf68f13015b9a88bd1ef86fcf7eda77c99979fda48c69e28aa0a84f88ac",
         "size_gb":  4.7,
@@ -216,20 +180,6 @@ FALLBACK_DISTROS = {
             "https://cdimage.ubuntu.com/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso",
         ],
         "live_path": "casper/vmlinuz",
-    },
-    "linux-lite": {
-        "label":    "Linux Lite 8.0 – Xfce  (~2.36 GB)",
-        "filename": "linux-lite-8.0-64bit.iso",
-        "sha256":   "7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e",
-        "size_gb":  2.36,
-        "mirrors": [
-            "https://mirror.freedif.org/LinuxLiteOS/isos/linux-lite-8.0-64bit.iso",
-            "https://mirror.freedif.org/LinuxLiteOS/isos/linux-lite-8.0-64bit.iso",
-            "https://www.mirrorservice.org/sites/repo.linuxliteos.com/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
-            "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso",
-        ],
-        "live_path": "casper/vmlinuz",
-        "hybrid": True,
     },
     "debian": {
         "label":    "Debian Live 13.6.0 – KDE  (~3.9 GB)",
@@ -244,21 +194,19 @@ FALLBACK_DISTROS = {
         "live_path": "live/vmlinuz",
     },
     "fedora": {
-        "label":    "Fedora 43 – KDE Plasma Desktop  (~3.0 GB)",
-        "filename": "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-        "sha256":   "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab",
+        "label":    "Fedora 44 – KDE Plasma Desktop  (~3.0 GB)",
+        "filename": "Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso",
+        "sha256":   "c8295961d4c41adbf785a31a17c21a971d3b7415fda72dcad0c11c49577bf03a",
         "size_gb":  3.0,
         "mirrors": [
-             "https://mirror.telepoint.bg/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-             "https://mirrors.netix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
+            "https://ftp.kaist.ac.kr/pub/fedora/linux/releases/44/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso",
+            "https://gsl-syd.mm.fcix.net/fedora/linux/releases/44/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso",
+            "https://muug.ca/mirror/fedora/linux/releases/44/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-44-1.7.x86_64.iso",
         ],
         "live_path": "LiveOS/squashfs.img",
         "hybrid": True,
     },
 }
-
-DISTROS = load_distros_from_json()
-
 
 # ─── unit conversion helpers ─────────────────────────────────────────────────
 #
