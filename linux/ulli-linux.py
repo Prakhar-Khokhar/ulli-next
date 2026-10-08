@@ -3,8 +3,8 @@
 Linux-to-Linux Installer
 A GUI tool to install a second Linux distribution alongside an existing one.
 
-Supported targets: Linux Mint 22.3, Ubuntu 24.04.4, Kubuntu 24.04.4,
-                   Debian Live 13.3.0 KDE, Fedora 43 KDE
+Supported targets: Linux Mint 22.3, Ubuntu 26.04 LTS, Kubuntu 26.04 LTS,
+                   Debian Live 13.6.0 KDE, Fedora 44 KDE
 
 Filesystem strategy:
   - btrfs:  Shrink the existing partition and install into new unallocated space
@@ -158,7 +158,7 @@ DISTROS = {
         "hybrid": True,
     },
     "ubuntu": {
-        "label":    "Ubuntu 26.04 LTS – GNOME  (~5.9 GB)",
+        "label":    "Ubuntu 26.04 LTS – GNOME  (~6.1 GB)",
         "filename": "ubuntu-26.04-desktop-amd64.iso",
         "sha256":   "487f87faaf547ea30e0aba4d5b53346292571256b25333a978db1692bcee9dd2",
         "size_gb":  5.9,
@@ -170,7 +170,7 @@ DISTROS = {
         "live_path": "casper/vmlinuz",
     },
     "kubuntu": {
-        "label":    "Kubuntu 26.04 LTS – KDE Plasma  (~4.2 GB)",
+        "label":    "Kubuntu 26.04 LTS – KDE Plasma  (~4.7 GB)",
         "filename": "kubuntu-26.04-desktop-amd64.iso",
         "sha256":   "95ce9cf68f13015b9a88bd1ef86fcf7eda77c99979fda48c69e28aa0a84f88ac",
         "size_gb":  4.7,
