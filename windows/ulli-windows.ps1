@@ -125,6 +125,43 @@ $script:Distros = [ordered]@{
         IsHybrid      = $true
         ToRam         = $false
     }
+    linuxlite = @{
+        Name          = "Linux Lite 8.0"
+        RadioLabel    = "Linux Lite 8.0 - XFCE Desktop (approx. 2.36 GB)"
+        ExpectedSize  = "approximately 2.36 GB"
+        Mirrors       = @(
+            "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso",
+            "https://mirror.lagoon.nc/linuxlite/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
+            "https://repo.linuxliteos.com/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso"
+        )
+        Checksum      = "7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e"
+        IsoFilename   = "linux-lite-8.0-64bit.iso"
+        DownloadPage  = "https://www.linuxliteos.com/download.php"
+        DownloadMsg   = "Please download Linux Lite 8.0 (64-bit) and save it as:"
+        Keyword       = "Linux Lite"
+        ValidationFile = "casper\vmlinuz"
+        IsHybrid      = $false
+        ToRam         = $true
+    }
+    zorin = @{
+        Name          = "Zorin OS 18.1"
+        RadioLabel    = "Zorin OS 18.1 - Core Desktop (approx. 3.6 GB)"
+        ExpectedSize  = "approximately 3.6 GB"
+        Mirrors       = @(
+            "https://mirrors.dotsrc.org/zorinos/18/Zorin-OS-18.1-Core-64-bit.iso",
+            "https://mirror.metanet.ch/zorinos/18/Zorin-OS-18.1-Core-64-bit.iso",
+            "https://ftp.lysator.liu.se/pub/zorinos/isos/18/Zorin-OS-18.1-Core-64-bit.iso",
+            "https://ftp.yz.yamagata-u.ac.jp/pub/linux/zorinos-isos/18/Zorin-OS-18.1-Core-64-bit.iso"
+        )
+        Checksum      = ""
+        IsoFilename   = "Zorin-OS-18.1-Core-64-bit.iso"
+        DownloadPage  = "https://zorin.com/os/download/"
+        DownloadMsg   = "Please download Zorin OS 18.1 Core (64-bit) and save it as:"
+        Keyword       = "Zorin OS"
+        ValidationFile = "casper\vmlinuz"
+        IsHybrid      = $false
+        ToRam         = $true
+    }
     fedora = @{
         Name          = "Fedora 44 KDE"
         RadioLabel    = "Fedora 44 - KDE Plasma Desktop (approx. 3.0 GB)"
@@ -438,6 +475,8 @@ function Get-RamBootParameter {
         "Ubuntu"  { return "toram" }          # casper
         "Kubuntu" { return "toram" }          # casper
         "Debian"  { return "toram" }          # live-boot
+        "Linux Lite" { return "toram" }       # casper (Ubuntu-based live system)
+        "Zorin OS"   { return "toram" }       # casper (Ubuntu-based live system)
         default   { return $null }            # unknown mechanism - never guess
     }
 }
