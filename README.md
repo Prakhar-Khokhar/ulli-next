@@ -24,10 +24,10 @@ The built-in catalog metadata is maintained in [`distros.json`](./distros.json).
 | Linux Mint 22.3 | Cinnamon | Catalog entry |
 | Ubuntu 26.04 LTS | GNOME | Catalog entry |
 | Kubuntu 26.04 LTS | KDE Plasma 6 | Catalog entry |
-| Linux Lite 8.0 | Xfce | Catalog entry; not yet thoroughly tested |
-| Debian Live 13.6.0 | KDE | Catalog entry |
+| Linux Lite 8.0 | Xfce | Catalog entry |
+| Debian Live 13.7 | KDE | Catalog entry |
 | CachyOS | Desktop | Catalog entry |
-| Fedora 43 | KDE Plasma Desktop | **Experimental — 6 GB+ RAM recommended; not properly tested. Avoid for now.** |
+| Fedora 44 | KDE Plasma Desktop | **Experimental — 6 GB+ RAM recommended; not properly tested. Avoid for now.** |
 | Zorin OS | Desktop | **Experimental — 6 GB+ RAM recommended; not properly tested. Avoid for now.** |
 
 **Important:** Linux Lite and Zorin OS support should be treated cautiously until testing is complete. Fedora and Zorin OS are listed for visibility, not as recommendations for normal use. Prefer a better-tested option for now. Check the actual catalog in `distros.json` before relying on a distro being available in your build.
