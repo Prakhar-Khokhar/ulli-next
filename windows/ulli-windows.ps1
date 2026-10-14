@@ -131,7 +131,7 @@ $script:Distros = [ordered]@{
         ExpectedSize  = "approximately 2.36 GB"
         Mirrors       = @(
             "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso",
-            "https://mirror.lagoon.nc/linuxlite/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
+            "https://mirror.lagoon.nc/linuxlite/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso"
         )
         Checksum      = "7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e"
         IsoFilename   = "linux-lite-8.0-64bit.iso"
