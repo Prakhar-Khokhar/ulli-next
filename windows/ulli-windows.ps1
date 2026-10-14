@@ -132,7 +132,7 @@ $script:Distros = [ordered]@{
         Mirrors       = @(
             "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso",
             "https://mirror.lagoon.nc/linuxlite/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
-            "https://repo.linuxliteos.com/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso"
+            "https://downloads.sourceforge.net/project/linux-lite/8.0/linux-lite-8.0-64bit.iso"
         )
         Checksum      = "7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e"
         IsoFilename   = "linux-lite-8.0-64bit.iso"
@@ -153,7 +153,7 @@ $script:Distros = [ordered]@{
             "https://ftp.lysator.liu.se/pub/zorinos/isos/18/Zorin-OS-18.1-Core-64-bit.iso",
             "https://ftp.yz.yamagata-u.ac.jp/pub/linux/zorinos-isos/18/Zorin-OS-18.1-Core-64-bit.iso"
         )
-        Checksum      = ""
+        Checksum      = "44649b97bd307fc4c8529205d098ebbf98575a1e1ba2ee7d7005b697af1721d5"
         IsoFilename   = "Zorin-OS-18.1-Core-64-bit.iso"
         DownloadPage  = "https://zorin.com/os/download/"
         DownloadMsg   = "Please download Zorin OS 18.1 Core (64-bit) and save it as:"
