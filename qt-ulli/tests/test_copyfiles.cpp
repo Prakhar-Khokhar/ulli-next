@@ -15,7 +15,6 @@
 #include <QtTest/QtTest>
 
 #include <filesystem>
-#include <iostream>
 
 #if defined(Q_OS_WIN)
 
@@ -24,11 +23,6 @@ using namespace ulli::platform::windows;
 
 class TestCopyFiles : public QObject {
     Q_OBJECT
-
-public:
-    TestCopyFiles() {
-        std::cerr << "test_copyfiles: constructor start" << std::endl;
-    }
 
 private:
     Catalog catalog_;
@@ -87,7 +81,6 @@ private:
 private slots:
     // Test init
     void initTestCase() {
-        std::cerr << "test_copyfiles: initTestCase start" << std::endl;
         QVERIFY(tempDir_.isValid());
         testSrc_ = std::filesystem::path(tempDir_.path().toStdString()) / "src_iso";
         testDst_ = std::filesystem::path(tempDir_.path().toStdString()) / "dst_staging";
@@ -102,11 +95,6 @@ private slots:
         fsProc.waitForFinished(10000);
         const QString fsOut = QString::fromLocal8Bit(fsProc.readAllStandardOutput()).trimmed();
         stagingIsFat32_ = fsOut.compare("FAT32", Qt::CaseInsensitive) == 0;
-        std::cerr << "test_copyfiles: initTestCase tempDir=" << tempDir_.path().toStdString()
-                  << " testSrc=" << QString::fromStdString(testSrc_.string()).toStdString()
-                  << " testDst=" << QString::fromStdString(testDst_.string()).toStdString()
-                  << " fsOut=" << fsOut.toStdString() << " stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0)
-                  << std::endl;
 
         // Create a minimal distro catalog for testing
         std::vector<Distro> distros;
@@ -202,7 +190,6 @@ private slots:
 
     // Test 6: Missing ISO
     void testMissingIso() {
-        std::cerr << "test_copyfiles: testMissingIso start" << std::endl;
         DiskOps ops;
         std::filesystem::path missingSrc = "/nonexistent/iso";
         std::function<bool()> noCancel = []() { return false; };
@@ -214,7 +201,6 @@ private slots:
 
     // Test 7: Invalid/unverified ISO (missing required files)
     void testInvalidIso() {
-        std::cerr << "test_copyfiles: testInvalidIso start, stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0) << std::endl;
         if (!stagingIsFat32()) {
             QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
         }
@@ -234,7 +220,6 @@ private slots:
 
     // Test 8: Missing staging partition
     void testMissingStagingPartition() {
-        std::cerr << "test_copyfiles: testMissingStagingPartition start" << std::endl;
         createMockIsoStructure("mint");
         std::filesystem::path missingDst = "/nonexistent/staging";
 
@@ -255,7 +240,6 @@ private slots:
 
     // Test 11: Cancellation before copy
     void testCancellationBeforeCopy() {
-        std::cerr << "test_copyfiles: testCancellationBeforeCopy start, stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0) << std::endl;
         if (!stagingIsFat32()) {
             QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
         }
@@ -278,7 +262,6 @@ private slots:
 
     // Test 12: Cancellation during copy
     void testCancellationDuringCopy() {
-        std::cerr << "test_copyfiles: testCancellationDuringCopy start, stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0) << std::endl;
         if (!stagingIsFat32()) {
             QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
         }
@@ -316,7 +299,6 @@ private slots:
 
     // Test 14: Required EFI payload missing
     void testMissingEfiPayload() {
-        std::cerr << "test_copyfiles: testMissingEfiPayload start, stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0) << std::endl;
         if (!stagingIsFat32()) {
             QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
         }
@@ -336,7 +318,6 @@ private slots:
 
     // Test 15: Post-copy verification failure
     void testPostCopyVerification() {
-        std::cerr << "test_copyfiles: testPostCopyVerification start, stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0) << std::endl;
         if (!stagingIsFat32()) {
             QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
         }
@@ -363,7 +344,6 @@ private slots:
 
     // Test 16: Existing files on staging partition
     void testExistingFilesOnStaging() {
-        std::cerr << "test_copyfiles: testExistingFilesOnStaging start, stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0) << std::endl;
         if (!stagingIsFat32()) {
             QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
         }
@@ -405,7 +385,6 @@ private slots:
 
     // Test 18: Distro-specific required files validation
     void testDistroSpecificRequiredFiles() {
-        std::cerr << "test_copyfiles: testDistroSpecificRequiredFiles start, stagingIsFat32=" << (stagingIsFat32_ ? 1 : 0) << std::endl;
         if (!stagingIsFat32()) {
             QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
         }
