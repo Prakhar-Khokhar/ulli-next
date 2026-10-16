@@ -1,0 +1,85 @@
+name: Windows Qt build
+
+on:
+  push:
+    paths:
+      - "qt-ulli/**"
+      - "distros.json"
+      - ".github/workflows/windows-qt-build.yml"
+  pull_request:
+    paths:
+      - "qt-ulli/**"
+      - "distros.json"
+      - ".github/workflows/windows-qt-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-qt-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build Windows x64 (MSVC 2022, Qt 6)
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          archives: qtbase qttools
+          cache: true
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S qt-ulli -B build/windows
+          -G "Visual Studio 17 2022" -A x64
+          "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+          -DULLI_BUILD_TESTS=ON
+          -DULLI_WARNINGS_AS_ERRORS=OFF
+
+      - name: Build
+        run: cmake --build build/windows --config Release --parallel 2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/windows -C Release --output-on-failure
+
+      - name: Package executable and Qt runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Join-Path $env:GITHUB_WORKSPACE "build/windows/Release/ulli-qt.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Expected executable not found: $exe"
+          }
+
+          $package = Join-Path $env:GITHUB_WORKSPACE "windows-package"
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          windeployqt --release --compiler-runtime --dir $package $exe
+          Copy-Item $exe $package
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE "distros.json") $package
+          @"
+          ULLI-Qt Windows CI build
+          Built with MSVC 2022 and Qt 6.8.3.
+          This artifact contains the executable, Qt runtime dependencies, and distros.json.
+          It does not yet bundle all external Linux filesystem/partition utilities described in the project README,
+          so treat it as a CI/test build rather than a complete end-user release.
+          "@ | Set-Content -Encoding UTF8 (Join-Path $package "BUILD-NOTES.txt")
+          Compress-Archive -Path (Join-Path $package "*") -DestinationPath (Join-Path $env:GITHUB_WORKSPACE "ulli-qt-windows.zip") -Force
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ulli-qt-windows-msvc-qt-runtime
+          path: ulli-qt-windows.zip
+          if-no-files-found: error
+          retention-days: 14
