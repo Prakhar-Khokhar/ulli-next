@@ -332,7 +332,7 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
 }
 
 core::Result<void> DiskOps::preflight(const core::InstallPlan& plan) {
-    if (!core::platform::isElevated()) {
+    if (!platform::isElevated()) {
         return core::makeNotElevated();
     }
     if (auto v = validatePlanForDisk(plan); !v) return v;
@@ -344,7 +344,7 @@ core::Result<void> DiskOps::preflight(const core::InstallPlan& plan) {
 }
 
 core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro& d) {
-    const std::filesystem::path cache = core::platform::cacheDir();
+    const std::filesystem::path cache = platform::cacheDir();
     const std::filesystem::path isoPath = cache / d.isoFilename();
     if (std::filesystem::exists(isoPath)) {
         // Verify SHA-256 against the expected hash from distros.json
@@ -563,7 +563,7 @@ Write-Output ('{{"newSize":{0}, "filesystem":"{1}", "offset":{2}}}' -f $newSize,
 )PS1").arg(diskNumber).arg(partitionNumber);
 
     auto verifyResult = runPowerShellScript(verifyScript);
-    if (!verifyResult) return core::makeError(verifyResult.error().kind(), verifyResult.error().message());
+    if (!verifyResult) return core::makeError<std::uint64_t>(verifyResult.error().kind(), verifyResult.error().message());
 
     QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
     if (perr.error != QJsonParseError::NoError) {
