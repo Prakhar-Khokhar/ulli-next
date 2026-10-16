@@ -25,6 +25,11 @@ using namespace ulli::platform::windows;
 class TestCopyFiles : public QObject {
     Q_OBJECT
 
+public:
+    TestCopyFiles() {
+        std::cerr << "test_copyfiles: constructor start" << std::endl;
+    }
+
 private:
     Catalog catalog_;
     QTemporaryDir tempDir_;
