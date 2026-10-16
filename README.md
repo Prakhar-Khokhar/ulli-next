@@ -72,11 +72,11 @@ sudo python3 ulli-linux.py
 
 Extract the Windows package and run `run-ulli-windows.bat` as Administrator.
 
-For the newer Qt/C++ application, see the repository's build files and source tree; it is still under active development and is not yet a stable replacement for every legacy workflow.
+For the newer Qt/C++ application, see the repository's build files and source tree. The Windows Qt 6/C++ version has reached a **buildable development stage** and produces a CI test package; its UI, distro catalog, and ISO-download path are now being smoke-tested. However, **partitioning and other critical installation operations are not yet complete or validated enough for real installations**. Do not use this build to modify disks containing important data, and do not treat it as a replacement for the legacy installer.
 
 ## Development status
 
-The Qt/C++ port is the main long-term direction. Work continues on Windows/Linux backend completeness, real-hardware end-to-end testing, partitioning safety, recovery behavior, automated tests, packaging, and broader filesystem support. Support for filesystems such as ext4 and Btrfs and more capable cross-platform partitioning tools remains future work.
+The Qt 6/C++ port is the main long-term direction and has reached a **buildable stage on Windows**. Basic UI, catalog, and ISO-download testing is underway, but this is not yet a functional, validated end-to-end installer: partition-layout execution, disk operations, boot configuration, cancellation/rollback, and other critical paths still require implementation work and careful testing. Do not rely on this version for real installations yet. Work continues on Windows/Linux backend completeness, partitioning safety, recovery behavior, automated tests, packaging, and broader filesystem support. Support for filesystems such as ext4 and Btrfs and more capable cross-platform partitioning tools remains future work.
 
 Development follows an iterative process: **problem → hypothesis → implementation → test → diagnosis → modification → retest**. AI coding tools have been used, but generated code is not assumed correct; changes need review and testing. For a non-AI version of the original project, see [ULLI-organic](https://github.com/rltvty2/ulli-organic).
 
