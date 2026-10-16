@@ -2,9 +2,11 @@
 // SHA-256 verification tests. These tests are only compiled on Windows
 // where the platform::windows::Sha256 implementation is available.
 
-#if defined(Q_OS_WIN)
-
+// QtGlobal must be included BEFORE the Q_OS_WIN guard so the macro is
+// defined when the guard is evaluated.
 #include <QtGlobal>
+
+#if defined(Q_OS_WIN)
 
 #include "platform/windows/Sha256.h"
 
