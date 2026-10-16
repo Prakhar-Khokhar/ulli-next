@@ -46,57 +46,6 @@ private:
     // helper method, so the call is inlined in each test below.
     bool stagingIsFat32() const { return stagingIsFat32_; }
 
-    void initTestCase() {
-        std::cerr << "test_copyfiles: initTestCase start" << std::endl;
-        QVERIFY(tempDir_.isValid());
-        testSrc_ = std::filesystem::path(tempDir_.path().toStdString()) / "src_iso";
-        testDst_ = std::filesystem::path(tempDir_.path().toStdString()) / "dst_staging";
-        std::filesystem::create_directories(testSrc_);
-        std::filesystem::create_directories(testDst_);
-
-        // Probe whether the staging temp dir is on a FAT32 volume.
-        QProcess fsProc;
-        fsProc.start("powershell.exe", {"-NoProfile", "-Command",
-            QString("(Get-Volume -Path '%1').FileSystem")
-                .arg(QString::fromStdString(testDst_.string()))});
-        fsProc.waitForFinished(10000);
-        const QString fsOut = QString::fromLocal8Bit(fsProc.readAllStandardOutput()).trimmed();
-        stagingIsFat32_ = fsOut.compare("FAT32", Qt::CaseInsensitive) == 0;
-        qDebug() << "initTestCase: tempDir=" << tempDir_.path()
-                 << "testSrc=" << QString::fromStdString(testSrc_.string())
-                 << "testDst=" << QString::fromStdString(testDst_.string())
-                 << "fsOut=" << fsOut << "stagingIsFat32=" << stagingIsFat32_;
-
-        // Create a minimal distro catalog for testing
-        std::vector<Distro> distros;
-        distros.emplace_back("mint", "Linux Mint 22.3", "linuxmint-22.3-cinnamon-64bit.iso",
-                           "a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4",
-                           std::vector<std::string>{"https://example.com/mint.iso"},
-                           "https://linuxmint.com", "Mint", "casper\\vmlinuz", false,
-                           "casper/vmlinuz");
-        distros.emplace_back("ubuntu", "Ubuntu 24.04.4 LTS", "ubuntu-24.04.4-desktop-amd64.iso",
-                           "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e",
-                           std::vector<std::string>{"https://example.com/ubuntu.iso"},
-                           "https://ubuntu.com", "Ubuntu", "casper\\vmlinuz", false,
-                           "casper/vmlinuz");
-        distros.emplace_back("fedora", "Fedora 43 KDE", "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
-                           "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab",
-                           std::vector<std::string>{"https://example.com/fedora.iso"},
-                           "https://fedoraproject.org", "Fedora", "LiveOS\\squashfs.img", true,
-                           "LiveOS/squashfs.img");
-        distros.emplace_back("cachyos", "CachyOS Desktop", "cachyos-desktop-linux-260809.iso",
-                           "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c",
-                           std::vector<std::string>{"https://example.com/cachyos.iso"},
-                           "https://cachyos.org", "CachyOS", "arch\\boot\\x86_64\\vmlinuz-linux-cachyos", true,
-                           "boot/vmlinuz-linux-cachyos");
-        distros.emplace_back("debian", "Debian Live 13.6.0 KDE", "debian-live-13.6.0-amd64-kde.iso",
-                           "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639",
-                           std::vector<std::string>{"https://example.com/debian.iso"},
-                           "https://debian.org", "Debian", "live\\vmlinuz", true,
-                           "live/vmlinuz");
-        catalog_ = Catalog::fromDistros(std::move(distros));
-    }
-
     void createMockIsoStructure(const std::string& distroKeyword) {
         // Remove existing structure
         std::error_code ec;
@@ -136,6 +85,58 @@ private:
     }
 
 private slots:
+    // Test init
+    void initTestCase() {
+        std::cerr << "test_copyfiles: initTestCase start" << std::endl;
+        QVERIFY(tempDir_.isValid());
+        testSrc_ = std::filesystem::path(tempDir_.path().toStdString()) / "src_iso";
+        testDst_ = std::filesystem::path(tempDir_.path().toStdString()) / "dst_staging";
+        std::filesystem::create_directories(testSrc_);
+        std::filesystem::create_directories(testDst_);
+
+        // Probe whether the staging temp dir is on a FAT32 volume.
+        QProcess fsProc;
+        fsProc.start("powershell.exe", {"-NoProfile", "-Command",
+            QString("(Get-Volume -Path '%1').FileSystem")
+                .arg(QString::fromStdString(testDst_.string()))});
+        fsProc.waitForFinished(10000);
+        const QString fsOut = QString::fromLocal8Bit(fsProc.readAllStandardOutput()).trimmed();
+        stagingIsFat32_ = fsOut.compare("FAT32", Qt::CaseInsensitive) == 0;
+        std::cerr << "test_copyfiles: initTestCase tempDir=" << tempDir_.path()
+                  << " testSrc=" << QString::fromStdString(testSrc_.string())
+                  << " testDst=" << QString::fromStdString(testDst_.string())
+                  << " fsOut=" << fsOut << " stagingIsFat32=" << stagingIsFat32_ << std::endl;
+
+        // Create a minimal distro catalog for testing
+        std::vector<Distro> distros;
+        distros.emplace_back("mint", "Linux Mint 22.3", "linuxmint-22.3-cinnamon-64bit.iso",
+                           "a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4",
+                           std::vector<std::string>{"https://example.com/mint.iso"},
+                           "https://linuxmint.com", "Mint", "casper\\vmlinuz", false,
+                           "casper/vmlinuz");
+        distros.emplace_back("ubuntu", "Ubuntu 24.04.4 LTS", "ubuntu-24.04.4-desktop-amd64.iso",
+                           "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e",
+                           std::vector<std::string>{"https://example.com/ubuntu.iso"},
+                           "https://ubuntu.com", "Ubuntu", "casper\\vmlinuz", false,
+                           "casper/vmlinuz");
+        distros.emplace_back("fedora", "Fedora 43 KDE", "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
+                           "181fe3e265fb5850c9a4bb337bdca91bb433b570ef39ece4a7076187435fdab",
+                           std::vector<std::string>{"https://example.com/fedora.iso"},
+                           "https://fedoraproject.org", "Fedora", "LiveOS\\squashfs.img", true,
+                           "LiveOS/squashfs.img");
+        distros.emplace_back("cachyos", "CachyOS Desktop", "cachyos-desktop-linux-260809.iso",
+                           "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c",
+                           std::vector<std::string>{"https://example.com/cachyos.iso"},
+                           "https://cachyos.org", "CachyOS", "arch\\boot\\x86_64\\vmlinuz-linux-cachyos", true,
+                           "boot/vmlinuz-linux-cachyos");
+        distros.emplace_back("debian", "Debian Live 13.6.0 KDE", "debian-live-13.6.0-amd64-kde.iso",
+                           "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639",
+                           std::vector<std::string>{"https://example.com/debian.iso"},
+                           "https://debian.org", "Debian", "live\\vmlinuz", true,
+                           "live/vmlinuz");
+        catalog_ = Catalog::fromDistros(std::move(distros));
+    }
+
     // Test 1: ISO size metadata handling
     void testIsoSizeMetadata() {
         // Test that the plan correctly calculates staging size
