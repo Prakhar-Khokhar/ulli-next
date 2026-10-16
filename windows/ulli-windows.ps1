@@ -204,7 +204,7 @@ if ($scrH -le 900) {
 
 # Create main form
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "USB-less Linux Installer for Windows"
+$form.Text = "ULLI-Next"
 $form.Size = New-Object System.Drawing.Size($formW, $formH)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "Sizable"
@@ -219,7 +219,7 @@ $boldFont = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSt
 
 # Header label
 $headerLabel = New-Object System.Windows.Forms.Label
-$headerLabel.Text = "USB-less Linux Installer for Windows"
+$headerLabel.Text = "ULLI-Next, by Prakhar Khokhar"
 $headerLabel.Font = $headerFont
 $headerLabel.ForeColor = [System.Drawing.Color]::FromArgb(135, 185, 74)
 $headerLabel.Location = New-Object System.Drawing.Point(10, 10)
@@ -229,7 +229,7 @@ $form.Controls.Add($headerLabel)
 
 # Sub-header label
 $subHeaderLabel = New-Object System.Windows.Forms.Label
-$subHeaderLabel.Text = "Mint 22.3, Ubuntu 24.04.4, Kubuntu 24.04.4, Debian 13.3.0, or Fedora 43  |  No USB required"
+$subHeaderLabel.Text = "Mint 22.3, Ubuntu 26.04, Kubuntu 26.04, Debian 13.7.0, or Fedora 44  |  No USB required"
 $subHeaderLabel.Font = $normalFont
 $subHeaderLabel.ForeColor = [System.Drawing.Color]::DimGray
 $subHeaderLabel.Location = New-Object System.Drawing.Point(10, 42)
@@ -1124,6 +1124,37 @@ function Show-DiskPlan {
     $stratPanel.Controls.Add($radioWipe)
     $yPos += 112
 
+    # ---- PARTITION TO SHRINK (C: disk only) ----
+    $shrinkPartGroup = New-Object System.Windows.Forms.GroupBox
+    $shrinkPartGroup.Text = "Partition to shrink"
+    $shrinkPartGroup.Font = $planBoldFont
+    $shrinkPartGroup.Location = New-Object System.Drawing.Point(16, $yPos)
+    $shrinkPartGroup.Size = New-Object System.Drawing.Size(670, 56)
+    $planForm.Controls.Add($shrinkPartGroup)
+
+    $shrinkPartLabel = New-Object System.Windows.Forms.Label
+    $shrinkPartLabel.Text = "Shrink this partition:"
+    $shrinkPartLabel.Font = $planFont
+    $shrinkPartLabel.Location = New-Object System.Drawing.Point(10, 24)
+    $shrinkPartLabel.Size = New-Object System.Drawing.Size(130, 20)
+    $shrinkPartGroup.Controls.Add($shrinkPartLabel)
+
+    $script:ShrinkPartitionCombo = New-Object System.Windows.Forms.ComboBox
+    $script:ShrinkPartitionCombo.Font = $planFont
+    $script:ShrinkPartitionCombo.DropDownStyle = "DropDownList"
+    $script:ShrinkPartitionCombo.Location = New-Object System.Drawing.Point(145, 22)
+    $script:ShrinkPartitionCombo.Size = New-Object System.Drawing.Size(300, 24)
+    $script:ShrinkPartitionCombo.Enabled = $false
+    $script:ShrinkPartitionCombo.Add_SelectedIndexChanged({ & $updateAll })
+    $shrinkPartGroup.Controls.Add($script:ShrinkPartitionCombo)
+
+    $shrinkPartHelpLabel = New-Object System.Windows.Forms.Label
+    $shrinkPartHelpLabel.Font = $planFont
+    $shrinkPartHelpLabel.Location = New-Object System.Drawing.Point(455, 24)
+    $shrinkPartHelpLabel.Size = New-Object System.Drawing.Size(210, 20)
+    $shrinkPartGroup.Controls.Add($shrinkPartHelpLabel)
+    $yPos += 66
+
     # ---- PLANNED CHANGES ----
     $changesGroup = New-Object System.Windows.Forms.GroupBox
     $changesGroup.Text = "Planned Changes"
@@ -1242,6 +1273,48 @@ function Show-DiskPlan {
             $cPartitionEnd = $cPartition.Offset + $cPartition.Size
             $usableFreeGB = Get-DiskUnallocatedGB -DiskNumber $selDiskNum -AfterOffset $cPartitionEnd
 
+            # ---- Partition to shrink picker (C: disk) ----
+            # Let the user pick which NTFS partition on the Windows disk to shrink
+            # instead of always targeting C:. Falls back to C: when nothing else is
+            # shrinkable or when the combo has no valid choice.
+            $script:ShrinkPartitionCombo.Items.Clear()
+            $diskParts = Get-Partition -DiskNumber $selDiskNum -ErrorAction SilentlyContinue | Sort-Object Offset
+            if ($diskParts) {
+                foreach ($p in $diskParts) {
+                    if ($p.DriveLetter) {
+                        try {
+                            $vol = Get-Volume -DriveLetter $p.DriveLetter -ErrorAction Stop
+                            if ($vol.FileSystem -eq "NTFS" -and $vol.SizeRemaining -gt (($totalNeededGB + 1) * 1GB)) {
+                                $pSizeGB = [math]::Round($p.Size / 1GB, 2)
+                                $pFreeGB = [math]::Round($vol.SizeRemaining / 1GB, 2)
+                                $script:ShrinkPartitionCombo.Items.Add(
+                                    "$($p.DriveLetter): ($pSizeGB GB, $pFreeGB GB free)"
+                                ) | Out-Null
+                            }
+                        } catch {
+                            Write-LogMessage "Warning: Failed to check partition $($p.DriveLetter): $_" -IsError
+                        }
+                    }
+                }
+            }
+            $script:ShrinkPartitionCombo.Enabled = ($script:ShrinkPartitionCombo.Items.Count -gt 0)
+            $selLetter = 'C'
+            if ($script:ShrinkPartitionCombo.Items.Count -gt 0) {
+                $defaultIndex = 0
+                for ($i = 0; $i -lt $script:ShrinkPartitionCombo.Items.Count; $i++) {
+                    if ($script:ShrinkPartitionCombo.Items[$i] -like "C: *") { $defaultIndex = $i; break }
+                }
+                $script:ShrinkPartitionCombo.SelectedIndex = $defaultIndex
+                $selLetter = $script:ShrinkPartitionCombo.Items[$defaultIndex] -replace '^([A-Z]): .*$', '$1'
+                $shrinkPartHelpLabel.Text = "$($script:ShrinkPartitionCombo.Items.Count) shrinkable NTFS partition(s) on Disk $selDiskNum"
+            } else {
+                $shrinkPartHelpLabel.Text = "No shrinkable NTFS partitions on Disk $selDiskNum"
+            }
+            $script:DiskPlanShrinkLetter = $selLetter
+            $shrinkPart = Get-Partition -DriveLetter $selLetter -ErrorAction SilentlyContinue
+            $shrinkSizeGB = if ($shrinkPart) { [math]::Round($shrinkPart.Size / 1GB, 2) } else { $cSizeGB }
+            $shrinkPartEnd = if ($shrinkPart) { $shrinkPart.Offset + $shrinkPart.Size } else { $cPartitionEnd }
+
             $canFreeAll = ($usableFreeGB -ge ($totalNeededGB + 1))
             $canFreeBoot = ($usableFreeGB -ge ($script:BootPartSizeGB + $refindGB + 1))
 
@@ -1250,9 +1323,9 @@ function Show-DiskPlan {
                 # The freed gap must be larger than the boot partition plus the
                 # gap scan's alignment/buffer, so shrink 1 GB more than needed.
                 $liveShrinkAmountGB = $totalNeededGB + 1
-                $radioShrink.Text = "Shrink C: by $liveShrinkAmountGB GB for the live boot partition ($script:BootPartSizeGB GB)$refindNote"
+                $radioShrink.Text = "Shrink ${selLetter}: by $liveShrinkAmountGB GB for the live boot partition ($script:BootPartSizeGB GB)$refindNote"
             } else {
-                $radioShrink.Text = "Shrink C: by $totalNeededGB GB for Linux ($LinuxSizeGB GB) + boot ($script:BootPartSizeGB GB)$refindNote"
+                $radioShrink.Text = "Shrink ${selLetter}: by $totalNeededGB GB for Linux ($LinuxSizeGB GB) + boot ($script:BootPartSizeGB GB)$refindNote"
             }
             $radioShrink.Visible = $true
             $radioShrink.Enabled = $true
@@ -1296,9 +1369,9 @@ function Show-DiskPlan {
             switch ($strategy) {
                 "shrink_all" {
                     $shrinkByGB = if ($liveOnly) { $liveShrinkAmountGB } else { $totalNeededGB }
-                    $newCSizeGB = [math]::Round($cSizeGB - $shrinkByGB, 2)
+                    $newCSizeGB = [math]::Round($shrinkSizeGB - $shrinkByGB, 2)
                     $step = 1
-                    $changeLines += "  $step. Shrink C: partition from $cSizeGB GB to $newCSizeGB GB  (-$shrinkByGB GB)"
+                    $changeLines += "  $step. Shrink ${selLetter}: partition from $shrinkSizeGB GB to $newCSizeGB GB  (-$shrinkByGB GB)"
                     $step++
                     $changeLines += "  $step. Create $script:BootPartSizeGB GB FAT32 boot partition (LINUX_LIVE) with $distroName files"
                     if ($useRefind) {
@@ -1316,7 +1389,7 @@ function Show-DiskPlan {
 
                     $afterLines = Format-AfterLayout -Partitions $partitions -DistroName $distroName `
                         -BootPartSizeGB $script:BootPartSizeGB -LinuxSizeGB $LinuxSizeGB `
-                        -ShrinkLetter 'C' -NewShrinkSizeGB $newCSizeGB -UseRefind:$useRefind
+                        -ShrinkLetter $selLetter -NewShrinkSizeGB $newCSizeGB -UseRefind:$useRefind
                 }
                 "use_free_all" {
                     $step = 1
@@ -1379,6 +1452,10 @@ function Show-DiskPlan {
 
         } else {
             # ---- Other disk ----
+            # Partition picker only applies to the Windows (C:) disk
+            $script:ShrinkPartitionCombo.Items.Clear()
+            $script:ShrinkPartitionCombo.Enabled = $false
+            $shrinkPartHelpLabel.Text = "Picker applies to the Windows disk only"
             $shrinkablePartitions = @()
             $partitions = Get-Partition -DiskNumber $selDiskNum -ErrorAction SilentlyContinue | Sort-Object Offset
             if ($partitions) {
@@ -2377,6 +2454,9 @@ function Start-Installation {
     $isOtherDrive = ($selectedStrategy -eq "other_drive" -or $selectedStrategy -eq "other_drive_shrink" -or $selectedStrategy -eq "wipe_disk")
     $otherDriveShrinkLetter = $planResult.ShrinkDriveLetter
     $otherDriveShrinkAmountGB = $planResult.ShrinkAmountGB
+    # Which partition on the Windows disk to shrink (defaults to C:). Set by the
+    # partition picker in the disk plan dialog.
+    $shrinkDriveLetter = if ($planResult.ShrinkDriveLetter) { $planResult.ShrinkDriveLetter } else { 'C' }
     $linuxSizeGB = $planResult.LinuxSizeGB
     $useRefind = $planResult.UseRefind
     $isLiveOnly = $planResult.LiveOnly
@@ -2416,20 +2496,24 @@ function Start-Installation {
             Write-LogMessage "Selected distribution: $distroName"
         }
 
-        # Check space (only if we're shrinking C:)
+        # Check space (only if we're shrinking the Windows disk partition)
         if ($selectedStrategy -eq "shrink_all") {
-            if ($script:CDriveInfo.FreeGB -lt ($totalNeededGB + 10)) {
-                Write-LogMessage "Error: Not enough free space on C: to shrink!" -IsError
-                Write-LogMessage "Need: $($totalNeededGB + 10) GB free on C:" -IsError
-                Write-LogMessage "Have: $($script:CDriveInfo.FreeGB) GB" -IsError
+            $shrinkVol = Get-Volume -DriveLetter $shrinkDriveLetter -ErrorAction SilentlyContinue
+            $shrinkFreeGB = if ($shrinkVol) { [math]::Round($shrinkVol.SizeRemaining / 1GB, 2) } else { 0 }
+            if ($shrinkFreeGB -lt ($totalNeededGB + 10)) {
+                Write-LogMessage "Error: Not enough free space on ${shrinkDriveLetter}: to shrink!" -IsError
+                Write-LogMessage "Need: $($totalNeededGB + 10) GB free on ${shrinkDriveLetter}:" -IsError
+                Write-LogMessage "Have: $shrinkFreeGB GB" -IsError
                 return
             }
         } elseif ($selectedStrategy -eq "use_free_boot") {
             $neededFreeGB = if ($isLiveOnly) { $bootPartSizeGB } else { $linuxSizeGB }
-            if ($script:CDriveInfo.FreeGB -lt ($neededFreeGB + 10)) {
-                Write-LogMessage "Error: Not enough free space on C: to shrink!" -IsError
-                Write-LogMessage "Need: $($neededFreeGB + 10) GB free on C:" -IsError
-                Write-LogMessage "Have: $($script:CDriveInfo.FreeGB) GB" -IsError
+            $shrinkVol = Get-Volume -DriveLetter $shrinkDriveLetter -ErrorAction SilentlyContinue
+            $shrinkFreeGB = if ($shrinkVol) { [math]::Round($shrinkVol.SizeRemaining / 1GB, 2) } else { 0 }
+            if ($shrinkFreeGB -lt ($neededFreeGB + 10)) {
+                Write-LogMessage "Error: Not enough free space on ${shrinkDriveLetter}: to shrink!" -IsError
+                Write-LogMessage "Need: $($neededFreeGB + 10) GB free on ${shrinkDriveLetter}:" -IsError
+                Write-LogMessage "Have: $shrinkFreeGB GB" -IsError
                 return
             }
         } elseif ($selectedStrategy -eq "other_drive") {
@@ -2725,8 +2809,8 @@ exit
                 $shrinkAmountGB = if ($selectedStrategy -eq "use_free_boot") { $linuxSizeGB } else { $totalNeededGB }
             }
 
-            Set-Status "Shrinking C: partition..."
-            Write-LogMessage "Shrinking C: partition by $shrinkAmountGB GB..."
+            Set-Status "Shrinking ${shrinkDriveLetter}: partition..."
+            Write-LogMessage "Shrinking ${shrinkDriveLetter}: partition by $shrinkAmountGB GB..."
 
             if ($selectedStrategy -eq "shrink_all") {
                 $bootSizeGB = $bootPartSizeGB
@@ -2745,7 +2829,7 @@ exit
                 }
             }
 
-            if (-not (Resize-Partition -DriveLetter 'C' -ShrinkAmountGB $shrinkAmountGB)) {
+            if (-not (Resize-Partition -DriveLetter $shrinkDriveLetter -ShrinkAmountGB $shrinkAmountGB)) {
                 return
             }
 
@@ -2776,9 +2860,13 @@ exit
             $disk = Get-Disk -Number $targetDiskNumber -ErrorAction Stop
 
             if (-not $isOtherDrive) {
-                $cPartition = Get-Partition -DriveLetter C
-                $cPartitionEnd = $cPartition.Offset + $cPartition.Size
-                $anchorEnd = $cPartitionEnd
+                $shrinkPartition = Get-Partition -DriveLetter $shrinkDriveLetter -ErrorAction SilentlyContinue
+                if ($shrinkPartition) {
+                    $anchorEnd = $shrinkPartition.Offset + $shrinkPartition.Size
+                } else {
+                    $cPartition = Get-Partition -DriveLetter C
+                    $anchorEnd = $cPartition.Offset + $cPartition.Size
+                }
             } elseif ($selectedStrategy -eq "other_drive_shrink" -and $otherDriveShrinkLetter) {
                 $shrunkPartition = Get-Partition -DriveLetter $otherDriveShrinkLetter
                 $anchorEnd = $shrunkPartition.Offset + $shrunkPartition.Size
