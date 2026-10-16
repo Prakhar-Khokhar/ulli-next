@@ -152,17 +152,17 @@ core::Result<QJsonDocument> Wmi::runScript(const char* scriptName) {
     if (!proc.waitForFinished(60000)) {
         proc.kill();
         return core::makeError<QJsonDocument>(core::Error::Kind::Platform,
-            "PowerShell script timed out: " + scriptName);
+            std::string("PowerShell script timed out: ") + scriptName);
     }
     if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
         const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
         return core::makeError<QJsonDocument>(core::Error::Kind::Platform,
-            "PowerShell script '" + scriptName + "' failed: " + err.toStdString());
+            std::string("PowerShell script '") + scriptName + "' failed: " + err.toStdString());
     }
     const QByteArray raw = proc.readAllStandardOutput();
     if (raw.isEmpty()) {
         return core::makeError<QJsonDocument>(core::Error::Kind::Platform,
-            "PowerShell script produced no output: " + scriptName);
+            std::string("PowerShell script produced no output: ") + scriptName);
     }
     QJsonParseError perr{};
     QJsonDocument doc = QJsonDocument::fromJson(raw, &perr);
@@ -171,6 +171,41 @@ core::Result<QJsonDocument> Wmi::runScript(const char* scriptName) {
             "PowerShell output was not valid JSON: " + perr.errorString().toStdString());
     }
     return core::makeOk(doc);
+}
+
+core::Result<QString> Wmi::runScriptText(const char* scriptName) {
+    const std::string body = scriptFor(scriptName);
+    if (body.empty()) {
+        return core::makeError<QString>(core::Error::Kind::InvalidInput,
+            std::string("Unknown WMI script: ") + scriptName);
+    }
+    const std::filesystem::path scriptPath = writeTempScript(body);
+    if (scriptPath.empty()) {
+        return core::makeError<QString>(core::Error::Kind::Io,
+            "Failed to write temp PowerShell script");
+    }
+
+    QProcess proc;
+    proc.setProcessChannelMode(QProcess::SeparateChannels);
+    proc.start("powershell.exe",
+               {"-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", QString::fromStdString(scriptPath.string())});
+    if (!proc.waitForStarted(10000)) {
+        return core::makeError<QString>(core::Error::Kind::NotFound,
+            "powershell.exe is not available on this system");
+    }
+    if (!proc.waitForFinished(60000)) {
+        proc.kill();
+        return core::makeError<QString>(core::Error::Kind::Platform,
+            std::string("PowerShell script timed out: ") + scriptName);
+    }
+    if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
+        const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
+        return core::makeError<QString>(core::Error::Kind::Platform,
+            std::string("PowerShell script '") + scriptName + "' failed: " + err.toStdString());
+    }
+    const QByteArray raw = proc.readAllStandardOutput();
+    return core::makeOk(QString::fromLocal8Bit(raw).trimmed());
 }
 
 }  // namespace ulli::platform::windows

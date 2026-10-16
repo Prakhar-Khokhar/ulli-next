@@ -3,20 +3,15 @@
 
 #include "platform/windows/Wmi.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
-
 namespace ulli::platform::windows {
 
 bool BitLocker::isLocked() {
-    auto r = Wmi::runScript("bitlocker_status");
+    auto r = Wmi::runScriptText("bitlocker_status");
     if (!r) {
         // PowerShell/CIM unavailable — fail open but do not lie.
         return false;
     }
-    QJsonDocument doc = r.value();
-    if (!doc.isTextual()) return false;
-    const QString text = doc.text().trimmed();
+    const QString text = r.value().trimmed();
     return text.compare("true", Qt::CaseInsensitive) == 0;
 }
 
