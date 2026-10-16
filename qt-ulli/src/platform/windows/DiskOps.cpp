@@ -37,7 +37,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -65,20 +67,20 @@ core::Result<QString> runTool(const QString& program,
     proc.setProcessChannelMode(QProcess::MergedChannels);
     proc.start(program, args);
     if (!proc.waitForStarted(10000)) {
-        return core::makeError<std::string>(core::Error::Kind::NotFound,
+        return core::makeError<QString>(core::Error::Kind::NotFound,
             "Failed to start: " + program.toStdString());
     }
     if (!proc.waitForFinished(-1)) {
-        return core::makeError<std::string>(core::Error::Kind::Platform,
+        return core::makeError<QString>(core::Error::Kind::Platform,
             "Tool did not finish: " + program.toStdString());
     }
     const QString out = QString::fromLocal8Bit(proc.readAll());
     if (proc.exitStatus() != QProcess::NormalExit) {
-        return core::makeError<std::string>(core::Error::Kind::Platform,
+        return core::makeError<QString>(core::Error::Kind::Platform,
             "Tool crashed: " + program.toStdString());
     }
     if (proc.exitCode() != 0) {
-        return core::makeError<std::string>(core::Error::Kind::Platform,
+        return core::makeError<QString>(core::Error::Kind::Platform,
             "Tool " + program.toStdString() + " failed (exit "
             + std::to_string(proc.exitCode()) + "):\n" + out.toStdString());
     }
@@ -347,10 +349,10 @@ core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro& d) {
     if (std::filesystem::exists(isoPath)) {
         // Verify SHA-256 against the expected hash from distros.json
         auto v = Sha256::verifyFile(isoPath, d.sha256());
-        if (!v) return v;
+        if (!v) return core::makeError<std::filesystem::path>(v.error().kind(), v.error().message());
         return core::makeOk(isoPath);
     }
-    return core::makeError(core::Error::Kind::NotFound,
+    return core::makeError<std::filesystem::path>(core::Error::Kind::NotFound,
         "ISO not found in cache. Please download " + d.isoFilename() +
         " to " + cache.string() + " (link: " + d.downloadPage() + ").");
 }
@@ -361,7 +363,7 @@ core::Result<std::filesystem::path> DiskOps::downloadIso(
     std::function<void(int percent, const QString& status)> progressCallback) {
 
     if (distro.mirrors().empty()) {
-        return core::makeError(core::Error::Kind::NotFound,
+        return core::makeError<std::filesystem::path>(core::Error::Kind::NotFound,
             "No download mirrors available for " + distro.label());
     }
 
@@ -369,7 +371,7 @@ core::Result<std::filesystem::path> DiskOps::downloadIso(
     std::error_code ec;
     std::filesystem::create_directories(destPath.parent_path(), ec);
     if (ec) {
-        return core::makeError(core::Error::Kind::Io,
+        return core::makeError<std::filesystem::path>(core::Error::Kind::Io,
             "Cannot create download directory: " + ec.message());
     }
 
@@ -403,7 +405,7 @@ core::Result<std::filesystem::path> DiskOps::downloadIso(
             QString error = reply->errorString();
             reply->deleteLater();
             if (progressCallback) {
-                progressCallback(0, tr("Mirror failed: %1").arg(error));
+                progressCallback(0, QString("Mirror failed: %1").arg(error));
             }
             continue; // Try next mirror
         }
@@ -412,7 +414,7 @@ core::Result<std::filesystem::path> DiskOps::downloadIso(
         QFile file(QString::fromStdString(destPath.string()));
         if (!file.open(QIODevice::WriteOnly)) {
             reply->deleteLater();
-            return core::makeError(core::Error::Kind::Io,
+            return core::makeError<std::filesystem::path>(core::Error::Kind::Io,
                 "Cannot open destination file for writing: " + destPath.string());
         }
 
@@ -422,21 +424,21 @@ core::Result<std::filesystem::path> DiskOps::downloadIso(
 
         // Verify SHA-256
         if (progressCallback) {
-            progressCallback(100, tr("Verifying checksum..."));
+            progressCallback(100, QString("Verifying checksum..."));
         }
         auto v = Sha256::verifyFile(destPath, distro.sha256());
         if (!v) {
             std::filesystem::remove(destPath);
-            return v;
+            return core::makeError<std::filesystem::path>(v.error().kind(), v.error().message());
         }
 
         if (progressCallback) {
-            progressCallback(100, tr("Download complete and verified"));
+            progressCallback(100, QString("Download complete and verified"));
         }
         return core::makeOk(destPath);
     }
 
-    return core::makeError(core::Error::Kind::Platform,
+    return core::makeError<std::filesystem::path>(core::Error::Kind::Platform,
         "All download mirrors failed for " + distro.label());
 }
 
@@ -450,7 +452,7 @@ core::Result<std::uint64_t> DiskOps::shrinkPartition(char driveLetter,
     // 5. Post-resize verification
 
     if (requestedShrinkBytes == 0) {
-        return core::makeError(core::Error::Kind::InvalidInput,
+        return core::makeError<std::uint64_t>(core::Error::Kind::InvalidInput,
             "shrinkPartition: requestedShrinkBytes is zero");
     }
 
@@ -507,17 +509,17 @@ Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "si
 )PS1").arg(QString(driveLetter)).arg(static_cast<qulonglong>(requestedShrinkBytes));
 
     auto r = runPowerShellScript(script);
-    if (!r) return core::makeError(r.error().kind(), r.error().message());
+    if (!r) return core::makeError<std::uint64_t>(r.error().kind(), r.error().message());
 
     QJsonParseError perr{};
     QJsonDocument doc = QJsonDocument::fromJson(r.value().toUtf8(), &perr);
     if (perr.error != QJsonParseError::NoError) {
-        return core::makeError(core::Error::Kind::Platform,
+        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             "PowerShell output was not valid JSON: " + perr.errorString().toStdString());
     }
     QJsonObject obj = doc.object();
     if (obj.contains("error")) {
-        return core::makeError(core::Error::Kind::Platform,
+        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             obj.value("error").toString().toStdString());
     }
 
@@ -531,7 +533,7 @@ Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "si
 
     // Step 2: Check BitLocker on the target partition
     if (isBitLockerLockedOnPartition(diskNumber, partitionNumber)) {
-        return core::makeError(core::Error::Kind::Platform,
+        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             "Target partition is BitLocker-protected and locked. Unlock it before shrinking.");
     }
 
@@ -545,7 +547,7 @@ Write-Output '{"success":true}'
 )PS1").arg(diskNumber).arg(partitionNumber).arg(static_cast<qulonglong>(requestedFinalSize));
 
     auto resizeResult = runPowerShellScript(resizeScript);
-    if (!resizeResult) return core::makeError(resizeResult.error().kind(), resizeResult.error().message());
+    if (!resizeResult) return core::makeError<std::uint64_t>(resizeResult.error().kind(), resizeResult.error().message());
 
     // Step 4: Post-resize verification
     QString verifyScript = QString(R"PS1(
@@ -565,7 +567,7 @@ Write-Output ('{{"newSize":{0}, "filesystem":"{1}", "offset":{2}}}' -f $newSize,
 
     QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
     if (perr.error != QJsonParseError::NoError) {
-        return core::makeError(core::Error::Kind::Platform,
+        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             "Post-resize verification output was not valid JSON");
     }
     QJsonObject verifyObj = verifyDoc.object();
@@ -575,14 +577,14 @@ Write-Output ('{{"newSize":{0}, "filesystem":"{1}", "offset":{2}}}' -f $newSize,
 
     // Verify the results
     if (fs != "NTFS") {
-        return core::makeError(core::Error::Kind::Platform,
+        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             "Post-resize verification failed: filesystem is no longer NTFS (got: " + fs.toStdString() + ")");
     }
 
     // Allow for small alignment differences (1 MB tolerance)
     const qulonglong tolerance = 1024ull * 1024;
     if (newSize < requestedFinalSize - tolerance || newSize > requestedFinalSize + tolerance) {
-        return core::makeError(core::Error::Kind::Platform,
+        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             "Post-resize verification failed: partition size mismatch. Expected ~" + 
             std::to_string(requestedFinalSize) + ", got " + std::to_string(newSize));
     }
@@ -1214,7 +1216,7 @@ core::Result<void> DiskOps::copyFiles(const std::filesystem::path& src,
     // Use PowerShell to query the volume
     QString verifyScript = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue
+$ProgressPreference = 'SilentlyContinue'
 
 $path = '%1'
 $volume = Get-Volume -Path $path -ErrorAction SilentlyContinue
@@ -1690,9 +1692,7 @@ Write-Output ('{{"driveLetter":"{0}", "gptGuid":"{1}"}}' -f $driveLetter, $gptGu
             "EFI/BOOT/BOOTx64.EFI not found on staging partition");
     }
 
-    // Verify required distro files exist (distro-specific)
-    const Distro* distro = nullptr; // We'll need to get this from catalog, but for now check common
-    // For now, just verify the EFI file exists - distro verification happens in copyFiles
+    // Distro-specific required-file verification happens in copyFiles.
 
     // Create boot entry pointing to staging partition
     return BcdStore::createDirectBootEntry(plan, driveLetter.at(0).toLatin1());
@@ -1714,7 +1714,7 @@ void DiskOps::rollbackStagingPartition(const core::InstallPlan& plan) {
 
     QString script = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue
+$ProgressPreference = 'SilentlyContinue'
 
 $diskNumber = %1
 $partitionNumber = %2

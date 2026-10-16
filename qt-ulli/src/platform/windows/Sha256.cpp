@@ -7,6 +7,11 @@
 #include <QJsonObject>
 #include <QJsonValue>
 
+#include <QDir>
+#include <QFile>
+#include <QIODevice>
+#include <QProcess>
+
 #include <algorithm>
 
 namespace ulli::platform::windows {

@@ -30,6 +30,11 @@ public:
     // is not valid JSON.
     static core::Result<QJsonDocument> runScript(const char* scriptName);
 
+    // Run a named script and return its raw stdout (trimmed) as text.
+    // For scripts (e.g. bitlocker_status) that emit plain text rather
+    // than JSON. Returns the trimmed output or a Result error.
+    static core::Result<QString> runScriptText(const char* scriptName);
+
     // Convenience: returns the embedded script body as a string so the
     // caller can write it to a temp .ps1 file before invoking
     // powershell.exe.

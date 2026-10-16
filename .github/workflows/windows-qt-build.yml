@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Build Windows x64 (MSVC 2022, Qt 6.12 LTS)
+    name: Build Windows x64 (MSVC 2022, Qt 6.8)
     runs-on: windows-2022
     steps:
       - name: Check out source
@@ -31,7 +31,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.12.0"
+          version: "6.8.3"
           host: windows
           target: desktop
           arch: win64_msvc2022_64
@@ -69,7 +69,7 @@ jobs:
           Copy-Item (Join-Path $env:GITHUB_WORKSPACE "distros.json") $package
           @"
           ULLI-Qt Windows CI build
-          Built with MSVC 2022 and Qt 6.12.0 LTS.
+          Built with MSVC 2022 and Qt 6.8.3.
           This artifact contains the executable, Qt runtime dependencies, and distros.json.
           It does not yet bundle all external Linux filesystem/partition utilities described in the project README,
           so treat it as a CI/test build rather than a complete end-user release.
