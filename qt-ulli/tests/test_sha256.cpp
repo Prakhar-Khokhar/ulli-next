@@ -16,13 +16,13 @@
 
 #include <filesystem>
 
-#include <QDebug>
+#include <iostream>
 
 class TestSha256 : public QObject {
     Q_OBJECT
 private slots:
     void verifyFile_notFound() {
-        qDebug() << "verifyFile_notFound: temp dir valid check";
+        std::cerr << "verifyFile_notFound: running" << std::endl;
         std::filesystem::path missing("/nonexistent/path/that/does/not/exist.iso");
         auto r = ulli::platform::windows::Sha256::verifyFile(missing, "anysha256");
         QVERIFY(!r);
@@ -39,7 +39,9 @@ private slots:
         f.close();
 
         auto r = ulli::platform::windows::Sha256::verifyFile(file, "deadbeef");
-        qDebug() << "verifyFile_mismatch: ok=" << r.isOk() << "kind=" << (int)r.error().kind() << "msg=" << QString::fromStdString(r.error().message());
+        std::cerr << "verifyFile_mismatch: ok=" << r.isOk()
+                  << " kind=" << static_cast<int>(r.error().kind())
+                  << " msg=" << r.error().message() << std::endl;
         QVERIFY(!r);
         QCOMPARE(r.error().kind(), ulli::core::Error::Kind::Platform);
         QVERIFY(r.error().message().find("mismatch") != std::string::npos);
@@ -56,9 +58,12 @@ private slots:
         f.close();
 
         QString expected = QString(QCryptographicHash::hash(contents, QCryptographicHash::Sha256).toHex());
-        qDebug() << "verifyFile_match: expected=" << expected << "file=" << QString::fromStdString(file.string());
+        std::cerr << "verifyFile_match: expected=" << expected.toStdString()
+                  << " file=" << file.string() << std::endl;
         auto r = ulli::platform::windows::Sha256::verifyFile(file, expected.toStdString());
-        qDebug() << "verifyFile_match: ok=" << r.isOk() << "kind=" << (int)r.error().kind() << "msg=" << QString::fromStdString(r.error().message());
+        std::cerr << "verifyFile_match: ok=" << r.isOk()
+                  << " kind=" << static_cast<int>(r.error().kind())
+                  << " msg=" << r.error().message() << std::endl;
         QVERIFY(r);
     }
 };

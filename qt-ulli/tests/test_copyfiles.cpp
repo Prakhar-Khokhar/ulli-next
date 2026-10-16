@@ -34,11 +34,9 @@ private:
     // CI runners QTemporaryDir is NTFS, so those cases cannot run against
     // a real FAT32 volume and are skipped rather than asserting against
     // the gate.
-    void skipUnlessFat32Staging() {
-        if (!stagingIsFat32_) {
-            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
-        }
-    }
+    // Note: QSKIP must be called directly from a QTest slot, not from a
+    // helper method, so the call is inlined in each test below.
+    bool stagingIsFat32() const { return stagingIsFat32_; }
 
     void initTestCase() {
         QVERIFY(tempDir_.isValid());
@@ -204,7 +202,9 @@ private slots:
 
     // Test 7: Invalid/unverified ISO (missing required files)
     void testInvalidIso() {
-        skipUnlessFat32Staging();
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
         createMockIsoStructure("mint");
         // Remove a required file
         std::filesystem::remove(testSrc_ / "casper" / "vmlinuz");
@@ -241,7 +241,9 @@ private slots:
 
     // Test 11: Cancellation before copy
     void testCancellationBeforeCopy() {
-        skipUnlessFat32Staging();
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
         createMockIsoStructure("mint");
 
         DiskOps ops;
@@ -261,7 +263,9 @@ private slots:
 
     // Test 12: Cancellation during copy
     void testCancellationDuringCopy() {
-        skipUnlessFat32Staging();
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
         // Create a larger structure to allow time for cancellation
         createMockIsoStructure("mint");
         // Add more files
@@ -296,7 +300,9 @@ private slots:
 
     // Test 14: Required EFI payload missing
     void testMissingEfiPayload() {
-        skipUnlessFat32Staging();
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
         createMockIsoStructure("mint");
         // Remove EFI boot file
         std::filesystem::remove(testSrc_ / "EFI" / "BOOT" / "BOOTx64.EFI");
@@ -313,7 +319,9 @@ private slots:
 
     // Test 15: Post-copy verification failure
     void testPostCopyVerification() {
-        skipUnlessFat32Staging();
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
         createMockIsoStructure("mint");
 
         DiskOps ops;
@@ -337,7 +345,9 @@ private slots:
 
     // Test 16: Existing files on staging partition
     void testExistingFilesOnStaging() {
-        skipUnlessFat32Staging();
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
         createMockIsoStructure("mint");
 
         // Pre-create a file on destination
@@ -376,7 +386,9 @@ private slots:
 
     // Test 18: Distro-specific required files validation
     void testDistroSpecificRequiredFiles() {
-        skipUnlessFat32Staging();
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
         // Fedora
         {
             createMockIsoStructure("fedora");
