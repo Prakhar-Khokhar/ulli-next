@@ -19,14 +19,15 @@ namespace ulli::platform::windows {
 namespace {
 
 // Embedded PowerShell script to compute SHA-256 and return JSON.
+// NOTE: param() must be the first statement in a PowerShell script.
 constexpr const char* kSha256Script = R"PS1(
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
 param(
     [Parameter(Mandatory=$true)]
     [string]$Path
 )
+
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
 if (-not (Test-Path -LiteralPath $Path)) {
     Write-Output '{"error":"File not found"}'
