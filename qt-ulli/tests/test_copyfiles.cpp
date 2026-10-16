@@ -42,6 +42,7 @@ private:
     bool stagingIsFat32() const { return stagingIsFat32_; }
 
     void initTestCase() {
+        std::cerr << "test_copyfiles: initTestCase start" << std::endl;
         QVERIFY(tempDir_.isValid());
         testSrc_ = std::filesystem::path(tempDir_.path().toStdString()) / "src_iso";
         testDst_ = std::filesystem::path(tempDir_.path().toStdString()) / "dst_staging";
