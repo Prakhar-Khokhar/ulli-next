@@ -212,7 +212,7 @@ private slots:
 
         auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
         QVERIFY(!result);
-        QVERIFY(result.error().message().contains("Required file missing"));
+        QVERIFY(result.error().message().find("Required file missing") != std::string::npos);
     }
 
     // Test 8: Missing staging partition
@@ -263,7 +263,9 @@ private slots:
         // Add more files
         std::filesystem::create_directories(testSrc_ / "extra");
         for (int i = 0; i < 10; ++i) {
-            QFile f(testSrc_ / "extra" / QString("file%1.dat").arg(i));
+            std::filesystem::path fpath = testSrc_ / "extra" /
+                (std::string("file") + std::to_string(i) + ".dat");
+            QFile f(QString::fromStdString(fpath.string()));
             f.open(QIODevice::WriteOnly);
             f.write(QByteArray(1024 * 1024, 'x')); // 1 MB each
         }
@@ -302,7 +304,7 @@ private slots:
 
         auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
         QVERIFY(!result);
-        QVERIFY(result.error().message().contains("Required file missing"));
+        QVERIFY(result.error().message().find("Required file missing") != std::string::npos);
     }
 
     // Test 15: Post-copy verification failure

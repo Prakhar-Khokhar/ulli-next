@@ -2,6 +2,8 @@
 // SHA-256 verification tests. These tests are only compiled on Windows
 // where the platform::windows::Sha256 implementation is available.
 
+#include <QtGlobal>
+
 #if defined(Q_OS_WIN)
 
 #include "platform/windows/Sha256.h"
