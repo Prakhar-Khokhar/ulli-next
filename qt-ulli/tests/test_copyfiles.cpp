@@ -8,6 +8,7 @@
 #include "core/Result.h"
 
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QProcess>
 #include <QTemporaryDir>
@@ -52,9 +53,12 @@ private:
             QString("(Get-Volume -Path '%1').FileSystem")
                 .arg(QString::fromStdString(testDst_.string()))});
         fsProc.waitForFinished(10000);
-        stagingIsFat32_ = QString::fromLocal8Bit(fsProc.readAllStandardOutput())
-                              .trimmed()
-                              .compare("FAT32", Qt::CaseInsensitive) == 0;
+        const QString fsOut = QString::fromLocal8Bit(fsProc.readAllStandardOutput()).trimmed();
+        stagingIsFat32_ = fsOut.compare("FAT32", Qt::CaseInsensitive) == 0;
+        qDebug() << "initTestCase: tempDir=" << tempDir_.path()
+                 << "testSrc=" << QString::fromStdString(testSrc_.string())
+                 << "testDst=" << QString::fromStdString(testDst_.string())
+                 << "fsOut=" << fsOut << "stagingIsFat32=" << stagingIsFat32_;
 
         // Create a minimal distro catalog for testing
         std::vector<Distro> distros;

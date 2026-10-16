@@ -16,10 +16,13 @@
 
 #include <filesystem>
 
+#include <QDebug>
+
 class TestSha256 : public QObject {
     Q_OBJECT
 private slots:
     void verifyFile_notFound() {
+        qDebug() << "verifyFile_notFound: temp dir valid check";
         std::filesystem::path missing("/nonexistent/path/that/does/not/exist.iso");
         auto r = ulli::platform::windows::Sha256::verifyFile(missing, "anysha256");
         QVERIFY(!r);
@@ -36,6 +39,7 @@ private slots:
         f.close();
 
         auto r = ulli::platform::windows::Sha256::verifyFile(file, "deadbeef");
+        qDebug() << "verifyFile_mismatch: ok=" << r.isOk() << "kind=" << (int)r.error().kind() << "msg=" << QString::fromStdString(r.error().message());
         QVERIFY(!r);
         QCOMPARE(r.error().kind(), ulli::core::Error::Kind::Platform);
         QVERIFY(r.error().message().find("mismatch") != std::string::npos);
@@ -52,7 +56,9 @@ private slots:
         f.close();
 
         QString expected = QString(QCryptographicHash::hash(contents, QCryptographicHash::Sha256).toHex());
+        qDebug() << "verifyFile_match: expected=" << expected << "file=" << QString::fromStdString(file.string());
         auto r = ulli::platform::windows::Sha256::verifyFile(file, expected.toStdString());
+        qDebug() << "verifyFile_match: ok=" << r.isOk() << "kind=" << (int)r.error().kind() << "msg=" << QString::fromStdString(r.error().message());
         QVERIFY(r);
     }
 };
