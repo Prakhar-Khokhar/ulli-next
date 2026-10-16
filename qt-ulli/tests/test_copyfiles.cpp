@@ -102,7 +102,7 @@ private slots:
         fsProc.waitForFinished(10000);
         const QString fsOut = QString::fromLocal8Bit(fsProc.readAllStandardOutput()).trimmed();
         stagingIsFat32_ = fsOut.compare("FAT32", Qt::CaseInsensitive) == 0;
-        std::cerr << "test_copyfiles: initTestCase tempDir=" << tempDir_.path().string()
+        std::cerr << "test_copyfiles: initTestCase tempDir=" << tempDir_.path().toStdString()
                   << " testSrc=" << QString::fromStdString(testSrc_.string())
                   << " testDst=" << QString::fromStdString(testDst_.string())
                   << " fsOut=" << fsOut << " stagingIsFat32=" << stagingIsFat32_ << std::endl;
