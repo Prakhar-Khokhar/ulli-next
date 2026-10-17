@@ -1199,10 +1199,14 @@ function Show-DiskPlan {
     $script:DiskPlanShrinkAmount = 0
 
     # ---- Master update function ----
+    $script:UpdatingDiskPlan = $false
     $updateAll = {
+        if ($script:UpdatingDiskPlan) { return }
         $selIndex = $diskCombo.SelectedIndex
         if ($selIndex -lt 0) { return }
-        $selDisk = $diskItems[$selIndex]
+        $script:UpdatingDiskPlan = $true
+        try {
+            $selDisk = $diskItems[$selIndex]
         $selDiskNum = $selDisk.Number
         $isTargetCDisk = $selDisk.IsCDisk
 
@@ -1298,14 +1302,30 @@ function Show-DiskPlan {
                 }
             }
             $script:ShrinkPartitionCombo.Enabled = ($script:ShrinkPartitionCombo.Items.Count -gt 0)
+            # Remember the user's chosen partition so re-populating the list on
+            # the next update does not snap the selection back to C:.
+            $prevSelLetter = $null
+            if ($script:ShrinkPartitionCombo.SelectedIndex -ge 0) {
+                $prevSelLetter = $script:ShrinkPartitionCombo.SelectedItem -replace '^([A-Z]): .*$', '$1'
+            }
             $selLetter = 'C'
+            $newIndex = -1
             if ($script:ShrinkPartitionCombo.Items.Count -gt 0) {
-                $defaultIndex = 0
-                for ($i = 0; $i -lt $script:ShrinkPartitionCombo.Items.Count; $i++) {
-                    if ($script:ShrinkPartitionCombo.Items[$i] -like "C: *") { $defaultIndex = $i; break }
+                # Prefer the letter the user previously picked, if still present.
+                if ($prevSelLetter) {
+                    for ($i = 0; $i -lt $script:ShrinkPartitionCombo.Items.Count; $i++) {
+                        if ($script:ShrinkPartitionCombo.Items[$i] -like "${prevSelLetter}: *") { $newIndex = $i; break }
+                    }
                 }
-                $script:ShrinkPartitionCombo.SelectedIndex = $defaultIndex
-                $selLetter = $script:ShrinkPartitionCombo.Items[$defaultIndex] -replace '^([A-Z]): .*$', '$1'
+                # Fall back to C:, then to the first listed partition.
+                if ($newIndex -lt 0) {
+                    for ($i = 0; $i -lt $script:ShrinkPartitionCombo.Items.Count; $i++) {
+                        if ($script:ShrinkPartitionCombo.Items[$i] -like "C: *") { $newIndex = $i; break }
+                    }
+                    if ($newIndex -lt 0) { $newIndex = 0 }
+                }
+                $script:ShrinkPartitionCombo.SelectedIndex = $newIndex
+                $selLetter = $script:ShrinkPartitionCombo.Items[$newIndex] -replace '^([A-Z]): .*$', '$1'
                 $shrinkPartHelpLabel.Text = "$($script:ShrinkPartitionCombo.Items.Count) shrinkable NTFS partition(s) on Disk $selDiskNum"
             } else {
                 $shrinkPartHelpLabel.Text = "No shrinkable NTFS partitions on Disk $selDiskNum"
@@ -1728,7 +1748,10 @@ function Show-DiskPlan {
             $changesText.Text = ($changeLines -join "`r`n")
             $afterText.Text = ($afterLines -join "`r`n")
         }
+    } finally {
+        $script:UpdatingDiskPlan = $false
     }
+}
 
     # Wire events
     $diskCombo.Add_SelectedIndexChanged({
