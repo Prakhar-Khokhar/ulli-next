@@ -11,6 +11,11 @@
 
 #include <QWidget>
 
+#include <QCryptographicHash>
+#include <QFile>
+#include <QFutureWatcher>
+#include <QtConcurrent/QtConcurrent>
+
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -57,9 +62,13 @@ private slots:
     void onBrowseClicked();
     void onDownloadClicked();
     void onComboIndexChanged(int index);
+    void onIsoVerificationFinished();
 
 private:
     void updateIsoStatusDisplay();
+    void verifyIsoAsync(const core::Distro* distro);
+    static bool verifyIsoHash(const core::Distro* distro,
+                              const std::filesystem::path& isoPath);
     QString getIsoStatus(const core::Distro* distro) const;
     std::filesystem::path getIsoCachePath(const core::Distro* distro) const;
 
@@ -74,6 +83,11 @@ private:
     DownloadCallback downloadCallback_;
     core::Distro* currentDistro_ = nullptr;
     bool downloading_ = false;
+
+    // In-flight asynchronous ISO verification, so the UI never claims an
+    // ISO is "verified" without actually checking its SHA-256.
+    QFutureWatcher<bool>* verifyWatcher_ = nullptr;
+    QString verifyingKey_;
 };
 
 }  // namespace ulli::ui

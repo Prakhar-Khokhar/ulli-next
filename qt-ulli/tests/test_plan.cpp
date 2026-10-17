@@ -20,6 +20,23 @@ private slots:
         p.strategy = ulli::core::Strategy::UseFreeAll;  // Doesn't require shrink
         QVERIFY(p.valid());
     }
+
+    // Bug A regression: a catalog distro plan with an empty isoPath must be
+    // valid — InstallEngine::runStages resolves the ISO (download or rediscover
+    // the cached file) via backend_->resolveIso() *after* valid() is called.
+    // Requiring isoPath here wrongly rejected a previously-downloaded ISO on
+    // restart. UseFreeAll needs no shrink drive letter.
+    void catalogPlanWithEmptyIsoPathIsValid() {
+        ulli::core::InstallPlan p;
+        p.distroKey = "linux-lite";
+        // isoPath intentionally empty — resolved at install time.
+        p.targetDiskNumber = 1;
+        p.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        p.strategy = ulli::core::Strategy::UseFreeAll;
+        p.allocationMode = ulli::core::AllocationMode::FullInstall;
+        QVERIFY(p.valid());
+    }
     void tooSmallLinuxInvalid() {
         ulli::core::InstallPlan p;
         p.distroKey = "mint";
@@ -47,6 +64,7 @@ private slots:
         p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
         p.strategy = ulli::core::Strategy::ShrinkAll;
         p.allocationMode = ulli::core::AllocationMode::FullInstall;
+        p.shrinkDriveLetter = 'C';  // shrink strategy requires a target partition
         // No shrinkAmountBytes set - should be invalid
         QVERIFY(!p.valid());
         

@@ -34,7 +34,10 @@ QString InstallPlan::summary() const {
 
 bool InstallPlan::valid() const {
     if (distroKey.empty()) return false;
-    if (isoPath.empty()) return false;
+    // isoPath is resolved at install time by InstallEngine::runStages
+    // (backend_->resolveIso). It must not be required here, otherwise a
+    // catalog distro whose ISO is already cached would be rejected before
+    // resolution — see Bug A (ISO rediscovery after restart).
     if (targetDiskNumber <= 0) return false;
     if (bootSizeBytes < (1ull * 1024 * 1024 * 1024)) return false;   // 1 GiB min
     
@@ -57,6 +60,8 @@ bool InstallPlan::valid() const {
         strategy == Strategy::UseFreeBoot || 
         strategy == Strategy::OtherDriveShrink) {
         if (shrinkAmountBytes == 0) return false;
+        // A shrink strategy must name the target partition to shrink.
+        if (!shrinkDriveLetter.has_value()) return false;
         // shrinkAmount must be at least the required minimum for the mode
         const std::uint64_t minShrink = (allocationMode == AllocationMode::LiveOnly) 
             ? kStagingSizeBytes 

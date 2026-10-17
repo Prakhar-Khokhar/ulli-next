@@ -111,28 +111,15 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
         if (auto r = backend_->validatePlanForDisk(plan); !r) return r;
         if (plan.shrinkDriveLetter.has_value()) {
             // The backend figures out the new size from the requested
-            // shrink amount stored on the plan.
+            // shrink amount stored on the plan. shrinkPartition returns the
+            // actual post-resize partition size; we record the requested
+            // shrink amount as the expected freed space, which createLayout
+            // validates against the real on-disk gap before mutating.
             auto r = backend_->shrinkPartition(plan.shrinkDriveLetter.value(),
                                               plan.shrinkAmountBytes);
             if (!r) {
                 return makeError(r.error().kind(), r.error().message());
             }
-            // Calculate actual freed bytes: original size - new size
-            // shrinkPartition returns the new partition size
-            const std::uint64_t newSize = r.value();
-            // The original size was linuxSizeBytes + newSize (before shrink)
-            // Actually, the shrinkAmountBytes is what we requested to shrink
-            // The actual freed is the difference between the original and new size
-            // We need to get the original size from somewhere - for now use the requested
-            // Since the verification in shrinkPartition checks the final size,
-            // we can compute: actualFreed = requestedFinalSize - newSize? No.
-            // Let's rethink: the user requests to shrink by shrinkAmountBytes
-            // The final size should be originalSize - shrinkAmountBytes
-            // But Windows may not shrink exactly that amount due to alignment
-            // So actualFreed = originalSize - actualFinalSize
-            // Since shrinkPartition returns actualFinalSize, we need originalSize
-            // For now, we'll use the requested shrink amount as the expected freed
-            // The createLayout validation will check against actual free space
             plan.actualFreedBytes = plan.shrinkAmountBytes;
         }
         if (cancelFlag_.loadAcquire() != 0) return makeCancelled();

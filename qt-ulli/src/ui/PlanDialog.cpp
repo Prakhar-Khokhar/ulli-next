@@ -359,7 +359,14 @@ void PlanDialog::onLinuxSizeChanged(int value) {
 }
 
 void PlanDialog::updateOkButtonState() {
-    buttons_->button(QDialogButtonBox::Ok)->setEnabled(!(wipeRadio_->isChecked() && !wipeConfirmed_));
+    bool ok = !(wipeRadio_->isChecked() && !wipeConfirmed_);
+    // A shrink strategy requires a selected target partition; never allow
+    // the user to proceed with an empty partition selection, which would
+    // silently produce a plan with no drive letter to shrink.
+    if (shrinkRadio_->isChecked() && shrinkPartitionCombo_->currentIndex() < 0) {
+        ok = false;
+    }
+    buttons_->button(QDialogButtonBox::Ok)->setEnabled(ok);
 }
 
 void PlanDialog::updateSizeBounds() {

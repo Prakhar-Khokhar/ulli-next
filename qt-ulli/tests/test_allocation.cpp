@@ -141,8 +141,13 @@ private slots:
         p.strategy = ulli::core::Strategy::ShrinkAll;
         p.allocationMode = ulli::core::AllocationMode::FullInstall;
         p.shrinkAmountBytes = p.linuxSizeBytes;
-        // No shrinkDriveLetter set - valid() doesn't check this, but engine will fail
-        QVERIFY(p.valid());  // Plan is valid, but engine will need the drive letter
+        // Without a selected partition, the plan is now invalid: a shrink
+        // strategy must name the target partition to shrink.
+        QVERIFY(!p.valid());
+
+        // With a drive letter and matching shrink amount - valid.
+        p.shrinkDriveLetter = 'C';
+        QVERIFY(p.valid());
     }
 
     void shrinkAllShrinkAmountMustEqualLinuxSize() {
@@ -347,6 +352,7 @@ private slots:
         p.strategy = ulli::core::Strategy::ShrinkAll;
         p.allocationMode = ulli::core::AllocationMode::LiveOnly;
         p.shrinkAmountBytes = 7ull * 1024 * 1024 * 1024;  // Matches linuxSizeBytes
+        p.shrinkDriveLetter = 'C';
         QVERIFY(p.valid());
     }
 

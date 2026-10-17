@@ -7,7 +7,12 @@
 
 #include <QComboBox>
 #include <QFileDialog>
+#include <QFile>
+#include <QByteArrayView>
 #include <QCheckBox>
+#include <QCryptographicHash>
+#include <QFutureWatcher>
+#include <QtConcurrent/QtConcurrent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -78,7 +83,12 @@ DistroSelector::DistroSelector(QWidget* parent) : QWidget(parent) {
             this, &DistroSelector::onDownloadClicked);
 }
 
-DistroSelector::~DistroSelector() = default;
+DistroSelector::~DistroSelector() {
+    if (verifyWatcher_) {
+        verifyWatcher_->disconnect(this);
+        verifyWatcher_->deleteLater();
+    }
+}
 
 void DistroSelector::setCatalog(const core::Catalog* catalog) {
     catalog_ = catalog;
@@ -133,25 +143,97 @@ void DistroSelector::updateIsoStatusDisplay() {
         return;
     }
 
+    // Cancel any in-flight verification for a previously selected distro.
+    if (verifyWatcher_) {
+        verifyWatcher_->disconnect(this);
+        verifyWatcher_->deleteLater();
+        verifyWatcher_ = nullptr;
+        verifyingKey_.clear();
+    }
+
     const auto isoPath = getIsoCachePath(currentDistro_);
     const bool exists = std::filesystem::exists(isoPath);
-    const bool verified = exists && !currentDistro_->sha256().empty();
 
-    if (verified) {
-        statusLabel_->setText(tr("✓ ISO verified: %1").arg(QString::fromStdString(isoPath.string())));
-        statusLabel_->setStyleSheet("color: #2a7; font-size: 11px;");
-        downloadBtn_->setEnabled(false);
-        downloadBtn_->setText(tr("ISO Ready"));
-    } else if (exists) {
-        statusLabel_->setText(tr("⚠ ISO found but not verified: %1").arg(QString::fromStdString(isoPath.string())));
-        statusLabel_->setStyleSheet("color: #c60; font-size: 11px;");
-        downloadBtn_->setEnabled(true);
-        downloadBtn_->setText(tr("Verify / Re-download"));
-    } else {
-        statusLabel_->setText(tr("ISO not downloaded. Size: ~%1").arg(QString::fromStdString(currentDistro_->isoFilename())));
+    if (!exists) {
+        statusLabel_->setText(tr("ISO not downloaded. Size: ~%1")
+                                  .arg(QString::fromStdString(currentDistro_->isoFilename())));
         statusLabel_->setStyleSheet("color: #666; font-size: 11px;");
         downloadBtn_->setEnabled(true);
         downloadBtn_->setText(tr("Download ISO"));
+        downloadProgress_->setVisible(false);
+        downloadProgress_->setValue(0);
+        emit isoStatusChanged(combo_->currentData().toString(), statusLabel_->text());
+        return;
+    }
+
+    // File exists — verify its SHA-256 against the catalog before claiming
+    // it is valid. Run off the UI thread so a multi-GB ISO does not freeze
+    // the UI; never show "verified" without actually checking the hash.
+    const QString key = QString::fromStdString(currentDistro_->key());
+    verifyingKey_ = key;
+    statusLabel_->setText(tr("Verifying ISO checksum…"));
+    statusLabel_->setStyleSheet("color: #0066cc; font-size: 11px;");
+    downloadBtn_->setEnabled(false);
+    downloadProgress_->setVisible(false);
+
+    verifyWatcher_ = new QFutureWatcher<bool>(this);
+    connect(verifyWatcher_, &QFutureWatcher<bool>::finished,
+            this, &DistroSelector::onIsoVerificationFinished);
+    verifyWatcher_->setFuture(QtConcurrent::run(&DistroSelector::verifyIsoHash,
+                                                currentDistro_, isoPath));
+}
+
+bool DistroSelector::verifyIsoHash(const core::Distro* distro,
+                                   const std::filesystem::path& isoPath) {
+    if (!distro || distro->sha256().empty()) return false;
+
+    QFile f(QString::fromStdString(isoPath.string()));
+    if (!f.open(QIODevice::ReadOnly)) return false;
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    constexpr std::size_t kBufferSize = 64 * 1024;
+    char buffer[kBufferSize];
+    while (!f.atEnd()) {
+        qint64 bytesRead = f.read(buffer, kBufferSize);
+        if (bytesRead < 0) {
+            f.close();
+            return false;
+        }
+        hash.addData(QByteArrayView(buffer, static_cast<qsizetype>(bytesRead)));
+    }
+    f.close();
+
+    QString actualHex = QString(hash.result().toHex()).toLower();
+    QString expected = QString::fromStdString(distro->sha256()).toLower().trimmed();
+    return actualHex == expected;
+}
+
+void DistroSelector::onIsoVerificationFinished() {
+    verifyWatcher_->deleteLater();
+    verifyWatcher_ = nullptr;
+
+    // Ignore stale results if the user switched distros while verifying.
+    if (!currentDistro_ || verifyingKey_.isEmpty() ||
+        QString::fromStdString(currentDistro_->key()) != verifyingKey_) {
+        verifyingKey_.clear();
+        return;
+    }
+    verifyingKey_.clear();
+
+    const auto isoPath = getIsoCachePath(currentDistro_);
+    const bool ok = verifyWatcher_->result();
+    if (ok) {
+        statusLabel_->setText(tr("✓ ISO verified: %1")
+                                  .arg(QString::fromStdString(isoPath.string())));
+        statusLabel_->setStyleSheet("color: #2a7; font-size: 11px;");
+        downloadBtn_->setEnabled(false);
+        downloadBtn_->setText(tr("ISO Ready"));
+    } else {
+        statusLabel_->setText(tr("⚠ ISO found but verification failed: %1")
+                                  .arg(QString::fromStdString(isoPath.string())));
+        statusLabel_->setStyleSheet("color: #c00; font-size: 11px;");
+        downloadBtn_->setEnabled(true);
+        downloadBtn_->setText(tr("Verify / Re-download"));
     }
     downloadProgress_->setVisible(false);
     downloadProgress_->setValue(0);

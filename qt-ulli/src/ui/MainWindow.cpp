@@ -101,8 +101,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         auto* worker = new QObject();
         worker->moveToThread(QThread::currentThread());
 
-        QMetaObject::invokeMethod(worker, [backend = std::move(backend), &distro, destPath,
-                                           progressCb, finishedCb, worker]() mutable {
+        QMetaObject::invokeMethod(worker,
+                                  [backend = std::move(backend), distro, destPath,
+                                   progressCb, finishedCb, worker]() mutable {
             auto result = backend->downloadIso(distro, destPath, progressCb);
             finishedCb(result);
             worker->deleteLater();
