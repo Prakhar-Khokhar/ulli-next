@@ -1376,6 +1376,14 @@ function Show-DiskPlan {
                 elseif ($canFreeBoot) { $strategy = "use_free_boot" }
             }
             $script:DiskPlanStrategy = $strategy
+            # use_free_boot shrinks C: (not the picker's partition); use_free_all
+            # shrinks nothing. Keep DiskPlanShrinkLetter consistent with the
+            # strategy so Start-Installation shrinks the right drive.
+            if ($strategy -eq "use_free_boot") {
+                $script:DiskPlanShrinkLetter = 'C'
+            } elseif ($strategy -eq "use_free_all") {
+                $script:DiskPlanShrinkLetter = $null
+            }
 
             $changeLines = @()
             $afterLines = @()
