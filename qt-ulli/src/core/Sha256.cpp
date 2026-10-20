@@ -18,14 +18,14 @@ constexpr std::size_t kChunkSize = 64 * 1024;
 Result<std::string> Sha256::hashFile(const std::filesystem::path& file) {
     std::error_code ec;
     if (!std::filesystem::exists(file, ec) || ec) {
-        return makeError(Error::Kind::NotFound,
-                         "ISO file does not exist: " + file.string());
+        return makeError<std::string>(Error::Kind::NotFound,
+                                      "ISO file does not exist: " + file.string());
     }
 
     QFile f(QString::fromStdString(file.string()));
     if (!f.open(QIODevice::ReadOnly)) {
-        return makeError(Error::Kind::Io,
-                         "Cannot open file for reading: " + file.string());
+        return makeError<std::string>(Error::Kind::Io,
+                                      "Cannot open file for reading: " + file.string());
     }
 
     QCryptographicHash hash(QCryptographicHash::Sha256);
@@ -34,15 +34,16 @@ Result<std::string> Sha256::hashFile(const std::filesystem::path& file) {
         const qint64 bytesRead = f.read(buffer.data(), static_cast<qint64>(buffer.size()));
         if (bytesRead < 0) {
             f.close();
-            return makeError(Error::Kind::Io,
-                             "Failed to read file: " + file.string());
+            return makeError<std::string>(Error::Kind::Io,
+                                          "Failed to read file: " + file.string());
         }
         if (bytesRead == 0) continue;
         hash.addData(QByteArrayView(buffer.data(), static_cast<qsizetype>(bytesRead)));
     }
     f.close();
 
-    return makeOk(std::string(hash.result().toHex().toLower().toUtf8().constData()));
+    // toHex() is ASCII, so the bytes are the hex string.
+    return makeOk(std::string(hash.result().toHex().toLower().constData()));
 }
 
 Result<void> Sha256::verifyFile(const std::filesystem::path& file,
