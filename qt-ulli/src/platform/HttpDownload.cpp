@@ -20,6 +20,8 @@ namespace {
 constexpr int kChunkSize = 256 * 1024;
 constexpr int kProgressThrottleMs = 250;
 constexpr qint64 kFreeSpaceHeadroomBytes = 64LL * 1024 * 1024;
+// Upper bound for the wait until an aborted reply has finished.
+constexpr int kSettleTimeoutMs = 2000;
 
 }  // namespace
 
@@ -193,6 +195,24 @@ HttpDownloadResult httpDownload(
 
     loop.exec();
     watchdog.stop();
+
+    // The reply must not be running any more when the manager goes away:
+    // an in-flight request would be torn down with it. The abort is
+    // asynchronous, so the reply is given a bounded moment to finish.
+    // The handlers are bound to the event loop, which is destroyed when
+    // this function returns, so a late signal cannot touch a destroyed
+    // local object.
+    if (!replyFinished) {
+        reply->abort();
+        QEventLoop settle;
+        QTimer guard;
+        guard.setSingleShot(true);
+        guard.setInterval(kSettleTimeoutMs);
+        QObject::connect(&guard, &QTimer::timeout, &settle, &QEventLoop::quit);
+        QObject::connect(reply, &QNetworkReply::finished, &settle, &QEventLoop::quit);
+        guard.start();
+        settle.exec();
+    }
 
     file.close();
 

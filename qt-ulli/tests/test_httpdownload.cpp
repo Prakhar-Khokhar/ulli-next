@@ -25,6 +25,7 @@
 #include <QUrl>
 
 #include <atomic>
+#include <cstdio>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -34,8 +35,15 @@ using ulli::platform::HttpDownloadOutcome;
 
 namespace {
 
+// Breadcrumbs on stderr: stderr is not buffered, so the last breadcrumb
+// survives a crash of the test binary.
+void trace(const char* what) {
+    std::fprintf(stderr, "[httpdownload] %s\n", what);
+    std::fflush(stderr);
+}
+
 // A loopback server that behaves exactly as the test asks for.
-class StubServer : public QObject {
+class StubServer : public QTcpServer {
 public:
     enum class Behaviour {
         Stall,      // accept the connection and never send anything
@@ -46,12 +54,23 @@ public:
     StubServer(Behaviour behaviour, QByteArray body = QByteArray())
         : behaviour_(behaviour), body_(std::move(body)) {}
 
-    bool listen() {
-        if (!server_.listen(QHostAddress::LocalHost, 0)) return false;
-        QObject::connect(&server_, &QTcpServer::newConnection, this, [this]() {
-            QTcpSocket* socket = server_.nextPendingConnection();
+    ~StubServer() override {
+        // Close the accepted sockets before the server disappears, so the
+        // client sees an orderly shutdown.
+        const QList<QTcpSocket*> sockets = sockets_;
+        sockets_.clear();
+        for (QTcpSocket* socket : sockets) {
+            socket->close();
+            delete socket;
+        }
+    }
+
+    bool start() {
+        if (!listen(QHostAddress::LocalHost, 0)) return false;
+        connect(this, &QTcpServer::newConnection, this, [this]() {
+            QTcpSocket* socket = nextPendingConnection();
             if (!socket) return;
-            socket->setParent(&server_);
+            sockets_.append(socket);
             if (behaviour_ == Behaviour::Stall) {
                 // Accept the connection and stay silent: the client has to
                 // notice the stall on its own.
@@ -69,13 +88,13 @@ public:
 
     QUrl url() const {
         return QUrl(QString("http://127.0.0.1:%1/ulli-test.iso")
-                        .arg(server_.serverPort()));
+                        .arg(serverPort()));
     }
 
 private:
-    QTcpServer server_;
     Behaviour behaviour_ = Behaviour::Stall;
     QByteArray body_;
+    QList<QTcpSocket*> sockets_;
 };
 
 QByteArray readFile(const std::filesystem::path& path) {
@@ -97,12 +116,16 @@ private slots:
 };
 
 void TestHttpDownload::stalledTransferTimesOut() {
+    trace("stalledTransferTimesOut: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
 
     StubServer server(StubServer::Behaviour::Stall);
-    QVERIFY(server.listen());
+    if (!server.start()) {
+        QSKIP("no loopback TCP server available in this environment");
+    }
+    trace("stalledTransferTimesOut: server listening");
 
     HttpDownloadLimits limits;
     limits.inactivityTimeoutMs = 500;
@@ -110,6 +133,7 @@ void TestHttpDownload::stalledTransferTimesOut() {
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      nullptr, limits);
+    trace("stalledTransferTimesOut: transfer returned");
     QCOMPARE(result.outcome, HttpDownloadOutcome::TimedOut);
     QVERIFY2(!result.errorMessage.isEmpty(),
              "the timeout must produce a distinct diagnostic");
@@ -117,15 +141,20 @@ void TestHttpDownload::stalledTransferTimesOut() {
     // complete download, and the destination is published by the caller.
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
+    trace("stalledTransferTimesOut: done");
 }
 
 void TestHttpDownload::stalledTransferIsCancelled() {
+    trace("stalledTransferIsCancelled: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
 
     StubServer server(StubServer::Behaviour::Stall);
-    QVERIFY(server.listen());
+    if (!server.start()) {
+        QSKIP("no loopback TCP server available in this environment");
+    }
+    trace("stalledTransferIsCancelled: server listening");
 
     // The request is raised while the transfer is already running and
     // stalled: no progress or data signal will ever arrive.
@@ -138,22 +167,29 @@ void TestHttpDownload::stalledTransferIsCancelled() {
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      cancel.get(), limits);
+    trace("stalledTransferIsCancelled: transfer returned");
     QCOMPARE(result.outcome, HttpDownloadOutcome::Cancelled);
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
+    trace("stalledTransferIsCancelled: done");
 }
 
 void TestHttpDownload::successfulTransferWritesThePayload() {
+    trace("successfulTransferWritesThePayload: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
 
     const QByteArray payload("ULLI test payload for the bounded download");
     StubServer server(StubServer::Behaviour::SendBody, payload);
-    QVERIFY(server.listen());
+    if (!server.start()) {
+        QSKIP("no loopback TCP server available in this environment");
+    }
+    trace("successfulTransferWritesThePayload: server listening");
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      nullptr, HttpDownloadLimits());
+    trace("successfulTransferWritesThePayload: transfer returned");
     QCOMPARE(result.outcome, HttpDownloadOutcome::Completed);
     QVERIFY(result.errorMessage.isEmpty());
     QCOMPARE(result.bytesReceived, static_cast<qint64>(payload.size()));
@@ -164,25 +200,32 @@ void TestHttpDownload::successfulTransferWritesThePayload() {
     QVERIFY(std::filesystem::exists(part));
     QCOMPARE(readFile(part), payload);
     QVERIFY(!std::filesystem::exists(dest));
+    trace("successfulTransferWritesThePayload: done");
 }
 
 void TestHttpDownload::truncatedTransferFails() {
+    trace("truncatedTransferFails: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
 
     const QByteArray payload("ULLI test payload that never arrives completely");
     StubServer server(StubServer::Behaviour::Truncate, payload);
-    QVERIFY(server.listen());
+    if (!server.start()) {
+        QSKIP("no loopback TCP server available in this environment");
+    }
+    trace("truncatedTransferFails: server listening");
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      nullptr, HttpDownloadLimits());
+    trace("truncatedTransferFails: transfer returned");
     QCOMPARE(result.outcome, HttpDownloadOutcome::Failed);
     QVERIFY2(!result.errorMessage.isEmpty(), "the failure must be reported");
     // A truncated transfer must not leave a file behind that could be
     // mistaken for a complete ISO.
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
+    trace("truncatedTransferFails: done");
 }
 
 QTEST_MAIN(TestHttpDownload)
