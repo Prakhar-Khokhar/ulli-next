@@ -8,6 +8,7 @@
 #include "platform/Platform.h"
 
 #include <QApplication>
+#include <QtConcurrent/QtConcurrent>
 #include <QDateTime>
 #include <QFile>
 #include <QHBoxLayout>
@@ -89,25 +90,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                                          const std::filesystem::path& destPath,
                                          std::function<void(int, const QString&)> progressCb,
                                          std::function<void(core::Result<std::filesystem::path>)> finishedCb) {
-        // Create backend on the UI thread for download
-        std::unique_ptr<core::IPlatformBackend> backend;
-    #if defined(Q_OS_WIN)
-        backend = std::make_unique<platform::windows::DiskOps>();
-    #else
-        backend = std::make_unique<platform::linux::DiskOps>();
-    #endif
-
-        // Run download in a worker thread to not block UI
-        auto* worker = new QObject();
-        worker->moveToThread(QThread::currentThread());
-
-        QMetaObject::invokeMethod(worker,
-                                  [backend = std::move(backend), distro, destPath,
-                                   progressCb, finishedCb, worker]() mutable {
+        // Run the (blocking) download off the UI thread. progressCb and
+        // finishedCb are responsible for marshalling back to the UI thread.
+        QtConcurrent::run([distro, destPath, progressCb, finishedCb]() {
+            std::unique_ptr<core::IPlatformBackend> backend;
+        #if defined(Q_OS_WIN)
+            backend = std::make_unique<platform::windows::DiskOps>();
+        #else
+            backend = std::make_unique<platform::linux::DiskOps>();
+        #endif
             auto result = backend->downloadIso(distro, destPath, progressCb);
             finishedCb(result);
-            worker->deleteLater();
-        }, Qt::QueuedConnection);
+        });
     });
 }
 

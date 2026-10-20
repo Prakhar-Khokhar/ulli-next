@@ -175,6 +175,13 @@ PlanDialog::PlanDialog(QWidget* parent) : QDialog(parent) {
 }
 
 void PlanDialog::onAcceptClicked() {
+    if (shrinkRadio_->isChecked() &&
+        (shrinkPartitionCombo_->count() == 0 ||
+         shrinkPartitionCombo_->currentIndex() < 0)) {
+        QMessageBox::warning(this, tr("ULLI"),
+            tr("Please select a partition to shrink."));
+        return;
+    }
     // Extra confirmation for WipeDisk strategy
     if (wipeRadio_->isChecked() && !wipeConfirmed_) {
         const int idx = diskCombo_->currentIndex();
@@ -263,6 +270,8 @@ void PlanDialog::updateStrategyAvailability(const core::Disk& disk) {
     const bool isSystem = disk.isSystem();
     const bool isLiveOnly = liveOnlyRadio_->isChecked();
 
+    updating_ = true;
+
     // WipeDisk: only on non-system disks
     wipeRadio_->setEnabled(!isSystem);
     wipeRadio_->setVisible(!isSystem);
@@ -284,25 +293,40 @@ void PlanDialog::updateStrategyAvailability(const core::Disk& disk) {
     }
 
     // UseFreeAll: only if there's unallocated space
-    // For LiveOnly: need at least 7 GB unallocated
-    // For FullInstall: need at least 37 GB unallocated (30 GB + 7 GB)
-    const std::uint64_t minUnallocated = isLiveOnly 
-        ? (kStagingSizeBytes + kStagingSizeBytes)  // 14 GB minimum (7 GB staging + some buffer)
-        : (kMinFullInstallShrinkBytes + kStagingSizeBytes); // 37 GB minimum
+    const std::uint64_t minUnallocated = isLiveOnly
+        ? (kStagingSizeBytes + kStagingSizeBytes)
+        : (kMinFullInstallShrinkBytes + kStagingSizeBytes);
     freeRadio_->setEnabled(disk.unallocatedBytes >= minUnallocated);
     if (!freeRadio_->isEnabled() && freeRadio_->isChecked()) {
         shrinkRadio_->setChecked(true);
     }
 
-    // Populate shrink partition combo if shrink is selected
-    if (shrinkRadio_->isChecked()) {
+    updating_ = false;
+
+    // Populate shrink partition combo whenever shrinkable partitions exist,
+    // so selection state stays fresh even when shrink is not currently selected.
+    if (hasShrinkable) {
         updateShrinkPartitionCombo(disk);
     }
+
+    // Visibility reflects the (possibly adjusted) selection.
+    const bool shrinkSelected = shrinkRadio_->isChecked();
+    shrinkPartitionLabel_->setVisible(shrinkSelected);
+    shrinkPartitionCombo_->setVisible(shrinkSelected);
+    shrinkPartitionCombo_->setEnabled(shrinkSelected);
 
     updatePlanPreview();
 }
 
 void PlanDialog::updateShrinkPartitionCombo(const core::Disk& disk) {
+    // Preserve the user's previously selected drive letter across
+    // repopulation (e.g. when switching disks or allocation modes).
+    char previous = '\0';
+    if (shrinkPartitionCombo_->currentIndex() >= 0) {
+        previous = shrinkPartitionCombo_->currentData().value<char>();
+    }
+
+    QSignalBlocker blocker(shrinkPartitionCombo_);
     shrinkPartitionCombo_->clear();
     for (const auto& p : disk.partitions) {
         if (p.driveLetter.has_value() && (p.fs == core::FileSystem::Ntfs || p.kind == core::PartitionKind::WindowsNtfs)) {
@@ -314,16 +338,34 @@ void PlanDialog::updateShrinkPartitionCombo(const core::Disk& disk) {
             shrinkPartitionCombo_->addItem(label, QVariant::fromValue(p.driveLetter.value()));
         }
     }
-    // Default to C: if available
-    for (int i = 0; i < shrinkPartitionCombo_->count(); ++i) {
-        if (shrinkPartitionCombo_->itemData(i).toChar() == 'C') {
-            shrinkPartitionCombo_->setCurrentIndex(i);
-            break;
+
+    int targetIndex = -1;
+    if (previous != '\0') {
+        for (int i = 0; i < shrinkPartitionCombo_->count(); ++i) {
+            if (shrinkPartitionCombo_->itemData(i).toChar() == previous) {
+                targetIndex = i;
+                break;
+            }
         }
+    }
+    if (targetIndex < 0) {
+        for (int i = 0; i < shrinkPartitionCombo_->count(); ++i) {
+            if (shrinkPartitionCombo_->itemData(i).toChar() == 'C') {
+                targetIndex = i;
+                break;
+            }
+        }
+    }
+    if (targetIndex < 0 && shrinkPartitionCombo_->count() > 0) {
+        targetIndex = 0;
+    }
+    if (targetIndex >= 0) {
+        shrinkPartitionCombo_->setCurrentIndex(targetIndex);
     }
 }
 
 void PlanDialog::onStrategyChanged() {
+    if (updating_) return;
     wipeConfirmed_ = false;
     const bool shrinkSelected = shrinkRadio_->isChecked();
     shrinkPartitionLabel_->setVisible(shrinkSelected);
@@ -340,6 +382,8 @@ void PlanDialog::onStrategyChanged() {
 
 void PlanDialog::onShrinkPartitionChanged(int index) {
     Q_UNUSED(index);
+    updateSizeBounds();
+    updateOkButtonState();
     updatePlanPreview();
 }
 
@@ -360,10 +404,17 @@ void PlanDialog::onLinuxSizeChanged(int value) {
 
 void PlanDialog::updateOkButtonState() {
     bool ok = !(wipeRadio_->isChecked() && !wipeConfirmed_);
-    // A shrink strategy requires a selected target partition; never allow
-    // the user to proceed with an empty partition selection, which would
-    // silently produce a plan with no drive letter to shrink.
-    if (shrinkRadio_->isChecked() && shrinkPartitionCombo_->currentIndex() < 0) {
+    if (shrinkRadio_->isChecked()) {
+        if (shrinkPartitionCombo_->count() == 0 ||
+            shrinkPartitionCombo_->currentIndex() < 0) {
+            ok = false;
+        }
+        if (shrinkPartitionCombo_->currentIndex() >= 0 &&
+            shrinkPartitionCombo_->currentData().value<char>() == '\0') {
+            ok = false;
+        }
+    }
+    if (freeRadio_->isChecked() && !freeRadio_->isEnabled()) {
         ok = false;
     }
     buttons_->button(QDialogButtonBox::Ok)->setEnabled(ok);
@@ -378,10 +429,22 @@ void PlanDialog::updateSizeBounds() {
     // Determine available space for shrink
     uint64_t maxShrinkBytes = 0;
     if (shrinkRadio_->isChecked()) {
-        // For shrink, find the largest NTFS partition with a drive letter
-        for (const auto& p : d.partitions) {
-            if (p.driveLetter.has_value() && (p.fs == core::FileSystem::Ntfs || p.kind == core::PartitionKind::WindowsNtfs)) {
-                maxShrinkBytes = std::max(maxShrinkBytes, p.sizeBytes);
+        // Use the selected shrink partition's size when available, so the
+        // size bound reflects the actual partition the user chose.
+        if (shrinkPartitionCombo_->currentIndex() >= 0) {
+            const char drive = shrinkPartitionCombo_->currentData().value<char>();
+            for (const auto& p : d.partitions) {
+                if (p.driveLetter.has_value() && p.driveLetter.value() == drive) {
+                    maxShrinkBytes = p.sizeBytes;
+                    break;
+                }
+            }
+        }
+        if (maxShrinkBytes == 0) {
+            for (const auto& p : d.partitions) {
+                if (p.driveLetter.has_value() && (p.fs == core::FileSystem::Ntfs || p.kind == core::PartitionKind::WindowsNtfs)) {
+                    maxShrinkBytes = std::max(maxShrinkBytes, p.sizeBytes);
+                }
             }
         }
     } else if (freeRadio_->isChecked()) {

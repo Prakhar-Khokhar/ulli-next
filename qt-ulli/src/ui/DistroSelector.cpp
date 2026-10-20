@@ -209,19 +209,27 @@ bool DistroSelector::verifyIsoHash(const core::Distro* distro,
 }
 
 void DistroSelector::onIsoVerificationFinished() {
-    verifyWatcher_->deleteLater();
+    if (!verifyWatcher_) return;
+
+    // Retrieve the result BEFORE releasing the watcher; accessing it
+    // afterwards is a use-after-free (the original crash).
+    const bool ok = verifyWatcher_->result();
+
+    // Capture the key this verification was started for, then clear state.
+    const QString key = verifyingKey_;
+
+    QFutureWatcher<bool>* watcher = verifyWatcher_;
     verifyWatcher_ = nullptr;
+    verifyingKey_.clear();
+    watcher->deleteLater();
 
     // Ignore stale results if the user switched distros while verifying.
-    if (!currentDistro_ || verifyingKey_.isEmpty() ||
-        QString::fromStdString(currentDistro_->key()) != verifyingKey_) {
-        verifyingKey_.clear();
+    if (!currentDistro_ || key.isEmpty() ||
+        QString::fromStdString(currentDistro_->key()) != key) {
         return;
     }
-    verifyingKey_.clear();
 
     const auto isoPath = getIsoCachePath(currentDistro_);
-    const bool ok = verifyWatcher_->result();
     if (ok) {
         statusLabel_->setText(tr("✓ ISO verified: %1")
                                   .arg(QString::fromStdString(isoPath.string())));

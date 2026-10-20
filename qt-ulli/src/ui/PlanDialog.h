@@ -80,6 +80,7 @@ private:
     QLabel* safetyWarningLabel_ = nullptr;
     QDialogButtonBox* buttons_ = nullptr;
     bool wipeConfirmed_ = false;
+    bool updating_ = false;
 };
 
 }  // namespace ulli::ui
