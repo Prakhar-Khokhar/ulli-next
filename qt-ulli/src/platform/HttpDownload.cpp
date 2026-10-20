@@ -78,11 +78,13 @@ HttpDownloadResult httpDownload(
 
     // Every failure path removes the partial file, so nothing half
     // written can be mistaken for a complete download later on.
+    // The reply belongs to the network access manager and is destroyed
+    // with it: giving it a deferred delete would leave it alive until
+    // the outer event loop runs.
     const auto fail = [&](HttpDownloadOutcome outcome, const QString& message) {
         removePart();
         result.outcome = outcome;
         result.errorMessage = message;
-        reply->deleteLater();
         return result;
     };
 
@@ -242,7 +244,6 @@ HttpDownloadResult httpDownload(
                     "The server returned an empty response.");
     }
 
-    reply->deleteLater();
     result.outcome = HttpDownloadOutcome::Completed;
     return result;
 }

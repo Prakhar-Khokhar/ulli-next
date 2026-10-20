@@ -42,6 +42,14 @@ void trace(const char* what) {
     std::fflush(stderr);
 }
 
+// The test report is written to stdout, which is buffered. Flushing it
+// after every step keeps the report readable even if the binary dies
+// later on.
+void flushOutput() {
+    std::fflush(stdout);
+    std::fflush(stderr);
+}
+
 // A loopback server that behaves exactly as the test asks for.
 class StubServer : public QTcpServer {
 public:
@@ -55,13 +63,13 @@ public:
         : behaviour_(behaviour), body_(std::move(body)) {}
 
     ~StubServer() override {
-        // Close the accepted sockets before the server disappears, so the
-        // client sees an orderly shutdown.
+        // Abort the accepted sockets before the server disappears, so the
+        // client sees an orderly shutdown. The sockets are children of
+        // the server and are deleted with it.
         const QList<QTcpSocket*> sockets = sockets_;
         sockets_.clear();
         for (QTcpSocket* socket : sockets) {
-            socket->close();
-            delete socket;
+            socket->abort();
         }
     }
 
@@ -109,11 +117,17 @@ class TestHttpDownload : public QObject {
     Q_OBJECT
 
 private slots:
+    void cleanupTestCase();
     void stalledTransferTimesOut();
     void stalledTransferIsCancelled();
     void successfulTransferWritesThePayload();
     void truncatedTransferFails();
 };
+
+void TestHttpDownload::cleanupTestCase() {
+    // Flush the report before the process leaves the test binary.
+    flushOutput();
+}
 
 void TestHttpDownload::stalledTransferTimesOut() {
     trace("stalledTransferTimesOut: start");
@@ -142,6 +156,7 @@ void TestHttpDownload::stalledTransferTimesOut() {
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
     trace("stalledTransferTimesOut: done");
+    flushOutput();
 }
 
 void TestHttpDownload::stalledTransferIsCancelled() {
@@ -172,6 +187,7 @@ void TestHttpDownload::stalledTransferIsCancelled() {
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
     trace("stalledTransferIsCancelled: done");
+    flushOutput();
 }
 
 void TestHttpDownload::successfulTransferWritesThePayload() {
@@ -190,17 +206,40 @@ void TestHttpDownload::successfulTransferWritesThePayload() {
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      nullptr, HttpDownloadLimits());
     trace("successfulTransferWritesThePayload: transfer returned");
+    std::fprintf(stderr,
+                 "[httpdownload] outcome=%d bytes=%lld expectedBytes=%lld\n",
+                 static_cast<int>(result.outcome),
+                 static_cast<long long>(result.bytesReceived),
+                 static_cast<long long>(payload.size()));
+    std::fprintf(stderr, "[httpdownload] errorMessage='%s'\n",
+                 result.errorMessage.toUtf8().constData());
+    flushOutput();
     QCOMPARE(result.outcome, HttpDownloadOutcome::Completed);
+    trace("successfulTransferWritesThePayload: outcome checked");
     QVERIFY(result.errorMessage.isEmpty());
     QCOMPARE(result.bytesReceived, static_cast<qint64>(payload.size()));
+    trace("successfulTransferWritesThePayload: byte count checked");
 
     // The payload sits in the temporary file; publishing it under the
     // final name is the caller's job (it verifies the checksum first).
     const auto part = std::filesystem::path(dest.string() + ".part");
+    std::error_code ec;
+    const auto partSize = std::filesystem::file_size(part, ec);
+    std::fprintf(stderr, "[httpdownload] partExists=%d partSize=%llu ec='%s'\n",
+                 static_cast<int>(std::filesystem::exists(part)),
+                 static_cast<unsigned long long>(partSize), ec.message().c_str());
+    flushOutput();
     QVERIFY(std::filesystem::exists(part));
-    QCOMPARE(readFile(part), payload);
+    const QByteArray written = readFile(part);
+    std::fprintf(stderr, "[httpdownload] writtenSize=%lld written='%s'\n",
+                 static_cast<long long>(written.size()),
+                 written.constData());
+    flushOutput();
+    QCOMPARE(written, payload);
+    trace("successfulTransferWritesThePayload: content checked");
     QVERIFY(!std::filesystem::exists(dest));
     trace("successfulTransferWritesThePayload: done");
+    flushOutput();
 }
 
 void TestHttpDownload::truncatedTransferFails() {
@@ -226,6 +265,7 @@ void TestHttpDownload::truncatedTransferFails() {
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
     trace("truncatedTransferFails: done");
+    flushOutput();
 }
 
 QTEST_MAIN(TestHttpDownload)
