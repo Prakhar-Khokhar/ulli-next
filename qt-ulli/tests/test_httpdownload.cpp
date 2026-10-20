@@ -18,6 +18,7 @@
 #include <QByteArray>
 #include <QFile>
 #include <QHostAddress>
+#include <QSet>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -35,16 +36,8 @@ using ulli::platform::HttpDownloadOutcome;
 
 namespace {
 
-// Breadcrumbs on stderr: stderr is not buffered, so the last breadcrumb
-// survives a crash of the test binary.
-void trace(const char* what) {
-    std::fprintf(stderr, "[httpdownload] %s\n", what);
-    std::fflush(stderr);
-}
-
 // The test report is written to stdout, which is buffered. Flushing it
-// after every step keeps the report readable even if the binary dies
-// later on.
+// keeps the report readable even when the binary dies later on.
 void flushOutput() {
     std::fflush(stdout);
     std::fflush(stderr);
@@ -54,7 +47,7 @@ void flushOutput() {
 class StubServer : public QTcpServer {
 public:
     enum class Behaviour {
-        Stall,      // accept the connection and never send anything
+        Stall,      // read the request and never send anything
         SendBody,   // send the body and close
         Truncate,   // announce more bytes than are sent, then close
     };
@@ -79,17 +72,28 @@ public:
             QTcpSocket* socket = nextPendingConnection();
             if (!socket) return;
             sockets_.append(socket);
-            if (behaviour_ == Behaviour::Stall) {
-                // Accept the connection and stay silent: the client has to
-                // notice the stall on its own.
-                return;
-            }
-            QByteArray payload = body_;
-            if (behaviour_ == Behaviour::Truncate) payload = payload.left(4);
-            socket->write("HTTP/1.1 200 OK\r\nContent-Length: " +
-                          QByteArray::number(body_.size()) + "\r\n\r\n" + payload);
-            socket->flush();
-            socket->disconnectFromHost();
+            // The response may only be sent once the request has arrived:
+            // closing the connection earlier makes the client see a
+            // truncated transfer.
+            connect(socket, &QTcpSocket::readyRead, socket, [this, socket]() {
+                socket->readAll();
+                if (answered_.contains(socket)) return;
+                answered_.insert(socket);
+                if (behaviour_ == Behaviour::Stall) {
+                    // Read the request and stay silent: the client has to
+                    // notice the stall on its own.
+                    return;
+                }
+                QByteArray payload = body_;
+                if (behaviour_ == Behaviour::Truncate) payload = payload.left(4);
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " +
+                              QByteArray::number(body_.size()) + "\r\n\r\n" + payload);
+                socket->flush();
+                // The response has to be on the wire before the connection
+                // is closed, otherwise the client can lose it.
+                socket->waitForBytesWritten(5000);
+                socket->disconnectFromHost();
+            });
         });
         return true;
     }
@@ -103,6 +107,7 @@ private:
     Behaviour behaviour_ = Behaviour::Stall;
     QByteArray body_;
     QList<QTcpSocket*> sockets_;
+    QSet<QTcpSocket*> answered_;
 };
 
 QByteArray readFile(const std::filesystem::path& path) {
@@ -130,7 +135,6 @@ void TestHttpDownload::cleanupTestCase() {
 }
 
 void TestHttpDownload::stalledTransferTimesOut() {
-    trace("stalledTransferTimesOut: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
@@ -139,7 +143,6 @@ void TestHttpDownload::stalledTransferTimesOut() {
     if (!server.start()) {
         QSKIP("no loopback TCP server available in this environment");
     }
-    trace("stalledTransferTimesOut: server listening");
 
     HttpDownloadLimits limits;
     limits.inactivityTimeoutMs = 500;
@@ -147,7 +150,6 @@ void TestHttpDownload::stalledTransferTimesOut() {
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      nullptr, limits);
-    trace("stalledTransferTimesOut: transfer returned");
     QCOMPARE(result.outcome, HttpDownloadOutcome::TimedOut);
     QVERIFY2(!result.errorMessage.isEmpty(),
              "the timeout must produce a distinct diagnostic");
@@ -155,12 +157,10 @@ void TestHttpDownload::stalledTransferTimesOut() {
     // complete download, and the destination is published by the caller.
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
-    trace("stalledTransferTimesOut: done");
     flushOutput();
 }
 
 void TestHttpDownload::stalledTransferIsCancelled() {
-    trace("stalledTransferIsCancelled: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
@@ -169,7 +169,6 @@ void TestHttpDownload::stalledTransferIsCancelled() {
     if (!server.start()) {
         QSKIP("no loopback TCP server available in this environment");
     }
-    trace("stalledTransferIsCancelled: server listening");
 
     // The request is raised while the transfer is already running and
     // stalled: no progress or data signal will ever arrive.
@@ -182,16 +181,13 @@ void TestHttpDownload::stalledTransferIsCancelled() {
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      cancel.get(), limits);
-    trace("stalledTransferIsCancelled: transfer returned");
     QCOMPARE(result.outcome, HttpDownloadOutcome::Cancelled);
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
-    trace("stalledTransferIsCancelled: done");
     flushOutput();
 }
 
 void TestHttpDownload::successfulTransferWritesThePayload() {
-    trace("successfulTransferWritesThePayload: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
@@ -201,49 +197,23 @@ void TestHttpDownload::successfulTransferWritesThePayload() {
     if (!server.start()) {
         QSKIP("no loopback TCP server available in this environment");
     }
-    trace("successfulTransferWritesThePayload: server listening");
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      nullptr, HttpDownloadLimits());
-    trace("successfulTransferWritesThePayload: transfer returned");
-    std::fprintf(stderr,
-                 "[httpdownload] outcome=%d bytes=%lld expectedBytes=%lld\n",
-                 static_cast<int>(result.outcome),
-                 static_cast<long long>(result.bytesReceived),
-                 static_cast<long long>(payload.size()));
-    std::fprintf(stderr, "[httpdownload] errorMessage='%s'\n",
-                 result.errorMessage.toUtf8().constData());
-    flushOutput();
     QCOMPARE(result.outcome, HttpDownloadOutcome::Completed);
-    trace("successfulTransferWritesThePayload: outcome checked");
     QVERIFY(result.errorMessage.isEmpty());
     QCOMPARE(result.bytesReceived, static_cast<qint64>(payload.size()));
-    trace("successfulTransferWritesThePayload: byte count checked");
 
     // The payload sits in the temporary file; publishing it under the
     // final name is the caller's job (it verifies the checksum first).
     const auto part = std::filesystem::path(dest.string() + ".part");
-    std::error_code ec;
-    const auto partSize = std::filesystem::file_size(part, ec);
-    std::fprintf(stderr, "[httpdownload] partExists=%d partSize=%llu ec='%s'\n",
-                 static_cast<int>(std::filesystem::exists(part)),
-                 static_cast<unsigned long long>(partSize), ec.message().c_str());
-    flushOutput();
     QVERIFY(std::filesystem::exists(part));
-    const QByteArray written = readFile(part);
-    std::fprintf(stderr, "[httpdownload] writtenSize=%lld written='%s'\n",
-                 static_cast<long long>(written.size()),
-                 written.constData());
-    flushOutput();
-    QCOMPARE(written, payload);
-    trace("successfulTransferWritesThePayload: content checked");
+    QCOMPARE(readFile(part), payload);
     QVERIFY(!std::filesystem::exists(dest));
-    trace("successfulTransferWritesThePayload: done");
     flushOutput();
 }
 
 void TestHttpDownload::truncatedTransferFails() {
-    trace("truncatedTransferFails: start");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto dest = std::filesystem::path(dir.path().toStdString()) / "test.iso";
@@ -253,18 +223,15 @@ void TestHttpDownload::truncatedTransferFails() {
     if (!server.start()) {
         QSKIP("no loopback TCP server available in this environment");
     }
-    trace("truncatedTransferFails: server listening");
 
     const auto result = ulli::platform::httpDownload(server.url(), dest, nullptr,
                                                      nullptr, HttpDownloadLimits());
-    trace("truncatedTransferFails: transfer returned");
     QCOMPARE(result.outcome, HttpDownloadOutcome::Failed);
     QVERIFY2(!result.errorMessage.isEmpty(), "the failure must be reported");
     // A truncated transfer must not leave a file behind that could be
     // mistaken for a complete ISO.
     QVERIFY(!std::filesystem::exists(dest.string() + ".part"));
     QVERIFY(!std::filesystem::exists(dest));
-    trace("truncatedTransferFails: done");
     flushOutput();
 }
 
