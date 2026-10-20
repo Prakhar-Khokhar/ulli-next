@@ -11,6 +11,11 @@ QString InstallPlan::summary() const {
     s += QString::fromStdString("ISO:    " + isoPath.string() + "\n");
     s += QString("Disk:   #%1\n").arg(targetDiskNumber < 0 ? QString("not selected")
                                                             : QString::number(targetDiskNumber));
+    if (!targetDiskModel.empty()) {
+        s += QString("        %1 (%2)\n")
+                 .arg(QString::fromStdString(targetDiskModel),
+                      formatBytes(targetDiskSizeBytes));
+    }
     switch (strategy) {
         case Strategy::ShrinkAll: s += "Plan:   Shrink target by Linux + boot + rEFInd\n"; break;
         case Strategy::UseFreeAll: s += "Plan:   Use existing unallocated, do not touch OS\n"; break;

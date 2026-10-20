@@ -30,12 +30,25 @@
 #include <QAtomicInt>
 #include <QObject>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
 namespace ulli::core {
 
 class Catalog;
+
+// Outcome of an ISO download.
+//
+// `verified` is true only when the file's SHA-256 matched the digest from
+// the catalog. When the catalog has no digest for the distro the file is
+// still usable but it must never be presented as cryptographically
+// verified.
+struct IsoDownload {
+    std::filesystem::path path;   // the published (cached) ISO
+    bool verified = false;        // true only on a digest match
+    std::string sha256;           // the digest that was computed
+};
 
 // Abstract backend. The Windows and Linux ports provide concrete
 // implementations. Tests provide a mock.
@@ -61,15 +74,32 @@ public:
     // WipeDisk, or other clearly-unsafe combinations.
     virtual Result<void> validatePlanForDisk(const InstallPlan& plan) = 0;
 
-    // ISO download / verification. Returns the resolved ISO path.
+    // ISO download / verification. Returns the resolved ISO path of an
+    // already cached ISO. The file is checked against the catalog digest
+    // when the catalog provides one; a cached file that does not match is
+    // rejected (and removed) so it can never be used for an install.
     virtual Result<std::filesystem::path> resolveIso(const Distro& distro) = 0;
 
-    // Download ISO from mirrors with progress reporting. Returns the
-    // path to the downloaded file on success.
-    virtual Result<std::filesystem::path> downloadIso(
+    // Download an ISO from the distro mirrors.
+    //
+    // Contract for implementations:
+    //   * The payload is streamed to disk with bounded memory. A multi
+    //     gigabyte ISO must never be held in RAM.
+    //   * The file is written to a temporary file next to destPath and is
+    //     only published under destPath after it has been verified. An
+    //     interrupted or corrupt download never appears as a valid cached
+    //     ISO.
+    //   * progressCallback is called with (percent, status). Percent
+    //     covers the transfer; the status string distinguishes the
+    //     transfer from the verification phase. It must not be called
+    //     more often than a few times per second.
+    //   * When cancelFlag is given and becomes set, the download aborts,
+    //     the partial file is removed and a Cancelled error is returned.
+    virtual Result<IsoDownload> downloadIso(
         const Distro& distro,
         const std::filesystem::path& destPath,
-        std::function<void(int percent, const QString& status)> progressCallback) = 0;
+        std::function<void(int percent, const QString& status)> progressCallback,
+        const std::atomic<bool>* cancelFlag = nullptr) = 0;
 
     // Resize a partition (shrink only). Returns the new size.
     virtual Result<std::uint64_t> shrinkPartition(char driveLetter,

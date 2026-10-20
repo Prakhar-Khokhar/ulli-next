@@ -15,6 +15,7 @@
 #include "core/InstallEngine.h"
 #include "core/Result.h"
 
+#include <atomic>
 #include <filesystem>
 #include <vector>
 
@@ -30,10 +31,11 @@ public:
     core::Result<void> preflight(const core::InstallPlan& plan) override;
     core::Result<void> validatePlanForDisk(const core::InstallPlan& plan) override;
     core::Result<std::filesystem::path> resolveIso(const core::Distro& d) override;
-    core::Result<std::filesystem::path> downloadIso(
+    core::Result<core::IsoDownload> downloadIso(
         const core::Distro& distro,
         const std::filesystem::path& destPath,
-        std::function<void(int percent, const QString& status)> progressCallback) override;
+        std::function<void(int percent, const QString& status)> progressCallback,
+        const std::atomic<bool>* cancelFlag = nullptr) override;
     core::Result<std::uint64_t> shrinkPartition(char driveLetter,
                                                 std::uint64_t requestedShrinkBytes) override;
     core::Result<void> wipeDisk(int diskNumber) override;

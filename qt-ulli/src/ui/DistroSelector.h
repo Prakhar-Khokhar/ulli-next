@@ -1,8 +1,11 @@
 // ui/DistroSelector.h
 //
-// ComboBox that lists distros from the catalog + a "Custom ISO" entry
-// with a file picker. Also supports downloading and verifying ISOs
-// from the distro catalog metadata.
+// Distribution picker plus the ISO status of the current selection.
+//
+// The widget is deliberately *not* responsible for downloading: an ISO is
+// only fetched after the user has reviewed and approved a disk plan (see
+// MainWindow). The widget reports the state of the cached ISO and lets the
+// main window drive the download / verification stage display.
 
 #pragma once
 
@@ -11,7 +14,6 @@
 
 #include <QWidget>
 
-#include <QCryptographicHash>
 #include <QFile>
 #include <QFutureWatcher>
 #include <QtConcurrent/QtConcurrent>
@@ -26,8 +28,6 @@ class QPushButton;
 class QCheckBox;
 class QProgressBar;
 class QLabel;
-class QNetworkAccessManager;
-class QNetworkReply;
 
 namespace ulli::ui {
 
@@ -42,23 +42,32 @@ public:
     QString customIsoPath() const;
     bool isCustom() const;
 
-    // True when the selected ISO can be installed: the catalog ISO is
-    // present and its checksum verified, or a custom ISO file has been
-    // chosen and exists on disk. The install flow gates on this.
+    // True when the selected ISO is present on disk. When the catalog
+    // provides a digest the file has also been checksum verified.
     bool isoReady() const { return isoReady_; }
 
-    // Set a callback for downloading ISOs. The callback should perform
-    // the download and verification, reporting progress via the progress
-    // callback. This allows the backend to handle the actual download.
-    using DownloadCallback = std::function<void(
-        const core::Distro& distro,
-        const std::filesystem::path& destPath,
-        std::function<void(int percent, const QString& status)> progressCallback,
-        std::function<void(core::Result<std::filesystem::path>)> finishedCallback)>;
+    // True when the ISO of the current selection has been verified against
+    // the catalog digest.
+    bool isoVerified() const { return isoVerified_; }
 
-    void setDownloadCallback(DownloadCallback cb);
+    // Human readable state of the ISO of the current selection.
+    QString isoStatusText() const;
 
-signals:
+    // Cache path of the ISO of the current selection (empty for a custom
+    // ISO, which has its own path).
+    std::filesystem::path isoCachePath() const;
+
+    // Size of the file that was verified. Used to notice that the cached
+    // file was replaced since the verification.
+    qint64 verifiedIsoSize() const { return verifiedIsoSize_; }
+
+    // Drives the download / verification stage display from the main window.
+    void setIsoStage(const QString& status, int percent, bool busy);
+
+    // Called by the main window once an ISO has been fetched and checked.
+    void notifyIsoReady(qint64 fileSize, bool verified);
+
+    signals:
     void selectionChanged();
     void isoStatusChanged(const QString& distroKey, const QString& status);
     void isoReadinessChanged(bool ready);
@@ -66,7 +75,6 @@ signals:
 private slots:
     void onCustomToggled(bool checked);
     void onBrowseClicked();
-    void onDownloadClicked();
     void onComboIndexChanged(int index);
     void onIsoVerificationFinished();
 
@@ -74,32 +82,27 @@ private:
     void updateIsoStatusDisplay();
     void setIsoReady(bool ready);
     void updateCustomIsoReadiness();
-    void verifyIsoAsync(const core::Distro* distro);
-    static bool verifyIsoHash(const core::Distro* distro,
-                              const std::filesystem::path& isoPath);
-    QString getIsoStatus(const core::Distro* distro) const;
     std::filesystem::path getIsoCachePath(const core::Distro* distro) const;
 
     QComboBox* combo_ = nullptr;
     QCheckBox* customCheck_ = nullptr;
     QLineEdit* customPath_ = nullptr;
     QPushButton* browseBtn_ = nullptr;
-    QPushButton* downloadBtn_ = nullptr;
-    QProgressBar* downloadProgress_ = nullptr;
+    QProgressBar* isoProgress_ = nullptr;
     QLabel* statusLabel_ = nullptr;
     const core::Catalog* catalog_ = nullptr;
-    DownloadCallback downloadCallback_;
     core::Distro* currentDistro_ = nullptr;
-    bool downloading_ = false;
 
     // In-flight asynchronous ISO verification, so the UI never claims an
     // ISO is "verified" without actually checking its SHA-256.
     QFutureWatcher<bool>* verifyWatcher_ = nullptr;
     QString verifyingKey_;
 
-    // True when the selected ISO is present and verified (or a custom ISO
-    // file has been picked). The main window uses this to gate the install.
+    // True when the selected ISO is present (and verified when the catalog
+    // provides a digest).
     bool isoReady_ = false;
+    bool isoVerified_ = false;
+    qint64 verifiedIsoSize_ = 0;
 };
 
 }  // namespace ulli::ui

@@ -5,6 +5,7 @@
 #include "ui/PlanDialog.h"
 #include "ui/RestartCountdownDialog.h"
 
+#include "core/Sha256.h"
 #include "platform/Platform.h"
 
 #include <QApplication>
@@ -44,6 +45,12 @@ constexpr int kEngineStopTimeoutMs = 5000;
 // Creates the platform backend for the current platform.
 std::unique_ptr<core::IPlatformBackend> createPlatformBackend() {
     return std::make_unique<platform::DiskOps>();
+}
+
+qint64 fileSizeOrZero(const std::filesystem::path& path) {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    return ec ? 0 : static_cast<qint64>(size);
 }
 
 }  // namespace
@@ -101,20 +108,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(exitBtn_,  &QPushButton::clicked, this, &MainWindow::onExitClicked);
     connect(distro_, &DistroSelector::isoReadinessChanged,
             this, &MainWindow::onIsoReadinessChanged);
-
-    // ─── Wire up ISO download callback ────────────────────────────────────
-    distro_->setDownloadCallback([](const core::Distro& distro,
-                                    const std::filesystem::path& destPath,
-                                    std::function<void(int, const QString&)> progressCb,
-                                    std::function<void(core::Result<std::filesystem::path>)> finishedCb) {
-        // Run the (blocking) download off the UI thread. progressCb and
-        // finishedCb are responsible for marshalling back to the UI thread.
-        QtConcurrent::run([distro, destPath, progressCb, finishedCb]() {
-            auto backend = createPlatformBackend();
-            auto result = backend->downloadIso(distro, destPath, progressCb);
-            finishedCb(result);
-        });
-    });
+    connect(distro_, &DistroSelector::selectionChanged,
+            this, &MainWindow::onSelectionChanged);
 
     // The install may only start once an ISO is present and verified.
     isoReady_ = distro_->isoReady();
@@ -122,6 +117,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 }
 
 MainWindow::~MainWindow() {
+    // Stop a running ISO transfer: the worker checks the flag while it
+    // streams and removes its partial file.
+    if (downloadCancelFlag_) downloadCancelFlag_->store(true);
     // Stop the worker before any member this worker may still touch (the
     // catalog and the log) is destroyed.
     stopEngineThread();
@@ -139,6 +137,10 @@ bool MainWindow::hasInstallPrivileges() const {
     return ulli::platform::isElevated();
 }
 
+std::filesystem::path MainWindow::isoCachePathFor(const core::Distro& distro) const {
+    return ulli::platform::isoCachePath(distro);
+}
+
 void MainWindow::showInstallResult(bool success, const QString& message) {
     if (success) {
         QMessageBox::information(this, tr("ULLI"),
@@ -150,6 +152,21 @@ void MainWindow::showInstallResult(bool success, const QString& message) {
     }
 }
 
+QString MainWindow::workflowStateText() const {
+    switch (workflowState_) {
+        case WorkflowState::Idle: return tr("Ready");
+        case WorkflowState::Scanning: return tr("Scanning disks…");
+        case WorkflowState::AwaitingApproval: return tr("Waiting for plan approval");
+        case WorkflowState::Downloading: return tr("Downloading ISO…");
+        case WorkflowState::Verifying: return tr("Verifying ISO…");
+        case WorkflowState::Ready: return tr("Ready to install");
+        case WorkflowState::Installing: return tr("Installing…");
+        case WorkflowState::Failed: return tr("Failed");
+        case WorkflowState::Cancelled: return tr("Cancelled");
+    }
+    return QString();
+}
+
 void MainWindow::setBusy(bool busy) {
     busy_ = busy;
     exitBtn_->setEnabled(!busy);
@@ -157,13 +174,25 @@ void MainWindow::setBusy(bool busy) {
     updateStartButtonState();
 }
 
+void MainWindow::setWorkflowState(WorkflowState state) {
+    workflowState_ = state;
+    statusLabel_->setText(workflowStateText());
+    updateStartButtonState();
+}
+
 void MainWindow::updateStartButtonState() {
-    const bool ready = !busy_ && !scanning_ && isoReady_;
-    startBtn_->setEnabled(ready);
-    if (!ready && !busy_ && !scanning_ && !isoReady_) {
-        startBtn_->setToolTip(
-            tr("The ISO has to be downloaded and checksum-verified before "
-               "the installation can start."));
+    // The start button only needs a selection. The ISO may still be
+    // missing: it is fetched after the plan has been approved.
+    const bool hasSelection = distro_->isCustom()
+        ? !distro_->customIsoPath().isEmpty()
+        : !distro_->selectedKey().isEmpty();
+    const bool busyStage = workflowState_ == WorkflowState::Downloading ||
+                           workflowState_ == WorkflowState::Verifying ||
+                           workflowState_ == WorkflowState::Installing;
+    const bool canStart = hasSelection && !busy_ && !scanning_ && !busyStage;
+    startBtn_->setEnabled(canStart);
+    if (!canStart && !hasSelection) {
+        startBtn_->setToolTip(tr("Pick a distribution first."));
     } else {
         startBtn_->setToolTip(QString());
     }
@@ -174,8 +203,37 @@ void MainWindow::onIsoReadinessChanged(bool ready) {
     updateStartButtonState();
 }
 
+void MainWindow::onSelectionChanged() {
+    // A changed selection invalidates an approved plan: an approval is
+    // bound to the plan that was shown, never to a later selection.
+    ++workflowGeneration_;
+    if (approvedPlan_ || downloadCancelFlag_) {
+        invalidateApproval(tr("The distribution or the installation mode changed."));
+    }
+    updateStartButtonState();
+}
+
+void MainWindow::invalidateApproval(const QString& reason) {
+    if (downloadCancelFlag_) {
+        downloadCancelFlag_->store(true);
+        downloadCancelFlag_.reset();
+    }
+    const bool hadPlan = approvedPlan_.has_value();
+    approvedPlan_.reset();
+    if (hadPlan || workflowState_ != WorkflowState::Idle) {
+        logBackend_->append(tr("The approved plan was invalidated: %1").arg(reason),
+                            core::ProgressLog::Severity::Warn);
+        statusLabel_->setText(reason);
+    }
+    if (workflowState_ != WorkflowState::Installing) {
+        setWorkflowState(WorkflowState::Idle);
+    }
+}
+
 void MainWindow::onStartClicked() {
-    // 1. Resolve distro + ISO.
+    // 1. A distribution (or a custom ISO) must be selected. The ISO does
+    //    NOT have to be present yet: the plan is reviewed first and the
+    //    ISO is fetched afterwards.
     if (distro_->isCustom()) {
         if (distro_->customIsoPath().isEmpty()) {
             QMessageBox::warning(this, tr("ULLI"),
@@ -189,12 +247,6 @@ void MainWindow::onStartClicked() {
             return;
         }
     }
-    if (!isoReadyForInstall()) {
-        QMessageBox::warning(this, tr("ULLI"),
-            tr("The ISO is not ready yet. Download it and wait for the "
-               "checksum verification to finish before installing."));
-        return;
-    }
 
     // 2. Enumerate the disks. This blocks on the platform backend (a
     //    PowerShell round trip on Windows), so it must not run on the GUI
@@ -205,9 +257,8 @@ void MainWindow::onStartClicked() {
 
 void MainWindow::beginDiskScan() {
     scanning_ = true;
-    updateStartButtonState();
+    setWorkflowState(WorkflowState::Scanning);
     distro_->setEnabled(false);
-    statusLabel_->setText(tr("Scanning disks…"));
     progress_->setValue(0);
 
     // The backend is created here (cheap, no I/O) and moved into the
@@ -231,14 +282,14 @@ void MainWindow::beginDiskScan() {
 void MainWindow::onDisksEnumerated(std::vector<core::Disk> disks,
                                     const std::string& error) {
     scanning_ = false;
-    updateStartButtonState();
     distro_->setEnabled(!busy_);
+    setWorkflowState(WorkflowState::AwaitingApproval);
 
     if (!error.empty()) {
         logBackend_->append(
             tr("Disk scan failed: %1").arg(QString::fromStdString(error)),
             core::ProgressLog::Severity::Error);
-        statusLabel_->setText(tr("Ready"));
+        setWorkflowState(WorkflowState::Failed);
         QMessageBox::warning(this, tr("ULLI"),
             tr("Could not read the disk list:\n\n%1")
                 .arg(QString::fromStdString(error)));
@@ -246,7 +297,7 @@ void MainWindow::onDisksEnumerated(std::vector<core::Disk> disks,
     }
 
     if (disks.empty()) {
-        statusLabel_->setText(tr("Ready"));
+        setWorkflowState(WorkflowState::Failed);
         QMessageBox::warning(this, tr("ULLI"),
             tr("No disks were detected. Run ULLI as Administrator / root."));
         return;
@@ -261,14 +312,14 @@ void MainWindow::onDisksEnumerated(std::vector<core::Disk> disks,
         ? std::filesystem::path(distro_->customIsoPath().toStdString())
         : std::filesystem::path();
 
-    // 3. Planning screen.
+    // 3. Planning screen: the user reviews the plan and approves it.
     core::InstallPlan plan;
     if (!showPlanDialog(disks, distroKey, isoPath, plan)) {
-        statusLabel_->setText(tr("Ready"));
+        setWorkflowState(WorkflowState::Idle);
         return;
     }
     if (!plan.valid()) {
-        statusLabel_->setText(tr("Ready"));
+        setWorkflowState(WorkflowState::Idle);
         QMessageBox::warning(this, tr("ULLI"),
             tr("The install plan is invalid (missing distro or ISO)."));
         return;
@@ -276,14 +327,14 @@ void MainWindow::onDisksEnumerated(std::vector<core::Disk> disks,
 
     // 4. Pre-flight: elevation.
     if (!hasInstallPrivileges()) {
-        statusLabel_->setText(tr("Ready"));
+        setWorkflowState(WorkflowState::Idle);
         QMessageBox::warning(this, tr("ULLI"),
             tr("ULLI must be run as Administrator / root."));
         return;
     }
 
-    // 5. Hand off to engine.
-    startEngine(std::move(plan));
+    // 5. The plan was approved.
+    onPlanApproved(std::move(plan));
 }
 
 bool MainWindow::showPlanDialog(const std::vector<core::Disk>& disks,
@@ -292,9 +343,254 @@ bool MainWindow::showPlanDialog(const std::vector<core::Disk>& disks,
                                  core::InstallPlan& outPlan) {
     PlanDialog dlg(this);
     dlg.setDisks(disks);
+    dlg.setIsoContext(isoContextText());
     if (dlg.exec() != QDialog::Accepted) return false;
     outPlan = dlg.buildPlan(distroKey, isoPath);
     return true;
+}
+
+QString MainWindow::isoContextText() const {
+    if (distro_->isCustom()) {
+        return tr("ISO: custom file %1 — it is checked again before the "
+                  "installation starts.").arg(distro_->customIsoPath());
+    }
+    if (distro_->isoReady() && distro_->isoVerified()) {
+        return tr("ISO: %1 — verified and cached, it will be reused.")
+            .arg(distro_->isoStatusText());
+    }
+    return tr("ISO: not present yet — it will be downloaded and verified "
+              "after the plan is approved.");
+}
+
+bool MainWindow::approvalMatchesSelection(const core::InstallPlan& plan) const {
+    if (plan.distroKey == core::kCustomDistroKey) {
+        return distro_->isCustom() &&
+               plan.isoPath == std::filesystem::path(distro_->customIsoPath().toStdString());
+    }
+    return !distro_->isCustom() && plan.distroKey == distro_->selectedKey().toStdString();
+}
+
+void MainWindow::onPlanApproved(core::InstallPlan plan) {
+    approvedPlan_ = plan;
+    setWorkflowState(WorkflowState::AwaitingApproval);
+
+    // Revalidate the prerequisites before anything is fetched or written.
+    if (!plan.valid()) {
+        invalidateApproval(tr("The approved plan is not valid."));
+        QMessageBox::warning(this, tr("ULLI"),
+            tr("The install plan is invalid (missing distro or ISO)."));
+        return;
+    }
+    if (!hasInstallPrivileges()) {
+        invalidateApproval(tr("Administrator rights are required."));
+        QMessageBox::warning(this, tr("ULLI"),
+            tr("ULLI must be run as Administrator / root."));
+        return;
+    }
+    if (!approvalMatchesSelection(plan)) {
+        invalidateApproval(tr("The selection changed while the plan was reviewed."));
+        QMessageBox::warning(this, tr("ULLI"),
+            tr("The distribution changed while the plan was reviewed. "
+               "Please review the plan again."));
+        return;
+    }
+
+    ensureIsoAvailable(plan);
+}
+
+void MainWindow::ensureIsoAvailable(const core::InstallPlan& plan) {
+    if (plan.distroKey == core::kCustomDistroKey) {
+        // A custom ISO is already on disk. It is checked here and again by
+        // the engine before anything is written.
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(plan.isoPath, ec) || ec) {
+            setWorkflowState(WorkflowState::Failed);
+            QMessageBox::warning(this, tr("ULLI"),
+                tr("The custom ISO file is not available:\n%1")
+                    .arg(QString::fromStdString(plan.isoPath.string())));
+            return;
+        }
+        distro_->notifyIsoReady(fileSizeOrZero(plan.isoPath), false);
+        if (approvedPlan_) approvedPlan_->isoPath = plan.isoPath;
+        setWorkflowState(WorkflowState::Ready);
+        startApprovedPlan();
+        return;
+    }
+
+    const core::Distro* distro = catalog_->find(plan.distroKey);
+    if (!distro) {
+        setWorkflowState(WorkflowState::Failed);
+        QMessageBox::warning(this, tr("ULLI"),
+            tr("The distribution %1 is not in the catalog any more.")
+                .arg(QString::fromStdString(plan.distroKey)));
+        return;
+    }
+
+    const std::filesystem::path cached = isoCachePathFor(*distro);
+    std::error_code ec;
+    if (std::filesystem::exists(cached, ec) && !ec) {
+        // A cached ISO is reused - but only when it is the very file that
+        // was verified before. Otherwise it is verified again.
+        if (distro_->isoVerified() &&
+            distro_->verifiedIsoSize() == fileSizeOrZero(cached)) {
+            if (approvedPlan_) approvedPlan_->isoPath = cached;
+            setWorkflowState(WorkflowState::Ready);
+            startApprovedPlan();
+            return;
+        }
+        verifyCachedIso(*distro, cached);
+        return;
+    }
+
+    // The ISO is not cached: fetch it now - after the plan was approved.
+    beginIsoDownload(*distro, cached);
+}
+
+void MainWindow::verifyCachedIso(const core::Distro& distro,
+                                  const std::filesystem::path& path) {
+    setWorkflowState(WorkflowState::Verifying);
+    distro_->setIsoStage(tr("Verifying the cached ISO…"), 0, true);
+    const quint64 generation = workflowGeneration_;
+    cachedIsoPath_ = path;
+
+    // Capture everything by value: the worker must not touch the catalog
+    // after the window has been destroyed.
+    const std::string expected = distro.sha256();
+    const bool hasChecksum = distro.hasChecksum();
+    QPointer<MainWindow> guard(this);
+    QtConcurrent::run([guard, generation, path, expected, hasChecksum]() {
+        bool ok = true;
+        if (hasChecksum) {
+            auto r = core::Sha256::verifyFile(path, expected);
+            ok = static_cast<bool>(r);
+        }
+        const qint64 size = fileSizeOrZero(path);
+        if (!guard) return;
+        QMetaObject::invokeMethod(guard.data(), [guard, generation, ok, size]() {
+            if (!guard) return;
+            guard->onIsoVerificationFinished(ok, size, generation);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::onIsoVerificationFinished(bool ok, qint64 fileSize,
+                                            quint64 generation) {
+    if (generation != workflowGeneration_) {
+        // A stale verification result (the selection changed meanwhile).
+        return;
+    }
+    if (workflowState_ != WorkflowState::Verifying) {
+        return;
+    }
+    if (!ok) {
+        approvedPlan_.reset();
+        setWorkflowState(WorkflowState::Failed);
+        distro_->setIsoStage(tr("The cached ISO does not match the expected checksum."), 0, false);
+        QMessageBox::warning(this, tr("ULLI"),
+            tr("The cached ISO does not match the checksum from the catalog. "
+               "It will be downloaded again."));
+        return;
+    }
+    if (!approvedPlan_) return;
+    approvedPlan_->isoPath = cachedIsoPath_;
+    distro_->notifyIsoReady(fileSize, true);
+    setWorkflowState(WorkflowState::Ready);
+    startApprovedPlan();
+}
+
+void MainWindow::beginIsoDownload(const core::Distro& distro,
+                                  const std::filesystem::path& destPath) {
+    setWorkflowState(WorkflowState::Downloading);
+    distro_->setIsoStage(tr("Downloading %1…").arg(distro.qlabel()), 0, true);
+    const quint64 generation = workflowGeneration_;
+
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    downloadCancelFlag_ = cancel;
+
+    QPointer<MainWindow> guard(this);
+    QtConcurrent::run([guard, distro, destPath, cancel, generation]() {
+        std::unique_ptr<core::IPlatformBackend> backend;
+        if (guard) backend = guard->createBackend();
+        if (!backend) return;
+
+        auto result = backend->downloadIso(
+            distro, destPath,
+            [guard, generation](int percent, const QString& status) {
+                if (!guard) return;
+                QMetaObject::invokeMethod(guard.data(),
+                    [guard, generation, percent, status]() {
+                        if (!guard) return;
+                        if (generation != guard->workflowGeneration_) return;
+                        guard->onIsoDownloadProgress(percent, status);
+                    }, Qt::QueuedConnection);
+            },
+            cancel.get());
+
+        if (!guard) return;
+        QMetaObject::invokeMethod(guard.data(),
+            [guard, generation, result]() {
+                if (!guard) return;
+                guard->onIsoDownloadFinished(result, generation);
+            }, Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::onIsoDownloadProgress(int percent, const QString& status) {
+    if (workflowState_ != WorkflowState::Downloading) return;
+    progress_->setValue(percent);
+    distro_->setIsoStage(status, percent, true);
+}
+
+void MainWindow::onIsoDownloadFinished(core::Result<core::IsoDownload> result,
+                                       quint64 generation) {
+    downloadCancelFlag_.reset();
+    if (generation != workflowGeneration_) {
+        // The selection changed while the ISO was downloading: the result
+        // must not change the state of the new selection.
+        return;
+    }
+    if (workflowState_ != WorkflowState::Downloading) {
+        return;
+    }
+    if (!result) {
+        // The approval is void after a failed transfer. The (partial) file
+        // was removed by the backend, so nothing is left behind.
+        approvedPlan_.reset();
+        const bool cancelled = result.error().kind() == core::Error::Kind::Cancelled;
+        setWorkflowState(cancelled ? WorkflowState::Cancelled : WorkflowState::Failed);
+        distro_->setIsoStage(
+            cancelled ? tr("The ISO download was cancelled.")
+                      : tr("The ISO download failed: %1").arg(result.error().qmessage()),
+            0, false);
+        logBackend_->append(tr("ISO download failed: %1").arg(result.error().qmessage()),
+                            core::ProgressLog::Severity::Error);
+        QMessageBox::critical(this, tr("ULLI"),
+            tr("The ISO could not be downloaded:\n\n%1").arg(result.error().qmessage()));
+        return;
+    }
+
+    const auto& download = result.value();
+    if (!download.verified) {
+        logBackend_->append(
+            tr("The downloaded ISO could not be checksum verified: the catalog "
+               "has no trusted digest for it."),
+            core::ProgressLog::Severity::Warn);
+    }
+    if (approvedPlan_) approvedPlan_->isoPath = download.path;
+    distro_->notifyIsoReady(fileSizeOrZero(download.path), download.verified);
+    setWorkflowState(WorkflowState::Ready);
+    startApprovedPlan();
+}
+
+void MainWindow::startApprovedPlan() {
+    if (!approvedPlan_) return;
+    core::InstallPlan plan = std::move(*approvedPlan_);
+    approvedPlan_.reset();
+    // The engine re-enumerates the disk and re-validates the plan - which
+    // includes the identity of the target disk - before it modifies
+    // anything.
+    setWorkflowState(WorkflowState::Installing);
+    startEngine(std::move(plan));
 }
 
 void MainWindow::startEngine(core::InstallPlan plan) {
@@ -401,6 +697,7 @@ void MainWindow::onEngineFinished(bool success, QString message, bool autoRestar
     stopEngineThread();
 
     setBusy(false);
+    setWorkflowState(success ? WorkflowState::Idle : WorkflowState::Failed);
     if (success) {
         statusLabel_->setText(tr("Done — ready to restart"));
         // Only show restart countdown if the plan requested auto-restart
@@ -442,6 +739,14 @@ void MainWindow::onRestartCountdownCancelled() {
 }
 
 void MainWindow::onExitClicked() {
+    if (workflowState_ == WorkflowState::Downloading ||
+        workflowState_ == WorkflowState::Verifying) {
+        const auto reply = QMessageBox::question(this, tr("ULLI"),
+            tr("Cancel the running ISO transfer and exit?"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (reply != QMessageBox::Yes) return;
+        if (downloadCancelFlag_) downloadCancelFlag_->store(true);
+    }
     if (engineThread_ && engineThread_->isRunning()) {
         if (engine_) engine_->requestCancel();
         const auto reply = QMessageBox::question(this, tr("ULLI"),

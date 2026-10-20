@@ -28,11 +28,11 @@ core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro&) {
         "resolveIso: not implemented (Phase 2)");
 }
 
-core::Result<std::filesystem::path> DiskOps::downloadIso(
+core::Result<core::IsoDownload> DiskOps::downloadIso(
     const core::Distro&, const std::filesystem::path&,
-    std::function<void(int, const QString&)>) {
-    return core::makeError<std::filesystem::path>(core::Error::Kind::Internal,
-        "downloadIso: not implemented (Phase 2)");
+    std::function<void(int, const QString&)>, const std::atomic<bool>*) {
+    return core::makeError<core::IsoDownload>(core::Error::Kind::Internal,
+        "downloadIso: not implemented for Linux yet");
 }
 
 core::Result<std::uint64_t> DiskOps::shrinkPartition(char, std::uint64_t) {

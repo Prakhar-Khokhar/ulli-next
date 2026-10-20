@@ -42,6 +42,11 @@ public:
 
     bool valid() const { return !key_.empty() && !isoFilename_.empty(); }
 
+    // True when the catalog provides a trusted digest for this ISO. Without
+    // one the file can be checked for existence but never claimed to be
+    // cryptographically verified.
+    bool hasChecksum() const { return !sha256_.empty(); }
+
 private:
     std::string key_;
     std::string label_;

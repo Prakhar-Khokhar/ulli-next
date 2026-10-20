@@ -62,6 +62,13 @@ struct InstallPlan {
     std::optional<char> shrinkDriveLetter; // only set for OtherDriveShrink
     std::uint64_t shrinkAmountBytes = 0;  // for ShrinkAll / UseFreeBoot / OtherDriveShrink
 
+    // Identity of the target disk at the time the plan was approved.
+    // A disk number alone is not enough: the same number can point at a
+    // different device after a reboot, a dock change or a re-enumeration,
+    // so the model and the size are re-checked before anything is written.
+    std::string targetDiskModel;
+    std::uint64_t targetDiskSizeBytes = 0;
+
     // Layout
     std::uint64_t linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
     std::uint64_t bootSizeBytes = 7ull * 1024 * 1024 * 1024;

@@ -58,4 +58,8 @@ std::filesystem::path toolPath(const std::string& tool) {
     return tool;  // let QProcess find it via PATH
 }
 
+std::filesystem::path isoCachePath(const core::Distro& distro) {
+    return cacheDir() / distro.isoFilename();
+}
+
 }  // namespace ulli::platform

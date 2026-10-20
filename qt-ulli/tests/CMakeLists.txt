@@ -29,3 +29,4 @@ endif()
 
 add_ulli_test(progresslog)
 add_ulli_ui_test(ui test_ui_lifecycle.cpp)
+add_ulli_ui_test(workflow test_workflow.cpp)

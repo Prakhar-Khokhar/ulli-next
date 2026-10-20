@@ -30,7 +30,7 @@
 #include "platform/windows/BitLocker.h"
 #include "platform/windows/EspOps.h"
 #include "platform/windows/Wmi.h"
-#include "platform/windows/Sha256.h"
+#include "core/Sha256.h"
 #include "platform/Platform.h"
 
 #include <QDir>
@@ -48,10 +48,12 @@
 #include <QStorageInfo>
 #include <QTextStream>
 #include <QUrl>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QThread>
 
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 
 namespace ulli::platform::windows {
@@ -308,10 +310,14 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
 
     int matchedDiskNumber = -1;
     bool isSystem = false;
+    QString matchedModel;
+    std::uint64_t matchedSize = 0;
     for (const QJsonValue& v : arr) {
         const QJsonObject d = v.toObject();
         if (d.value("Number").toInt(-1) == plan.targetDiskNumber) {
             matchedDiskNumber = plan.targetDiskNumber;
+            matchedModel = d.value("Model").toString();
+            matchedSize = static_cast<std::uint64_t>(d.value("Size").toDouble(0.0));
             const QJsonArray parts = d.value("Partitions").toArray();
             for (const QJsonValue& pv : parts) {
                 if (pv.toObject().value("IsSystem").toBool()) {
@@ -330,6 +336,22 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
         return core::makeError(core::Error::Kind::InvalidInput,
             "Refusing to wipe a disk that contains the system partition. "
             "Choose a non-system disk or pick a different strategy.");
+    }
+    if (!plan.targetDiskModel.empty()) {
+        const QString liveModel = matchedModel.trimmed();
+        const QString planModel = QString::fromStdString(plan.targetDiskModel).trimmed();
+        if (liveModel.compare(planModel, Qt::CaseInsensitive) != 0) {
+            return core::makeError(core::Error::Kind::InvalidInput,
+                "Disk identity changed: model mismatch (expected '" +
+                plan.targetDiskModel + "', found '" + liveModel.toStdString() +
+                "'). The plan must be reviewed again.");
+        }
+    }
+    if (plan.targetDiskSizeBytes > 0 && matchedSize != plan.targetDiskSizeBytes) {
+        return core::makeError(core::Error::Kind::InvalidInput,
+            "Disk identity changed: size mismatch (expected " +
+            std::to_string(plan.targetDiskSizeBytes) + " bytes, found " +
+            std::to_string(matchedSize) + " bytes). The plan must be reviewed again.");
     }
     return core::makeOk();
 }
@@ -350,9 +372,14 @@ core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro& d) {
     const std::filesystem::path cache = platform::cacheDir();
     const std::filesystem::path isoPath = cache / d.isoFilename();
     if (std::filesystem::exists(isoPath)) {
-        // Verify SHA-256 against the expected hash from distros.json
-        auto v = Sha256::verifyFile(isoPath, d.sha256());
-        if (!v) return core::makeError<std::filesystem::path>(v.error().kind(), v.error().message());
+        if (d.hasChecksum()) {
+            auto v = core::Sha256::verifyFile(isoPath, d.sha256());
+            if (!v) {
+                std::error_code ec;
+                std::filesystem::remove(isoPath, ec);
+                return core::makeError<std::filesystem::path>(v.error().kind(), v.error().message());
+            }
+        }
         return core::makeOk(isoPath);
     }
     return core::makeError<std::filesystem::path>(core::Error::Kind::NotFound,
@@ -360,28 +387,46 @@ core::Result<std::filesystem::path> DiskOps::resolveIso(const core::Distro& d) {
         " to " + cache.string() + " (link: " + d.downloadPage() + ").");
 }
 
-core::Result<std::filesystem::path> DiskOps::downloadIso(
+core::Result<core::IsoDownload> DiskOps::downloadIso(
     const core::Distro& distro,
     const std::filesystem::path& destPath,
-    std::function<void(int percent, const QString& status)> progressCallback) {
+    std::function<void(int percent, const QString& status)> progressCallback,
+    const std::atomic<bool>* cancelFlag) {
+
+    const auto cancelled = [&]() -> bool {
+        return cancelFlag != nullptr && cancelFlag->load();
+    };
 
     if (distro.mirrors().empty()) {
-        return core::makeError<std::filesystem::path>(core::Error::Kind::NotFound,
+        return core::makeError<core::IsoDownload>(core::Error::Kind::NotFound,
             "No download mirrors available for " + distro.label());
     }
 
-    // Ensure destination directory exists
     std::error_code ec;
     std::filesystem::create_directories(destPath.parent_path(), ec);
     if (ec) {
-        return core::makeError<std::filesystem::path>(core::Error::Kind::Io,
+        return core::makeError<core::IsoDownload>(core::Error::Kind::Io,
             "Cannot create download directory: " + ec.message());
     }
 
+    const std::filesystem::path partPath(destPath.string() + ".part");
+    const auto removePart = [&]() {
+        std::error_code e;
+        std::filesystem::remove(partPath, e);
+    };
+
     // Try each mirror in order
     for (const auto& mirror : distro.mirrors()) {
+        removePart();
+
         if (progressCallback) {
             progressCallback(0, QString("Connecting to %1...").arg(QString::fromStdString(mirror)));
+        }
+
+        QFile file(QString::fromStdString(partPath.string()));
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            return core::makeError<core::IsoDownload>(core::Error::Kind::Io,
+                "Cannot open temporary file for writing: " + partPath.string());
         }
 
         QNetworkAccessManager manager;
@@ -389,59 +434,165 @@ core::Result<std::filesystem::path> DiskOps::downloadIso(
         request.setRawHeader("User-Agent", "ULLI/1.0");
 
         QNetworkReply* reply = manager.get(request);
+
         QEventLoop loop;
-        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+        bool cancelRequested = false;
+        bool writeFailed = false;
+        std::string writeError;
+        bool freeSpaceFailed = false;
+        std::string freeSpaceError;
+        qint64 totalSize = -1;
+        int lastPercent = -1;
+        QElapsedTimer throttle;
+        throttle.start();
+
+        QObject::connect(reply, &QNetworkReply::readyRead, [&]() {
+            if (cancelled()) {
+                cancelRequested = true;
+                reply->abort();
+                return;
+            }
+            while (reply->bytesAvailable() > 0) {
+                QByteArray chunk = reply->read(256 * 1024);
+                if (chunk.isEmpty()) break;
+                const qint64 written = file.write(chunk);
+                if (written != chunk.size()) {
+                    writeFailed = true;
+                    writeError = "Short write to temporary file: " + partPath.string();
+                    reply->abort();
+                    return;
+                }
+            }
+        });
+
         QObject::connect(reply, &QNetworkReply::downloadProgress,
-            [progressCallback](qint64 bytesReceived, qint64 bytesTotal) {
-                if (bytesTotal > 0 && progressCallback) {
-                    int percent = static_cast<int>((bytesReceived * 100) / bytesTotal);
-                    progressCallback(percent,
-                        QString("Downloading: %1 / %2 MB")
-                            .arg(bytesReceived / (1024*1024))
-                            .arg(bytesTotal / (1024*1024)));
+            [&](qint64 bytesReceived, qint64 bytesTotal) {
+                if (cancelled()) {
+                    cancelRequested = true;
+                    reply->abort();
+                    return;
+                }
+                if (bytesTotal > 0) {
+                    if (totalSize < 0) {
+                        totalSize = bytesTotal;
+                        QStorageInfo storage(QString::fromStdString(destPath.parent_path().string()));
+                        if (storage.bytesAvailable() > 0) {
+                            const qint64 needed = bytesTotal + 64LL * 1024 * 1024;
+                            if (storage.bytesAvailable() < needed) {
+                                freeSpaceFailed = true;
+                                freeSpaceError = "Not enough free space in " +
+                                    destPath.parent_path().string() + ": need " +
+                                    std::to_string(bytesTotal + 64LL * 1024 * 1024) +
+                                    ", have " + std::to_string(storage.bytesAvailable());
+                                reply->abort();
+                                return;
+                            }
+                        }
+                    }
+                    const int percent = static_cast<int>((bytesReceived * 100) / bytesTotal);
+                    if (percent != lastPercent && throttle.elapsed() >= 250) {
+                        lastPercent = percent;
+                        throttle.restart();
+                        if (progressCallback) {
+                            progressCallback(percent,
+                                QString("Downloading: %1 / %2 MB")
+                                    .arg(bytesReceived / (1024 * 1024))
+                                    .arg(bytesTotal / (1024 * 1024)));
+                        }
+                    }
                 }
             });
 
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
         loop.exec();
 
-        if (reply->error() != QNetworkReply::NoError) {
-            QString error = reply->errorString();
-            reply->deleteLater();
-            if (progressCallback) {
-                progressCallback(0, QString("Mirror failed: %1").arg(error));
-            }
-            continue; // Try next mirror
-        }
+        if (cancelled()) cancelRequested = true;
 
-        // Write to file
-        QFile file(QString::fromStdString(destPath.string()));
-        if (!file.open(QIODevice::WriteOnly)) {
-            reply->deleteLater();
-            return core::makeError<std::filesystem::path>(core::Error::Kind::Io,
-                "Cannot open destination file for writing: " + destPath.string());
-        }
-
-        file.write(reply->readAll());
         file.close();
+
+        if (cancelRequested || cancelled()) {
+            removePart();
+            reply->deleteLater();
+            return core::makeError<core::IsoDownload>(core::Error::Kind::Cancelled,
+                "Download cancelled");
+        }
+        if (writeFailed) {
+            removePart();
+            reply->deleteLater();
+            return core::makeError<core::IsoDownload>(core::Error::Kind::Io, writeError);
+        }
+        if (freeSpaceFailed) {
+            removePart();
+            reply->deleteLater();
+            return core::makeError<core::IsoDownload>(core::Error::Kind::Io, freeSpaceError);
+        }
+        if (reply->error() != QNetworkReply::NoError) {
+            const QString err = reply->errorString();
+            reply->deleteLater();
+            removePart();
+            if (progressCallback) {
+                progressCallback(0, QString("Mirror failed: %1").arg(err));
+            }
+            continue;
+        }
+
         reply->deleteLater();
 
-        // Verify SHA-256
+        // Verification phase
         if (progressCallback) {
             progressCallback(100, QString("Verifying checksum..."));
         }
-        auto v = Sha256::verifyFile(destPath, distro.sha256());
-        if (!v) {
-            std::filesystem::remove(destPath);
-            return core::makeError<std::filesystem::path>(v.error().kind(), v.error().message());
-        }
 
-        if (progressCallback) {
-            progressCallback(100, QString("Download complete and verified"));
+        if (distro.hasChecksum()) {
+            auto v = core::Sha256::verifyFile(partPath, distro.sha256());
+            if (!v) {
+                removePart();
+                return core::makeError<core::IsoDownload>(v.error().kind(), v.error().message());
+            }
+
+            std::error_code ec2;
+            std::filesystem::remove(destPath, ec2);
+            std::error_code ec3;
+            std::filesystem::rename(partPath, destPath, ec3);
+            if (ec3) {
+                removePart();
+                return core::makeError<core::IsoDownload>(core::Error::Kind::Io,
+                    "Failed to publish downloaded ISO: " + ec3.message());
+            }
+
+            core::IsoDownload out;
+            out.path = destPath;
+            out.verified = true;
+            out.sha256 = distro.sha256();
+            if (progressCallback) {
+                progressCallback(100, QString("Download complete"));
+            }
+            return core::makeOk(out);
+        } else {
+            std::error_code ec2;
+            std::filesystem::remove(destPath, ec2);
+            std::error_code ec3;
+            std::filesystem::rename(partPath, destPath, ec3);
+            if (ec3) {
+                removePart();
+                return core::makeError<core::IsoDownload>(core::Error::Kind::Io,
+                    "Failed to publish downloaded ISO: " + ec3.message());
+            }
+
+            core::IsoDownload out;
+            out.path = destPath;
+            out.verified = false;
+            out.sha256.clear();
+            if (progressCallback) {
+                progressCallback(100, QString("Download complete (no checksum available - not verified)"));
+            }
+            return core::makeOk(out);
         }
-        return core::makeOk(destPath);
     }
 
-    return core::makeError<std::filesystem::path>(core::Error::Kind::Platform,
+    return core::makeError<core::IsoDownload>(core::Error::Kind::Platform,
         "All download mirrors failed for " + distro.label());
 }
 

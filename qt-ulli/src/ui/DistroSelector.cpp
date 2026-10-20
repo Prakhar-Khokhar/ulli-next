@@ -3,14 +3,13 @@
 
 #include "core/Catalog.h"
 #include "core/Distro.h"
+#include "core/Sha256.h"
 #include "platform/Platform.h"
 
 #include <QComboBox>
 #include <QFileDialog>
 #include <QFile>
-#include <QByteArrayView>
 #include <QCheckBox>
-#include <QCryptographicHash>
 #include <QFutureWatcher>
 #include <QtConcurrent/QtConcurrent>
 #include <QHBoxLayout>
@@ -41,16 +40,12 @@ DistroSelector::DistroSelector(QWidget* parent) : QWidget(parent) {
     customPath_->setEnabled(false);
     browseBtn_->setEnabled(false);
 
-    downloadBtn_ = new QPushButton(tr("Download ISO"), this);
-    downloadBtn_->setEnabled(false);
-    downloadBtn_->setMinimumHeight(32);
-
-    downloadProgress_ = new QProgressBar(this);
-    downloadProgress_->setRange(0, 100);
-    downloadProgress_->setValue(0);
-    downloadProgress_->setVisible(false);
-    downloadProgress_->setTextVisible(true);
-    downloadProgress_->setFormat(tr("Downloading: %p%"));
+    isoProgress_ = new QProgressBar(this);
+    isoProgress_->setRange(0, 100);
+    isoProgress_->setValue(0);
+    isoProgress_->setVisible(false);
+    isoProgress_->setTextVisible(true);
+    isoProgress_->setFormat(tr("%p%"));
 
     statusLabel_ = new QLabel(this);
     statusLabel_->setStyleSheet("color: #666; font-size: 11px;");
@@ -60,15 +55,11 @@ DistroSelector::DistroSelector(QWidget* parent) : QWidget(parent) {
     customRow->addWidget(customPath_, 1);
     customRow->addWidget(browseBtn_);
 
-    auto* downloadRow = new QHBoxLayout;
-    downloadRow->addWidget(downloadBtn_);
-    downloadRow->addWidget(downloadProgress_, 1);
-
     auto* root = new QVBoxLayout(this);
     root->addWidget(label);
     root->addWidget(combo_);
     root->addWidget(statusLabel_);
-    root->addLayout(downloadRow);
+    root->addWidget(isoProgress_);
     root->addWidget(customCheck_);
     root->addLayout(customRow);
     setLayout(root);
@@ -79,8 +70,6 @@ DistroSelector::DistroSelector(QWidget* parent) : QWidget(parent) {
             this, &DistroSelector::onCustomToggled);
     connect(browseBtn_, &QPushButton::clicked,
             this, &DistroSelector::onBrowseClicked);
-    connect(downloadBtn_, &QPushButton::clicked,
-            this, &DistroSelector::onDownloadClicked);
 }
 
 DistroSelector::~DistroSelector() {
@@ -102,16 +91,11 @@ void DistroSelector::setCatalog(const core::Catalog* catalog) {
     onComboIndexChanged(0);
 }
 
-void DistroSelector::setDownloadCallback(DownloadCallback cb) {
-    downloadCallback_ = std::move(cb);
-}
-
 void DistroSelector::onCustomToggled(bool checked) {
     customPath_->setEnabled(checked);
     browseBtn_->setEnabled(checked);
     combo_->setEnabled(!checked);
-    downloadBtn_->setEnabled(false);
-    downloadProgress_->setVisible(false);
+    isoProgress_->setVisible(false);
     statusLabel_->clear();
     if (checked) {
         currentDistro_ = nullptr;
@@ -125,8 +109,7 @@ void DistroSelector::onCustomToggled(bool checked) {
 void DistroSelector::onComboIndexChanged(int index) {
     if (index < 0 || !catalog_) {
         currentDistro_ = nullptr;
-        downloadBtn_->setEnabled(false);
-        downloadProgress_->setVisible(false);
+        isoProgress_->setVisible(false);
         statusLabel_->clear();
         setIsoReady(false);
         return;
@@ -135,12 +118,13 @@ void DistroSelector::onComboIndexChanged(int index) {
     const auto* distro = catalog_->find(key.toStdString());
     currentDistro_ = const_cast<core::Distro*>(distro);
     updateIsoStatusDisplay();
+    // A different distribution invalidates an approved plan.
+    emit selectionChanged();
 }
 
 void DistroSelector::updateIsoStatusDisplay() {
     if (!currentDistro_) {
-        downloadBtn_->setEnabled(false);
-        downloadProgress_->setVisible(false);
+        isoProgress_->setVisible(false);
         statusLabel_->clear();
         setIsoReady(false);
         return;
@@ -158,13 +142,11 @@ void DistroSelector::updateIsoStatusDisplay() {
     const bool exists = std::filesystem::exists(isoPath);
 
     if (!exists) {
-        statusLabel_->setText(tr("ISO not downloaded. Size: ~%1")
-                                  .arg(QString::fromStdString(currentDistro_->isoFilename())));
+        statusLabel_->setText(tr("ISO not downloaded yet — it will be fetched "
+                                 "after the install plan is approved."));
         statusLabel_->setStyleSheet("color: #666; font-size: 11px;");
-        downloadBtn_->setEnabled(true);
-        downloadBtn_->setText(tr("Download ISO"));
-        downloadProgress_->setVisible(false);
-        downloadProgress_->setValue(0);
+        isoProgress_->setVisible(false);
+        isoProgress_->setValue(0);
         setIsoReady(false);
         emit isoStatusChanged(combo_->currentData().toString(), statusLabel_->text());
         return;
@@ -178,40 +160,26 @@ void DistroSelector::updateIsoStatusDisplay() {
     verifyingKey_ = key;
     statusLabel_->setText(tr("Verifying ISO checksum…"));
     statusLabel_->setStyleSheet("color: #0066cc; font-size: 11px;");
-    downloadBtn_->setEnabled(false);
-    downloadProgress_->setVisible(false);
+    isoProgress_->setVisible(false);
     setIsoReady(false);
 
     verifyWatcher_ = new QFutureWatcher<bool>(this);
     connect(verifyWatcher_, &QFutureWatcher<bool>::finished,
             this, &DistroSelector::onIsoVerificationFinished);
-    verifyWatcher_->setFuture(QtConcurrent::run(&DistroSelector::verifyIsoHash,
-                                                currentDistro_, isoPath));
-}
-
-bool DistroSelector::verifyIsoHash(const core::Distro* distro,
-                                   const std::filesystem::path& isoPath) {
-    if (!distro || distro->sha256().empty()) return false;
-
-    QFile f(QString::fromStdString(isoPath.string()));
-    if (!f.open(QIODevice::ReadOnly)) return false;
-
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    constexpr std::size_t kBufferSize = 64 * 1024;
-    char buffer[kBufferSize];
-    while (!f.atEnd()) {
-        qint64 bytesRead = f.read(buffer, kBufferSize);
-        if (bytesRead < 0) {
-            f.close();
-            return false;
-        }
-        hash.addData(QByteArrayView(buffer, static_cast<qsizetype>(bytesRead)));
-    }
-    f.close();
-
-    QString actualHex = QString(hash.result().toHex()).toLower();
-    QString expected = QString::fromStdString(distro->sha256()).toLower().trimmed();
-    return actualHex == expected;
+    // Capture the digest by value: the worker must not touch the catalog
+    // after the window has been destroyed.
+    const std::string expectedSha = currentDistro_->sha256();
+    const bool hasChecksum = currentDistro_->hasChecksum();
+    verifyWatcher_->setFuture(QtConcurrent::run(
+        [expectedSha, hasChecksum, isoPath]() -> bool {
+            if (!hasChecksum) {
+                // No trusted digest: the file is usable but it cannot be
+                // claimed to be cryptographically verified.
+                return true;
+            }
+            return static_cast<bool>(
+                core::Sha256::verifyFile(isoPath, expectedSha));
+        }));
 }
 
 void DistroSelector::onIsoVerificationFinished() {
@@ -237,28 +205,43 @@ void DistroSelector::onIsoVerificationFinished() {
 
     const auto isoPath = getIsoCachePath(currentDistro_);
     if (ok) {
-        statusLabel_->setText(tr("✓ ISO verified: %1")
-                                  .arg(QString::fromStdString(isoPath.string())));
-        statusLabel_->setStyleSheet("color: #2a7; font-size: 11px;");
-        downloadBtn_->setEnabled(false);
-        downloadBtn_->setText(tr("ISO Ready"));
-        setIsoReady(true);
+        const bool verified = currentDistro_->hasChecksum();
+        if (verified) {
+            statusLabel_->setText(tr("✓ ISO verified: %1")
+                                      .arg(QString::fromStdString(isoPath.string())));
+            statusLabel_->setStyleSheet("color: #2a7; font-size: 11px;");
+        } else {
+            statusLabel_->setText(tr("⚠ ISO present but not verified — the "
+                                     "catalog has no checksum for it: %1")
+                                      .arg(QString::fromStdString(isoPath.string())));
+            statusLabel_->setStyleSheet("color: #c60; font-size: 11px;");
+        }
+        std::error_code ec;
+        const auto size = std::filesystem::file_size(isoPath, ec);
+        notifyIsoReady(ec ? 0 : static_cast<qint64>(size), verified);
     } else {
         statusLabel_->setText(tr("⚠ ISO found but verification failed: %1")
                                   .arg(QString::fromStdString(isoPath.string())));
         statusLabel_->setStyleSheet("color: #c00; font-size: 11px;");
-        downloadBtn_->setEnabled(true);
-        downloadBtn_->setText(tr("Verify / Re-download"));
         setIsoReady(false);
     }
-    downloadProgress_->setVisible(false);
-    downloadProgress_->setValue(0);
+    isoProgress_->setVisible(false);
+    isoProgress_->setValue(0);
     emit isoStatusChanged(combo_->currentData().toString(), statusLabel_->text());
 }
 
 std::filesystem::path DistroSelector::getIsoCachePath(const core::Distro* distro) const {
     const std::filesystem::path cacheDir = ulli::platform::cacheDir();
     return cacheDir / distro->isoFilename();
+}
+
+std::filesystem::path DistroSelector::isoCachePath() const {
+    if (!currentDistro_) return {};
+    return getIsoCachePath(currentDistro_);
+}
+
+QString DistroSelector::isoStatusText() const {
+    return statusLabel_->text();
 }
 
 void DistroSelector::onBrowseClicked() {
@@ -272,9 +255,21 @@ void DistroSelector::onBrowseClicked() {
 }
 
 void DistroSelector::setIsoReady(bool ready) {
-    if (isoReady_ == ready) return;
+    if (isoReady_ == ready) {
+        return;
+    }
     isoReady_ = ready;
+    if (!ready) {
+        isoVerified_ = false;
+        verifiedIsoSize_ = 0;
+    }
     emit isoReadinessChanged(isoReady_);
+}
+
+void DistroSelector::notifyIsoReady(qint64 fileSize, bool verified) {
+    isoVerified_ = verified;
+    verifiedIsoSize_ = fileSize;
+    setIsoReady(true);
 }
 
 void DistroSelector::updateCustomIsoReadiness() {
@@ -287,63 +282,27 @@ void DistroSelector::updateCustomIsoReadiness() {
         return;
     }
     std::error_code ec;
-    setIsoReady(std::filesystem::is_regular_file(
-        std::filesystem::path(path.toStdString()), ec) && !ec);
+    const bool isFile = std::filesystem::is_regular_file(
+        std::filesystem::path(path.toStdString()), ec) && !ec;
+    setIsoReady(isFile);
+    if (isFile) {
+        const auto size = std::filesystem::file_size(
+            std::filesystem::path(path.toStdString()), ec);
+        notifyIsoReady(ec ? 0 : static_cast<qint64>(size), false);
+        statusLabel_->setText(tr("Custom ISO: %1").arg(path));
+        statusLabel_->setStyleSheet("color: #666; font-size: 11px;");
+    }
 }
 
-void DistroSelector::onDownloadClicked() {
-    if (!currentDistro_ || !downloadCallback_ || downloading_) return;
-
-    downloading_ = true;
-    downloadBtn_->setEnabled(false);
-    downloadProgress_->setVisible(true);
-    downloadProgress_->setValue(0);
-    statusLabel_->setText(tr("Starting download..."));
-    statusLabel_->setStyleSheet("color: #0066cc; font-size: 11px;");
-
-    const auto destPath = getIsoCachePath(currentDistro_);
-
-    downloadCallback_(*currentDistro_, destPath,
-        [this](int percent, const QString& status) {
-            QMetaObject::invokeMethod(this, [this, percent, status]() {
-                downloadProgress_->setValue(percent);
-                if (!status.isEmpty()) {
-                    statusLabel_->setText(status);
-                }
-            }, Qt::QueuedConnection);
-        },
-        [this](core::Result<std::filesystem::path> result) {
-            QMetaObject::invokeMethod(this, [this, result]() {
-                downloading_ = false;
-                downloadProgress_->setVisible(false);
-                if (result) {
-                    statusLabel_->setText(tr("✓ Download complete and verified"));
-                    statusLabel_->setStyleSheet("color: #2a7; font-size: 11px;");
-                    downloadBtn_->setEnabled(false);
-                    downloadBtn_->setText(tr("ISO Ready"));
-                } else {
-                    statusLabel_->setText(tr("✗ Download failed: %1").arg(result.error().qmessage()));
-                    statusLabel_->setStyleSheet("color: #c00; font-size: 11px;");
-                    downloadBtn_->setEnabled(true);
-                    downloadBtn_->setText(tr("Retry Download"));
-                }
-                updateIsoStatusDisplay();
-                emit selectionChanged();
-            }, Qt::QueuedConnection);
-        });
-}
-
-QString DistroSelector::selectedKey() const {
-    if (isCustom()) return QString();
-    return combo_->currentData().toString();
-}
-
-QString DistroSelector::customIsoPath() const {
-    return customPath_->text();
-}
-
-bool DistroSelector::isCustom() const {
-    return customCheck_->isChecked();
+void DistroSelector::setIsoStage(const QString& status, int percent, bool busy) {
+    if (!status.isEmpty()) {
+        statusLabel_->setText(status);
+        statusLabel_->setStyleSheet("color: #0066cc; font-size: 11px;");
+    }
+    isoProgress_->setVisible(busy);
+    if (busy) {
+        isoProgress_->setValue(percent);
+    }
 }
 
 }  // namespace ulli::ui

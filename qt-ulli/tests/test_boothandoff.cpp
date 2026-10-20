@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QtTest/QtTest>
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -61,10 +62,13 @@ public:
         return makeOk<std::filesystem::path>("/tmp/test.iso");
     }
 
-    Result<std::filesystem::path> downloadIso(
+    Result<IsoDownload> downloadIso(
         const Distro&, const std::filesystem::path&,
-        std::function<void(int, const QString&)>) override {
-        return makeOk<std::filesystem::path>("/tmp/test.iso");
+        std::function<void(int, const QString&)>,
+        const std::atomic<bool>* = nullptr) override {
+        IsoDownload out;
+        out.path = "/tmp/test.iso";
+        return makeOk(out);
     }
 
     Result<std::uint64_t> shrinkPartition(char, std::uint64_t) override {

@@ -137,13 +137,31 @@ PlanDialog::PlanDialog(QWidget* parent) : QDialog(parent) {
     safetyWarningLabel_->setTextFormat(Qt::RichText);
     safetyWarningLabel_->setStyleSheet("color: #c00; font-weight: bold;");
 
+    isoContextLabel_ = new QLabel(previewGroup);
+    isoContextLabel_->setWordWrap(true);
+    isoContextLabel_->setStyleSheet("color: #335;");
+
     auto* previewLayout = new QVBoxLayout(previewGroup);
     previewLayout->addWidget(plannedLayoutLabel_);
     previewLayout->addWidget(safetyWarningLabel_);
+    previewLayout->addWidget(isoContextLabel_);
 
     // ─── Buttons ─────────────────────────────────────────────────────────
     buttons_ = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons_->button(QDialogButtonBox::Ok)->setEnabled(true);
+    // The dialog is a review screen: accepting it approves the plan. It
+    // does not by itself run any destructive operation - the wipe strategy
+    // still asks for its own confirmation and the engine re-checks the
+    // disk state before it writes anything.
+    buttons_->button(QDialogButtonBox::Ok)->setText(tr("Approve plan"));
+
+    auto* approvalHint = new QLabel(
+        tr("Approving the plan starts the ISO download (if the ISO is not "
+           "cached yet) and then the installation. The disk state is checked "
+           "again before anything is written."),
+        this);
+    approvalHint->setWordWrap(true);
+    approvalHint->setStyleSheet("color: #666; font-size: 11px;");
 
     auto* root = new QVBoxLayout(this);
     root->addWidget(diskGroup, 1);
@@ -152,6 +170,7 @@ PlanDialog::PlanDialog(QWidget* parent) : QDialog(parent) {
     root->addWidget(sizeGroup);
     root->addWidget(optionsGroup);
     root->addWidget(previewGroup);
+    root->addWidget(approvalHint);
     root->addWidget(buttons_);
     setLayout(root);
 
@@ -185,28 +204,31 @@ void PlanDialog::onAcceptClicked() {
     // Extra confirmation for WipeDisk strategy
     if (wipeRadio_->isChecked() && !wipeConfirmed_) {
         const int idx = diskCombo_->currentIndex();
-        if (idx >= 0 && static_cast<std::size_t>(idx) < disks_.size()) {
-            const auto& d = disks_[static_cast<std::size_t>(idx)];
-            auto reply = QMessageBox::warning(this, tr("ULLI — Confirm Disk Wipe"),
-                tr("You have selected <b>Wipe Disk</b> for <b>Disk %1 (%2)</b>.<br><br>"
-                   "This will <b>PERMANENTLY ERASE ALL DATA</b> on this disk.<br>"
-                   "There is <b>NO UNDO</b>.<br><br>"
-                   "Type <b>WIPE</b> to confirm:").arg(d.number).arg(d.qmodel()),
-                QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Cancel);
-
-            if (reply == QMessageBox::Ok) {
-                reply = QMessageBox::question(this, tr("ULLI — Final Confirmation"),
-                    tr("Are you absolutely sure you want to wipe Disk %1?\n\n"
-                       "ALL DATA WILL BE LOST.").arg(d.number),
-                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-                if (reply == QMessageBox::Yes) {
-                    wipeConfirmed_ = true;
-                    accept();
-                    return;
-                }
-            }
+        if (idx < 0 || static_cast<std::size_t>(idx) >= disks_.size()) {
+            QMessageBox::warning(this, tr("ULLI"),
+                tr("Please select the disk that should be wiped."));
             return;
         }
+        const auto& d = disks_[static_cast<std::size_t>(idx)];
+        auto reply = QMessageBox::warning(this, tr("ULLI — Confirm Disk Wipe"),
+            tr("You have selected <b>Wipe Disk</b> for <b>Disk %1 (%2)</b>.<br><br>"
+               "This will <b>PERMANENTLY ERASE ALL DATA</b> on this disk.<br>"
+               "There is <b>NO UNDO</b>.<br><br>"
+               "Continue to the final confirmation?").arg(d.number).arg(d.qmodel()),
+            QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Cancel);
+
+        if (reply == QMessageBox::Ok) {
+            reply = QMessageBox::question(this, tr("ULLI — Final Confirmation"),
+                tr("Are you absolutely sure you want to wipe Disk %1?\n\n"
+                   "ALL DATA WILL BE LOST.").arg(d.number),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply == QMessageBox::Yes) {
+                wipeConfirmed_ = true;
+                accept();
+                return;
+            }
+        }
+        return;
     }
     accept();
 }
@@ -225,6 +247,10 @@ void PlanDialog::setDisks(const std::vector<core::Disk>& disks) {
     wipeConfirmed_ = false;
     updateOkButtonState();
     onDiskChanged(0);
+}
+
+void PlanDialog::setIsoContext(const QString& text) {
+    isoContextLabel_->setText(text);
 }
 
 void PlanDialog::onDiskChanged(int index) {
@@ -403,7 +429,10 @@ void PlanDialog::onLinuxSizeChanged(int value) {
 }
 
 void PlanDialog::updateOkButtonState() {
-    bool ok = !(wipeRadio_->isChecked() && !wipeConfirmed_);
+    // The wipe strategy is confirmed in onAcceptClicked() with an explicit
+    // "WIPE" confirmation, so the button itself stays enabled - otherwise
+    // the destructive confirmation could never be reached.
+    bool ok = true;
     if (shrinkRadio_->isChecked()) {
         if (shrinkPartitionCombo_->count() == 0 ||
             shrinkPartitionCombo_->currentIndex() < 0) {
@@ -593,7 +622,13 @@ core::InstallPlan PlanDialog::buildPlan(const std::string& distroKey,
 
     const int idx = diskCombo_->currentIndex();
     if (idx >= 0 && idx < static_cast<int>(disks_.size())) {
-        p.targetDiskNumber = disks_[static_cast<std::size_t>(idx)].number;
+        const auto& disk = disks_[static_cast<std::size_t>(idx)];
+        p.targetDiskNumber = disk.number;
+        // Record the identity of the disk as well: a disk number alone can
+        // point at a different device later, so the model and the size are
+        // re-checked before anything is written.
+        p.targetDiskModel = disk.qmodel();
+        p.targetDiskSizeBytes = disk.sizeBytes;
     }
     p.linuxSizeBytes = static_cast<std::uint64_t>(linuxSizeSpin_->value()) * 1024 * 1024 * 1024;
 

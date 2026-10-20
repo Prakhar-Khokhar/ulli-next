@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "core/Distro.h"
+
 #if defined(_WIN32)
     #include "platform/windows/DiskOps.h"
     #include "platform/windows/BcdStore.h"
@@ -43,6 +45,10 @@ namespace ulli::platform {
     // Path to a writable per-user directory for the install log, ISO
     // cache, and rEFInd download.
     std::filesystem::path cacheDir();
+
+    // Path of the cached ISO of a distro. Single source of truth for
+    // every component that has to find the ISO (UI, backend, engine).
+    std::filesystem::path isoCachePath(const core::Distro& distro);
 
     // Bundled third-party tool paths (parted, mkfs.fat, mke2fs, etc.).
     // On Linux, these are inside the AppImage. On Windows, they sit

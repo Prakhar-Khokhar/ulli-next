@@ -49,6 +49,8 @@ set(ULLI_CORE_SOURCES
     src/core/DiskInfo.h
     src/core/ProgressLog.h
     src/core/ProgressLog.cpp
+    src/core/Sha256.h
+    src/core/Sha256.cpp
 )
 
 set(ULLI_PLATFORM_SOURCES

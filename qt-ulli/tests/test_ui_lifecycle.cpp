@@ -13,6 +13,7 @@
 //    operation must neither abort nor hang forever.
 
 #include "ui/MainWindow.h"
+#include "ui/PlanDialog.h"
 
 #include "core/DiskInfo.h"
 #include "core/InstallEngine.h"
@@ -106,11 +107,15 @@ public:
         return ulli::core::makeOk<std::filesystem::path>("/tmp/mock.iso");
     }
 
-    ulli::core::Result<std::filesystem::path> downloadIso(
+    ulli::core::Result<ulli::core::IsoDownload> downloadIso(
         const ulli::core::Distro&,
         const std::filesystem::path&,
-        std::function<void(int, const QString&)>) override {
-        return ulli::core::makeOk<std::filesystem::path>("/tmp/mock.iso");
+        std::function<void(int, const QString&)>,
+        const std::atomic<bool>* = nullptr) override {
+        ulli::core::IsoDownload out;
+        out.path = "/tmp/mock.iso";
+        out.verified = true;
+        return ulli::core::makeOk(out);
     }
 
     ulli::core::Result<std::uint64_t> shrinkPartition(
@@ -343,6 +348,26 @@ private slots:
         delete w;
         QVERIFY2(timer.elapsed() < 30000,
                  "the window took too long to close");
+    }
+
+    // The plan that the planning screen produces must carry the identity of
+    // the target disk, not only its number: the number alone can point at a
+    // different device after a re-enumeration.
+    void planCarriesTheTargetDiskIdentity() {
+        ulli::core::Disk disk;
+        disk.number = 0;
+        disk.model = "Mock NVMe 1 TB";
+        disk.sizeBytes = 1000000000000ull;
+        disk.style = ulli::core::PartitionStyle::GPT;
+
+        ulli::ui::PlanDialog dlg;
+        dlg.setDisks({disk});
+
+        const auto plan = dlg.buildPlan("mint", {});
+        QCOMPARE(plan.targetDiskNumber, 0);
+        QCOMPARE(QString::fromStdString(plan.targetDiskModel),
+                 QString("Mock NVMe 1 TB"));
+        QCOMPARE(plan.targetDiskSizeBytes, 1000000000000ull);
     }
 
 private:

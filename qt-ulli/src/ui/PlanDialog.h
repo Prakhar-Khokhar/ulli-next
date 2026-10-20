@@ -30,6 +30,11 @@ public:
     explicit PlanDialog(QWidget* parent = nullptr);
 
     void setDisks(const std::vector<core::Disk>& disks);
+
+    // Describes the ISO state for the plan review, e.g. "will be
+    // downloaded after approval" or "verified at <path>".
+    void setIsoContext(const QString& text);
+
     core::InstallPlan buildPlan(const std::string& distroKey,
                                 const std::filesystem::path& isoPath) const;
 
@@ -78,6 +83,7 @@ private:
     QLabel* strategyDescription_ = nullptr;
     QLabel* plannedLayoutLabel_ = nullptr;
     QLabel* safetyWarningLabel_ = nullptr;
+    QLabel* isoContextLabel_ = nullptr;
     QDialogButtonBox* buttons_ = nullptr;
     bool wipeConfirmed_ = false;
     bool updating_ = false;
