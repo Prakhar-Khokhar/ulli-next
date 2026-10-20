@@ -80,6 +80,9 @@ $out = foreach ($d in $disks) {
     # UniqueIdFormat names the descriptor type the unique id was built
     # from (Vendor Specific, Vendor Id, EUI64, FCPH Name, SCSI Name
     # String); it is part of the identity and is compared with it.
+    # 0 is a valid descriptor type ("Vendor Specific"), but it is falsy in
+    # PowerShell - so the null check below has to be explicit, otherwise a
+    # valid format would be serialized as an empty string.
     [pscustomobject]@{
         Number        = [int]$d.Number
         Model         = if ($d.Model) { [string]$d.Model } else { '' }
@@ -87,7 +90,7 @@ $out = foreach ($d in $disks) {
         PartitionStyle= [string]$d.PartitionStyle
         Size          = [int64]$d.Size
         UniqueId      = if ($d.UniqueId) { [string]$d.UniqueId } else { '' }
-        UniqueIdFormat= if ($d.UniqueIdFormat) { [string]$d.UniqueIdFormat } else { '' }
+        UniqueIdFormat= if ($null -ne $d.UniqueIdFormat) { [string]$d.UniqueIdFormat } else { '' }
         SerialNumber  = if ($d.SerialNumber) { [string]$d.SerialNumber } else { '' }
         Partitions    = $partOut
     }

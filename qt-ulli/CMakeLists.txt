@@ -131,6 +131,8 @@ endif()
 # ─── Tests ───────────────────────────────────────────────────────────────────
 if(ULLI_BUILD_TESTS)
     enable_testing()
+    # Root of the source tree, for tests that read a source file at runtime.
+    set(ULLI_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
     add_subdirectory(tests)
 endif()
 

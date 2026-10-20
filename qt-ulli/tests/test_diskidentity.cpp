@@ -65,6 +65,8 @@ private slots:
     void punctuationInScsiNameStaysSignificant();
     void incompatibleUniqueIdFormatsAreNotEquivalent();
     void missingFormatFallsBackToTheText();
+    void knownFormatIsNotSilentlyLost();
+    void numericZeroFormatIsAPresentFormat();
     void formatNamesAreComparedCaseInsensitively();
     void surroundingWhitespaceIsIgnored();
     void internalWhitespaceAndCaseAreSignificant();
@@ -295,8 +297,8 @@ void TestDiskIdentity::incompatibleUniqueIdFormatsAreNotEquivalent() {
 }
 
 void TestDiskIdentity::missingFormatFallsBackToTheText() {
-    // An absent format is not a reason to reject a device: the text
-    // comparison decides and the ambiguity check still applies.
+    // An absent format in the plan is not a reason to reject a device:
+    // the text comparison decides and the ambiguity check still applies.
     const Disk live = makeDisk(0, "Generic USB Disk", 16ull * 1024 * 1024 * 1024,
                                "4C5311644S3ZNB0K", "S3ZNB0K", kFormatEui64);
 
@@ -308,27 +310,77 @@ void TestDiskIdentity::missingFormatFallsBackToTheText() {
     QVERIFY(check.ok());
     QCOMPARE(check.match, DiskIdentityMatch::Match);
 
-    // The live disk does not report a format.
+    // The live disk does not report a format either.
     const Disk withoutFormatLive = makeDisk(0, "Generic USB Disk",
                                             16ull * 1024 * 1024 * 1024,
                                             "4C5311644S3ZNB0K", "S3ZNB0K");
     const std::vector<Disk> withoutFormatDisks{withoutFormatLive};
-    DiskIdentity withFormat;
-    withFormat.uniqueId = "4C5311644S3ZNB0K";
-    withFormat.uniqueIdFormat = kFormatEui64.toStdString();
-    const auto other = ulli::core::checkDiskIdentity(withFormat, 0,
-                                                      withoutFormatDisks);
-    QVERIFY(other.ok());
-    QCOMPARE(other.match, DiskIdentityMatch::Match);
+    const auto both = ulli::core::checkDiskIdentity(withoutFormat, 0,
+                                                     withoutFormatDisks);
+    QVERIFY(both.ok());
+    QCOMPARE(both.match, DiskIdentityMatch::Match);
 
     // A different text is still refused.
     DiskIdentity different;
     different.uniqueId = "4C5311644S3ZNB0L";
-    different.uniqueIdFormat = kFormatEui64.toStdString();
     const auto mismatch = ulli::core::checkDiskIdentity(different, 0,
                                                          withoutFormatDisks);
     QVERIFY(!mismatch.ok());
     QCOMPARE(mismatch.match, DiskIdentityMatch::NotFound);
+}
+
+void TestDiskIdentity::knownFormatIsNotSilentlyLost() {
+    // The plan knew the format, the live disk does not report one: the
+    // meaning of the identifier cannot be confirmed, so the match is
+    // refused instead of being accepted on the text alone.
+    const Disk live = makeDisk(0, "Generic USB Disk", 16ull * 1024 * 1024 * 1024,
+                               "4C5311644S3ZNB0K", "S3ZNB0K");
+    DiskIdentity approved;
+    approved.uniqueId = "4C5311644S3ZNB0K";
+    approved.uniqueIdFormat = kFormatEui64.toStdString();
+    approved.serialNumber = "S3ZNB0K";
+
+    const std::vector<Disk> liveDisks{live};
+    const auto check = ulli::core::checkDiskIdentity(approved, 0, liveDisks);
+    QVERIFY(!check.ok());
+    QCOMPARE(check.match, DiskIdentityMatch::NotFound);
+    QVERIFY(check.disk == nullptr);
+}
+
+void TestDiskIdentity::numericZeroFormatIsAPresentFormat() {
+    // 0 is a valid descriptor type ("Vendor Specific"). It has to be
+    // treated as a known format, not as a missing one.
+    const Disk live = makeDisk(0, "Generic USB Disk", 16ull * 1024 * 1024 * 1024,
+                               "4C5311644S3ZNB0K", "S3ZNB0K", "0");
+    DiskIdentity approved;
+    approved.uniqueId = "4C5311644S3ZNB0K";
+    approved.uniqueIdFormat = "0";
+
+    const std::vector<Disk> liveDisks{live};
+    const auto check = ulli::core::checkDiskIdentity(approved, 0, liveDisks);
+    QVERIFY(check.ok());
+    QCOMPARE(check.match, DiskIdentityMatch::Match);
+
+    // "0" against a different, known format is a mismatch.
+    const Disk otherFormat = makeDisk(0, "Generic USB Disk",
+                                      16ull * 1024 * 1024 * 1024,
+                                      "4C5311644S3ZNB0K", "S3ZNB0K", kFormatEui64);
+    const std::vector<Disk> otherFormatDisks{otherFormat};
+    const auto mismatch = ulli::core::checkDiskIdentity(approved, 0,
+                                                         otherFormatDisks);
+    QVERIFY(!mismatch.ok());
+    QCOMPARE(mismatch.match, DiskIdentityMatch::NotFound);
+
+    // "0" is a known format, so a live disk without a format is refused
+    // as well - the same rule as for every other known format.
+    const Disk withoutFormat = makeDisk(0, "Generic USB Disk",
+                                        16ull * 1024 * 1024 * 1024,
+                                        "4C5311644S3ZNB0K", "S3ZNB0K");
+    const std::vector<Disk> withoutFormatDisks{withoutFormat};
+    const auto lost = ulli::core::checkDiskIdentity(approved, 0,
+                                                     withoutFormatDisks);
+    QVERIFY(!lost.ok());
+    QCOMPARE(lost.match, DiskIdentityMatch::NotFound);
 }
 
 void TestDiskIdentity::formatNamesAreComparedCaseInsensitively() {

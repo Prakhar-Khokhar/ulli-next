@@ -77,9 +77,23 @@ struct IdentityKey {
 // That is the documented fallback: the format only describes how the
 // value is to be read, and the ambiguity check below still refuses the
 // operation when more than one disk carries the identifier.
+//
+// A format that was known when the plan was approved must still be
+// reported by the live disk. If it is gone, the live enumeration cannot
+// confirm that the identifier still has the same meaning, and the match
+// is refused. (The Windows storage stack always reports the format, so
+// a missing one means the value could not be read.)
 bool formatsCompatible(const std::string& approvedFormat,
                        const std::string& liveFormat) {
-    if (approvedFormat.empty() || liveFormat.empty()) return true;
+    if (approvedFormat.empty()) {
+        // The plan does not know the format: the identifier text decides.
+        return true;
+    }
+    if (liveFormat.empty()) {
+        // The plan knew the format, the live disk does not report one:
+        // the meaning of the identifier cannot be confirmed.
+        return false;
+    }
     // The format names come from a fixed vocabulary, so comparing them
     // case insensitively cannot merge two different formats.
     return toUpper(approvedFormat) == toUpper(liveFormat);

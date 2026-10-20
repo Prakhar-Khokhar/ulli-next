@@ -2,6 +2,9 @@
 function(add_ulli_test name)
     qt_add_executable(test_${name} test_${name}.cpp)
     target_link_libraries(test_${name} PRIVATE ulli-core Qt6::Test)
+    # Tests that read a source file at runtime need the source root.
+    target_compile_definitions(test_${name} PRIVATE
+        ULLI_SOURCE_ROOT="${ULLI_SOURCE_ROOT}")
     add_test(NAME ${name} COMMAND test_${name})
 endfunction()
 
@@ -24,6 +27,7 @@ add_ulli_test(result)
 add_ulli_test(catalog)
 add_ulli_test(plan)
 add_ulli_test(diskidentity)
+add_ulli_test(wmiuniqueidformat)
 add_ulli_test(httpdownload)
 add_ulli_test(engine)
 add_ulli_test(allocation)
