@@ -1281,6 +1281,16 @@ function Show-DiskPlan {
             # Let the user pick which NTFS partition on the Windows disk to shrink
             # instead of always targeting C:. Falls back to C: when nothing else is
             # shrinkable or when the combo has no valid choice.
+            # Capture the user's currently chosen partition BEFORE clearing the
+            # combo, otherwise SelectedIndex is -1 afterwards and the selection
+            # snaps back to C: on every update.
+            $prevSelLetter = $null
+            if ($script:ShrinkPartitionCombo.SelectedIndex -ge 0) {
+                $prevSelLetter = $script:ShrinkPartitionCombo.SelectedItem -replace '^([A-Z]): .*$', '$1'
+            }
+            if (-not $prevSelLetter -and $script:DiskPlanShrinkLetter) {
+                $prevSelLetter = $script:DiskPlanShrinkLetter
+            }
             $script:ShrinkPartitionCombo.Items.Clear()
             $diskParts = Get-Partition -DiskNumber $selDiskNum -ErrorAction SilentlyContinue | Sort-Object Offset
             if ($diskParts) {
@@ -1302,12 +1312,6 @@ function Show-DiskPlan {
                 }
             }
             $script:ShrinkPartitionCombo.Enabled = ($script:ShrinkPartitionCombo.Items.Count -gt 0)
-            # Remember the user's chosen partition so re-populating the list on
-            # the next update does not snap the selection back to C:.
-            $prevSelLetter = $null
-            if ($script:ShrinkPartitionCombo.SelectedIndex -ge 0) {
-                $prevSelLetter = $script:ShrinkPartitionCombo.SelectedItem -replace '^([A-Z]): .*$', '$1'
-            }
             $selLetter = 'C'
             $newIndex = -1
             if ($script:ShrinkPartitionCombo.Items.Count -gt 0) {
