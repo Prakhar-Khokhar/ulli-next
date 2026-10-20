@@ -2,6 +2,7 @@
 #include "core/ProgressLog.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QStandardPaths>
 
 #include <iostream>
@@ -11,22 +12,25 @@ namespace ulli::core {
 ProgressLog::ProgressLog(QObject* parent) : QObject(parent) {}
 
 ProgressLog::~ProgressLog() {
+    QMutexLocker lock(&mutex_);
     if (stream_) stream_->flush();
     if (file_) file_->close();
 }
 
 bool ProgressLog::openFile(const QString& path) {
-    logFilePath_ = path;
-    QFileInfo info(path);
-    QDir().mkpath(info.absolutePath());
+    QDir().mkpath(QFileInfo(path).absolutePath());
 
-    file_ = std::make_unique<QFile>(path);
-    if (!file_->open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+    auto file = std::make_unique<QFile>(path);
+    if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
         std::cerr << "WARN: cannot open log file " << path.toStdString() << '\n';
-        file_.reset();
         return false;
     }
-    stream_ = std::make_unique<QTextStream>(file_.get());
+    auto stream = std::make_unique<QTextStream>(file.get());
+
+    QMutexLocker lock(&mutex_);
+    logFilePath_ = path;
+    stream_ = std::move(stream);
+    file_ = std::move(file);
     return true;
 }
 
@@ -35,9 +39,14 @@ void ProgressLog::append(const QString& message, Severity severity) {
     const QString sevStr = severity == Severity::Error
                                ? "Error"
                                : (severity == Severity::Warn ? "Warn" : "Info");
-    if (stream_) {
-        *stream_ << '[' << sevStr << "] [" << ts << "] " << message << '\n';
-        stream_->flush();
+    {
+        // Only the stream write is serialized; the signal is emitted after
+        // the lock is released so re-entrant appends cannot deadlock.
+        QMutexLocker lock(&mutex_);
+        if (stream_) {
+            *stream_ << '[' << sevStr << "] [" << ts << "] " << message << '\n';
+            stream_->flush();
+        }
     }
     emit logAppended(ts, severity, message);
 }

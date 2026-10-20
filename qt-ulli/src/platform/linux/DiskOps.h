@@ -17,7 +17,7 @@ namespace ulli::platform::linux {
 
 class DiskOps final : public core::IPlatformBackend {
 public:
-    std::vector<core::Disk> enumerateDisks() override;
+    std::vector<core::Disk> enumerateDisks(std::string* errorMessage = nullptr) override;
     core::Result<void> preflight(const core::InstallPlan& plan) override;
     core::Result<void> validatePlanForDisk(const core::InstallPlan& plan) override;
     core::Result<std::filesystem::path> resolveIso(const core::Distro& d) override;

@@ -270,10 +270,12 @@ std::vector<core::Disk> translateWmiDisks(const QJsonArray& arr) {
 DiskOps::DiskOps() = default;
 DiskOps::~DiskOps() = default;
 
-std::vector<core::Disk> DiskOps::enumerateDisks() {
+std::vector<core::Disk> DiskOps::enumerateDisks(std::string* errorMessage) {
+    if (errorMessage) errorMessage->clear();
     auto r = Wmi::runScript("list_disks");
     if (!r) {
         std::cerr << "WARN: enumerateDisks: " << r.error().message() << '\n';
+        if (errorMessage) *errorMessage = r.error().message();
         return {};
     }
     const QJsonDocument doc = r.value();
@@ -284,6 +286,7 @@ std::vector<core::Disk> DiskOps::enumerateDisks() {
         arr.append(doc.object());
     } else {
         std::cerr << "WARN: enumerateDisks: unexpected JSON top-level type\n";
+        if (errorMessage) *errorMessage = "Unexpected JSON shape from the disk query";
         return {};
     }
     return translateWmiDisks(arr);
@@ -662,7 +665,11 @@ core::Result<QString> DiskOps::runPowerShellScript(const QString& script) {
 }
 
 core::Result<void> DiskOps::wipeDisk(int diskNumber) {
-    if (diskNumber <= 0) {
+    // Windows disk numbers are 0-based (Get-Disk / diskpart "select disk 0"),
+    // so 0 is a valid target. Only the "not selected" sentinel is rejected.
+    // The system-disk protection lives in validatePlanForDisk(), which the
+    // engine calls before every wipe.
+    if (diskNumber < 0) {
         return core::makeError(core::Error::Kind::InvalidInput,
             "Invalid disk number");
     }
@@ -695,7 +702,7 @@ core::Result<void> DiskOps::createLayout(const core::InstallPlan& plan,
     // Use centralized constant
     const std::uint64_t kStagingSizeBytes = core::kStagingSizeBytes;
 
-    if (plan.targetDiskNumber <= 0) {
+    if (plan.targetDiskNumber < 0) {
         return core::makeError(core::Error::Kind::InvalidInput,
             "createLayout: targetDiskNumber not set");
     }

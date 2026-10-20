@@ -52,6 +52,8 @@ jobs:
 
       - name: Run unit tests
         run: ctest --test-dir build/windows -C Release --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
 
       - name: Package executable and Qt runtime
         shell: pwsh

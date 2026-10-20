@@ -25,7 +25,7 @@ public:
     DiskOps();
     ~DiskOps() override;
 
-    std::vector<core::Disk> enumerateDisks() override;
+    std::vector<core::Disk> enumerateDisks(std::string* errorMessage = nullptr) override;
 
     core::Result<void> preflight(const core::InstallPlan& plan) override;
     core::Result<void> validatePlanForDisk(const core::InstallPlan& plan) override;

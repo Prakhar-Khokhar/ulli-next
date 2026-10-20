@@ -106,9 +106,14 @@ if(WIN32)
     target_link_libraries(ulli-core PUBLIC ole32 oleaut32 advapi32 wbemuuid)
 endif()
 
+# ─── UI library (Widgets; linked by the executable and the UI tests) ────────
+add_library(ulli-ui STATIC ${ULLI_UI_SOURCES})
+target_include_directories(ulli-ui PUBLIC src)
+target_link_libraries(ulli-ui PUBLIC ulli-core Qt6::Gui Qt6::Widgets)
+
 # ─── Executable ──────────────────────────────────────────────────────────────
-qt_add_executable(ulli-qt ${ULLI_APP_SOURCES} ${ULLI_UI_SOURCES})
-target_link_libraries(ulli-qt PRIVATE ulli-core Qt6::Gui Qt6::Widgets)
+qt_add_executable(ulli-qt ${ULLI_APP_SOURCES})
+target_link_libraries(ulli-qt PRIVATE ulli-ui)
 if(WIN32)
     set_target_properties(ulli-qt PROPERTIES WIN32_EXECUTABLE TRUE)
     # Embed distros.json as a resource so the binary works even if the user

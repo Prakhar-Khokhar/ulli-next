@@ -9,6 +9,7 @@
 
 #include <QDateTime>
 #include <QFile>
+#include <QMutex>
 #include <QObject>
 #include <QString>
 #include <QTextStream>
@@ -31,6 +32,7 @@ public:
 
     // Append a log message. Always emits logAppended so the UI can
     // render; also writes to the file if one was opened successfully.
+    // Thread-safe: the install worker and the GUI thread may both append.
     void append(const QString& message,
                 Severity severity = Severity::Info);
 
@@ -41,6 +43,9 @@ signals:
                      QString message);
 
 private:
+    // Guards file_/stream_/logFilePath_. The signal is emitted *outside*
+    // the lock so a slot that appends again cannot deadlock.
+    mutable QMutex mutex_;
     QString logFilePath_;
     std::unique_ptr<QFile> file_;
     std::unique_ptr<QTextStream> stream_;

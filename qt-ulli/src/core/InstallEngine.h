@@ -44,7 +44,10 @@ public:
     virtual ~IPlatformBackend() = default;
 
     // Enumerate all physical disks visible to the installer.
-    virtual std::vector<Disk> enumerateDisks() = 0;
+    // On failure an empty vector is returned and, when errorMessage is
+    // given, a human readable reason is written to it. Implementations
+    // must not block longer than their own timeout.
+    virtual std::vector<Disk> enumerateDisks(std::string* errorMessage = nullptr) = 0;
 
     // Pre-flight: check BitLocker, sudo, etc. Returns NotElevated if
     // the user is not admin/root. Implementations should also call

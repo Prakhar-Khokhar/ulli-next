@@ -39,7 +39,8 @@ public:
     }
 
     // IPlatformBackend interface
-    std::vector<Disk> enumerateDisks() override {
+    std::vector<Disk> enumerateDisks(std::string* errorMessage = nullptr) override {
+        if (errorMessage) errorMessage->clear();
         return disks_;
     }
 

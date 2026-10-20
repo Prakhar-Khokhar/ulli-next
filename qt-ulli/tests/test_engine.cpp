@@ -6,6 +6,8 @@
 #include <QEventLoop>
 #include <QSignalSpy>
 #include <QThread>
+#include <QTemporaryDir>
+#include <QFile>
 #include <QTimer>
 #include <QtTest/QtTest>
 
@@ -37,7 +39,8 @@ public:
     }
 
     // IPlatformBackend interface
-    std::vector<Disk> enumerateDisks() override {
+    std::vector<Disk> enumerateDisks(std::string* errorMessage = nullptr) override {
+        if (errorMessage) errorMessage->clear();
         return disks_;
     }
 
@@ -645,6 +648,114 @@ private slots:
         auto args = finishedSpy.first();
         QVERIFY(args[0].toBool() == false);
         QVERIFY(args[1].toString().contains("Simulated failure"));
+    }
+
+    void customIsoIsAccepted() {
+        QTemporaryDir tmpDir;
+        QVERIFY(tmpDir.isValid());
+        QString isoPath = tmpDir.path() + "/test.iso";
+        QFile f(isoPath);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("hello");
+        f.close();
+
+        MockBackend backend;
+        backend.setExpectations({
+            {"preflight", true},
+            {"validate", true},
+            {"layout", true},
+            {"mount", true},
+            {"copy", true},
+            {"bootentry", true},
+        });
+
+        Disk disk;
+        disk.number = 1;
+        disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
+        backend.setDisks({disk});
+
+        ProgressLog log;
+        InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
+
+        QSignalSpy finishedSpy(&engine, &InstallEngine::finished);
+
+        InstallPlan plan;
+        plan.distroKey = ulli::core::kCustomDistroKey;
+        plan.isoPath = std::filesystem::path(isoPath.toStdString());
+        plan.targetDiskNumber = 1;
+        plan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        plan.strategy = Strategy::UseFreeAll;
+
+        engine.run(std::move(plan));
+
+        waitForFinished(&engine, finishedSpy);
+
+        auto args = finishedSpy.first();
+        QVERIFY(args[0].toBool() == true);
+    }
+
+    void customIsoMissingFileIsRejected() {
+        MockBackend backend;
+        backend.setExpectations({
+            {"preflight", true},
+            {"validate", true},
+        });
+
+        Disk disk;
+        disk.number = 1;
+        disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
+        backend.setDisks({disk});
+
+        ProgressLog log;
+        InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
+
+        QSignalSpy finishedSpy(&engine, &InstallEngine::finished);
+
+        InstallPlan plan;
+        plan.distroKey = ulli::core::kCustomDistroKey;
+        plan.isoPath = std::filesystem::path("/tmp/does-not-exist-ulli.iso");
+        plan.targetDiskNumber = 1;
+        plan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        plan.strategy = Strategy::UseFreeAll;
+
+        engine.run(std::move(plan));
+
+        waitForFinished(&engine, finishedSpy);
+
+        auto args = finishedSpy.first();
+        QVERIFY(args[0].toBool() == false);
+        QVERIFY(args[1].toString().contains("Custom ISO"));
+    }
+
+    void unknownDistroKeyWithoutIsoPathIsRejected() {
+        MockBackend backend;
+        Disk disk;
+        disk.number = 1;
+        disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
+        backend.setDisks({disk});
+
+        ProgressLog log;
+        InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
+
+        QSignalSpy finishedSpy(&engine, &InstallEngine::finished);
+
+        InstallPlan plan;
+        plan.distroKey = "does-not-exist";
+        plan.isoPath = std::filesystem::path();
+        plan.targetDiskNumber = 1;
+        plan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        plan.strategy = Strategy::UseFreeAll;
+
+        engine.run(std::move(plan));
+
+        waitForFinished(&engine, finishedSpy, 1000);
+
+        auto args = finishedSpy.first();
+        QVERIFY(args[0].toBool() == false);
+        QVERIFY(args[1].toString().contains("Unknown distro key"));
     }
 
 private:

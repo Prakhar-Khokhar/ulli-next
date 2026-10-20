@@ -22,6 +22,31 @@ constexpr int kProgressRefind    = 85;
 constexpr int kProgressBootEntry = 90;
 constexpr int kProgressCleanup   = 95;
 constexpr int kProgressDone      = 100;
+
+// A custom ISO is not in the catalog, so there is no expected checksum to
+// compare against. We still verify that the path points at a usable file so
+// a typo cannot reach the partitioning stage.
+Result<void> validateCustomIso(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) {
+        return makeError(Error::Kind::NotFound,
+                         "Custom ISO file does not exist: " + path.string());
+    }
+    if (!std::filesystem::is_regular_file(path, ec) || ec) {
+        return makeError(Error::Kind::InvalidInput,
+                         "Custom ISO path is not a regular file: " + path.string());
+    }
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec) {
+        return makeError(Error::Kind::Io,
+                         "Cannot read custom ISO size: " + path.string());
+    }
+    if (size == 0) {
+        return makeError(Error::Kind::InvalidInput,
+                         "Custom ISO file is empty: " + path.string());
+    }
+    return makeOk();
+}
 }
 
 InstallEngine::InstallEngine(std::unique_ptr<IPlatformBackend> backend,
@@ -81,9 +106,15 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
         return makeError(Error::Kind::InvalidInput, "Install plan failed validation");
     }
     const Distro* distro = catalog_->find(plan.distroKey);
-    if (!distro) {
+    if (!distro && plan.isoPath.empty()) {
+        // Neither a known distro nor a custom ISO path: nothing to install.
         return makeError(Error::Kind::InvalidInput,
                          "Unknown distro key: " + plan.distroKey);
+    }
+    if (!distro) {
+        log_->append(QString("Using custom ISO: %1")
+                         .arg(QString::fromStdString(plan.isoPath.string())),
+                     ProgressLog::Severity::Info);
     }
 
     // 1. Pre-flight
@@ -95,9 +126,17 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     // 2. Resolve ISO (download if needed, verify checksum)
     emit stageChanged("Resolving ISO");
     emit progressChanged(kProgressIso);
-    auto isoR = backend_->resolveIso(*distro);
-    if (!isoR) return makeError(isoR.error().kind(), isoR.error().message());
-    plan.isoPath = isoR.value();
+    if (distro) {
+        // Catalog distro: the backend resolves (and if needed downloads and
+        // checksum-verifies) the ISO and returns the resolved path.
+        auto isoR = backend_->resolveIso(*distro);
+        if (!isoR) return makeError(isoR.error().kind(), isoR.error().message());
+        plan.isoPath = isoR.value();
+    } else {
+        // Custom ISO: the plan already carries the path. There is no
+        // catalog checksum for it, so validate the file itself.
+        if (auto r = validateCustomIso(plan.isoPath); !r) return r;
+    }
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     // 3. Resize
@@ -168,14 +207,16 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     }
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
-    // 7. Distro-specific patches
+    // 7. Distro-specific patches (only meaningful for a catalog distro)
     emit stageChanged("Patching distro boot configuration");
     emit progressChanged(kProgressPatch);
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
-    if (auto r = backend_->patchDistroBootConfig(*distro, plan); !r) {
-        log_->append(QString("Distro config patch failed: %1")
-                         .arg(r.error().qmessage()),
-                     ProgressLog::Severity::Warn);
+    if (distro) {
+        if (auto r = backend_->patchDistroBootConfig(*distro, plan); !r) {
+            log_->append(QString("Distro config patch failed: %1")
+                             .arg(r.error().qmessage()),
+                         ProgressLog::Severity::Warn);
+        }
     }
 
     // 8. rEFInd

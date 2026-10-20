@@ -22,6 +22,16 @@ namespace ulli::core {
 constexpr std::uint64_t kStagingSizeBytes = 7ull * 1024 * 1024 * 1024;
 constexpr std::uint64_t kMinFullInstallShrinkBytes = 30ull * 1024 * 1024 * 1024;
 
+// Distro key used when the user points at an ISO that is not in the catalog.
+// The catalog lookup legitimately fails for such a plan; the ISO path carried
+// by the plan is used instead (see InstallEngine::runStages).
+constexpr const char* kCustomDistroKey = "custom";
+
+// Sentinel for "no target disk selected". Windows disk numbers are 0-based
+// (Get-Disk / diskpart "select disk 0"), so 0 is a *valid* disk number and
+// must not double as the "unset" marker.
+constexpr int kUnsetDiskNumber = -1;
+
 enum class Strategy {
     ShrinkAll,        // shrink C: by LinuxSize + boot + rEFInd
     UseFreeAll,       // use existing unallocated, do not touch C:
@@ -48,7 +58,7 @@ struct InstallPlan {
     std::filesystem::path isoPath;     // resolved ISO file
 
     // Target disk
-    int targetDiskNumber = 0;
+    int targetDiskNumber = kUnsetDiskNumber;  // kUnsetDiskNumber == "not chosen yet"
     std::optional<char> shrinkDriveLetter; // only set for OtherDriveShrink
     std::uint64_t shrinkAmountBytes = 0;  // for ShrinkAll / UseFreeBoot / OtherDriveShrink
 

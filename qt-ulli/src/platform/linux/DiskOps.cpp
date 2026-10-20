@@ -6,7 +6,12 @@
 
 namespace ulli::platform::linux {
 
-std::vector<core::Disk> DiskOps::enumerateDisks() { return {}; }
+std::vector<core::Disk> DiskOps::enumerateDisks(std::string* errorMessage) {
+    if (errorMessage) {
+        *errorMessage = "Disk enumeration is not implemented for Linux yet";
+    }
+    return {};
+}
 
 core::Result<void> DiskOps::preflight(const core::InstallPlan&) {
     if (!platform::isElevated()) return core::makeNotElevated();

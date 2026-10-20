@@ -86,6 +86,27 @@ private slots:
         p.shrinkAmountBytes = p.linuxSizeBytes;
         QVERIFY(!p.valid());
     }
+
+    void diskZeroIsValid() {
+        ulli::core::InstallPlan p;
+        p.distroKey = "mint";
+        p.isoPath = "/tmp/x.iso";
+        p.targetDiskNumber = 0;
+        p.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        p.strategy = ulli::core::Strategy::UseFreeAll;
+        QVERIFY(p.valid());
+    }
+
+    void unsetDiskNumberIsInvalid() {
+        ulli::core::InstallPlan p;
+        p.distroKey = "mint";
+        p.isoPath = "/tmp/x.iso";
+        p.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        p.strategy = ulli::core::Strategy::UseFreeAll;
+        QVERIFY(!p.valid());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestPlan)

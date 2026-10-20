@@ -42,6 +42,11 @@ public:
     QString customIsoPath() const;
     bool isCustom() const;
 
+    // True when the selected ISO can be installed: the catalog ISO is
+    // present and its checksum verified, or a custom ISO file has been
+    // chosen and exists on disk. The install flow gates on this.
+    bool isoReady() const { return isoReady_; }
+
     // Set a callback for downloading ISOs. The callback should perform
     // the download and verification, reporting progress via the progress
     // callback. This allows the backend to handle the actual download.
@@ -56,6 +61,7 @@ public:
 signals:
     void selectionChanged();
     void isoStatusChanged(const QString& distroKey, const QString& status);
+    void isoReadinessChanged(bool ready);
 
 private slots:
     void onCustomToggled(bool checked);
@@ -66,6 +72,8 @@ private slots:
 
 private:
     void updateIsoStatusDisplay();
+    void setIsoReady(bool ready);
+    void updateCustomIsoReadiness();
     void verifyIsoAsync(const core::Distro* distro);
     static bool verifyIsoHash(const core::Distro* distro,
                               const std::filesystem::path& isoPath);
@@ -88,6 +96,10 @@ private:
     // ISO is "verified" without actually checking its SHA-256.
     QFutureWatcher<bool>* verifyWatcher_ = nullptr;
     QString verifyingKey_;
+
+    // True when the selected ISO is present and verified (or a custom ISO
+    // file has been picked). The main window uses this to gate the install.
+    bool isoReady_ = false;
 };
 
 }  // namespace ulli::ui

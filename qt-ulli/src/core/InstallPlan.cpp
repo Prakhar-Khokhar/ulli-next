@@ -9,7 +9,8 @@ QString InstallPlan::summary() const {
     QString s;
     s += QString::fromStdString("Distro: " + distroKey + "\n");
     s += QString::fromStdString("ISO:    " + isoPath.string() + "\n");
-    s += QString("Disk:   #%1\n").arg(targetDiskNumber);
+    s += QString("Disk:   #%1\n").arg(targetDiskNumber < 0 ? QString("not selected")
+                                                            : QString::number(targetDiskNumber));
     switch (strategy) {
         case Strategy::ShrinkAll: s += "Plan:   Shrink target by Linux + boot + rEFInd\n"; break;
         case Strategy::UseFreeAll: s += "Plan:   Use existing unallocated, do not touch OS\n"; break;
@@ -38,7 +39,9 @@ bool InstallPlan::valid() const {
     // (backend_->resolveIso). It must not be required here, otherwise a
     // catalog distro whose ISO is already cached would be rejected before
     // resolution — see Bug A (ISO rediscovery after restart).
-    if (targetDiskNumber <= 0) return false;
+    // The target disk must be chosen. Disk numbers are 0-based on Windows
+    // (Get-Disk / diskpart), so only kUnsetDiskNumber (-1) means "unset".
+    if (targetDiskNumber < 0) return false;
     if (bootSizeBytes < (1ull * 1024 * 1024 * 1024)) return false;   // 1 GiB min
     
     // Validate based on allocation mode

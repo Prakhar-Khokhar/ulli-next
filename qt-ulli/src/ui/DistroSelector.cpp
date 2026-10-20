@@ -115,6 +115,7 @@ void DistroSelector::onCustomToggled(bool checked) {
     statusLabel_->clear();
     if (checked) {
         currentDistro_ = nullptr;
+        updateCustomIsoReadiness();
     } else {
         onComboIndexChanged(combo_->currentIndex());
     }
@@ -127,6 +128,7 @@ void DistroSelector::onComboIndexChanged(int index) {
         downloadBtn_->setEnabled(false);
         downloadProgress_->setVisible(false);
         statusLabel_->clear();
+        setIsoReady(false);
         return;
     }
     const QString key = combo_->currentData().toString();
@@ -140,6 +142,7 @@ void DistroSelector::updateIsoStatusDisplay() {
         downloadBtn_->setEnabled(false);
         downloadProgress_->setVisible(false);
         statusLabel_->clear();
+        setIsoReady(false);
         return;
     }
 
@@ -162,6 +165,7 @@ void DistroSelector::updateIsoStatusDisplay() {
         downloadBtn_->setText(tr("Download ISO"));
         downloadProgress_->setVisible(false);
         downloadProgress_->setValue(0);
+        setIsoReady(false);
         emit isoStatusChanged(combo_->currentData().toString(), statusLabel_->text());
         return;
     }
@@ -169,12 +173,14 @@ void DistroSelector::updateIsoStatusDisplay() {
     // File exists — verify its SHA-256 against the catalog before claiming
     // it is valid. Run off the UI thread so a multi-GB ISO does not freeze
     // the UI; never show "verified" without actually checking the hash.
+    // Until the check completes the ISO is *not* ready to install.
     const QString key = QString::fromStdString(currentDistro_->key());
     verifyingKey_ = key;
     statusLabel_->setText(tr("Verifying ISO checksum…"));
     statusLabel_->setStyleSheet("color: #0066cc; font-size: 11px;");
     downloadBtn_->setEnabled(false);
     downloadProgress_->setVisible(false);
+    setIsoReady(false);
 
     verifyWatcher_ = new QFutureWatcher<bool>(this);
     connect(verifyWatcher_, &QFutureWatcher<bool>::finished,
@@ -236,12 +242,14 @@ void DistroSelector::onIsoVerificationFinished() {
         statusLabel_->setStyleSheet("color: #2a7; font-size: 11px;");
         downloadBtn_->setEnabled(false);
         downloadBtn_->setText(tr("ISO Ready"));
+        setIsoReady(true);
     } else {
         statusLabel_->setText(tr("⚠ ISO found but verification failed: %1")
                                   .arg(QString::fromStdString(isoPath.string())));
         statusLabel_->setStyleSheet("color: #c00; font-size: 11px;");
         downloadBtn_->setEnabled(true);
         downloadBtn_->setText(tr("Verify / Re-download"));
+        setIsoReady(false);
     }
     downloadProgress_->setVisible(false);
     downloadProgress_->setValue(0);
@@ -259,7 +267,28 @@ void DistroSelector::onBrowseClicked() {
         tr("ISO Files (*.iso);;All Files (*)"));
     if (f.isEmpty()) return;
     customPath_->setText(f);
+    updateCustomIsoReadiness();
     emit selectionChanged();
+}
+
+void DistroSelector::setIsoReady(bool ready) {
+    if (isoReady_ == ready) return;
+    isoReady_ = ready;
+    emit isoReadinessChanged(isoReady_);
+}
+
+void DistroSelector::updateCustomIsoReadiness() {
+    // A custom ISO has no catalog checksum, so readiness only means the
+    // file is present. The engine re-validates the file before it touches
+    // any disk.
+    const QString path = customPath_->text();
+    if (path.isEmpty()) {
+        setIsoReady(false);
+        return;
+    }
+    std::error_code ec;
+    setIsoReady(std::filesystem::is_regular_file(
+        std::filesystem::path(path.toStdString()), ec) && !ec);
 }
 
 void DistroSelector::onDownloadClicked() {
