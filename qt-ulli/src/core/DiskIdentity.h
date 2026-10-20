@@ -23,6 +23,10 @@
 //   * If the device is still there but under a different disk number the
 //     operation is refused and the plan has to be reviewed again, so a
 //     number change can never silently retarget another disk.
+//   * The unique id is only equivalent to another unique id of the same
+//     format. The format describes which kind of identifier the value is
+//     (see UniqueIdFormat below), so the same text under two different
+//     formats describes two different things.
 
 #pragma once
 
@@ -33,15 +37,25 @@
 
 namespace ulli::core {
 
-// Normalizes a raw device identifier for comparison:
-//   * whitespace, hyphens and underscores are removed (vendors pad and
-//     format serials inconsistently)
-//   * the value is upper-cased
-std::string normalizeDiskIdentifier(const std::string& raw);
+// Prepares a raw device identifier for comparison.
+//
+// Only the surrounding whitespace is removed. The identifiers are opaque
+// values, and every further transformation can merge two different
+// devices: dropping a hyphen would make "AB-CD" and "A-BCD" equal, and
+// folding the case would make "AB" and "ab" equal. Such a collision is
+// exactly the false positive that must never happen here, because it
+// can send a destructive operation to the wrong disk.
+//
+// The surrounding whitespace is trimmed because the serial strings of
+// SCSI and ATA devices are space padded (SCSI VPD page 0x80, ATA
+// IDENTIFY DEVICE); the padding is not part of the serial.
+std::string trimDiskIdentifier(const std::string& raw);
 
-// True when the (already normalized) identifier carries no information:
-// it is empty or one of the placeholder values that many devices report.
-bool isPlaceholderDiskIdentifier(const std::string& normalized);
+// True when the identifier carries no information: it is empty or one of
+// the placeholder values that many devices report ("0000000000",
+// "NONE", ...). The placeholder vocabulary is a fixed list, so it is
+// compared case insensitively: rejecting more is the safe direction.
+bool isPlaceholderDiskIdentifier(const std::string& identifier);
 
 enum class DiskIdentityMatch {
     Match,             // the live disk is the approved disk

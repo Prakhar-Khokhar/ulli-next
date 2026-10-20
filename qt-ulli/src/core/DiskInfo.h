@@ -47,14 +47,19 @@ struct Partition {
 // capacity are not an identity either: two identical drives share both.
 // The storage layer therefore exposes identifiers of the device itself:
 //
-//   * uniqueId      - the storage device id (SCSI/ATA/NVMe/USB). It is a
-//                     property of the hardware and survives a repartition,
-//                     so it is the preferred identifier.
-//   * uniqueIdFormat- how the storage stack spells the id ("SCSI",
-//                     "ATA", "NVMe", "USB", ...). Purely informational.
-//   * serialNumber  - the device serial. Weaker than the unique id: some
-//                     vendors report placeholders and some enclosures
-//                     clone the value.
+//   * uniqueId      - the storage device id. On Windows it is built from
+//                     the device identification descriptor (SCSI VPD page
+//                     0x83) and is an opaque value: every character of it
+//                     is significant.
+//   * uniqueIdFormat- which kind of descriptor the id was built from:
+//                     "Vendor Specific" (0), "Vendor Id" (1), "EUI64"
+//                     (2), "FCPH Name" (3) or "SCSI Name String" (8). Two
+//                     ids are only equivalent when their text matches
+//                     *and* their format matches.
+//   * serialNumber  - the device serial from SCSI VPD page 0x80 or ATA
+//                     IDENTIFY. Weaker than the unique id: some vendors
+//                     report placeholders and some enclosures clone the
+//                     value.
 //
 // The comparison rules (and the normalization of the raw values) live in
 // core/DiskIdentity.h.

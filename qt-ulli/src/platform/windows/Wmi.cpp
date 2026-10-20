@@ -77,6 +77,9 @@ $out = foreach ($d in $disks) {
     # device and survives a repartition, SerialNumber is the (weaker)
     # hardware serial. Both are needed to tell two identical disks
     # apart - the disk number alone is only an enumeration index.
+    # UniqueIdFormat names the descriptor type the unique id was built
+    # from (Vendor Specific, Vendor Id, EUI64, FCPH Name, SCSI Name
+    # String); it is part of the identity and is compared with it.
     [pscustomobject]@{
         Number        = [int]$d.Number
         Model         = if ($d.Model) { [string]$d.Model } else { '' }

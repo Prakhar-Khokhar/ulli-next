@@ -22,6 +22,8 @@ const char* const kPlaceholderIdentifiers[] = {
     "NOTAVAILABLE",
     "TOBEFILLEDBYOEM",
     "TOBEFILLEDBYOEM.",
+    "TO BE FILLED BY O.E.M.",
+    "TO BE FILLED BY OEM",
     "0123456789",
     "1234567890",
     "0123456789ABCDEF",
@@ -34,7 +36,18 @@ const char* const kPlaceholderIdentifiers[] = {
 bool consistsOf(char c, const std::string& s) {
     return !s.empty() &&
            std::all_of(s.begin(), s.end(),
-                       [c](char x) { return x == c; });
+                       [c](char x) {
+                           return std::toupper(static_cast<unsigned char>(x)) == c;
+                       });
+}
+
+std::string toUpper(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (const char c : s) {
+        out.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+    }
+    return out;
 }
 
 enum class IdKind { UniqueId, Serial };
@@ -45,55 +58,103 @@ const char* idKindName(IdKind kind) {
 
 struct IdentityKey {
     IdKind kind = IdKind::UniqueId;
-    std::string value;  // normalized
+    std::string value;   // trimmed, compared verbatim
+    std::string format;  // UniqueIdFormat, only meaningful for the unique id
 };
+
+// The unique id of a disk is built from the device identification
+// descriptor (SCSI VPD page 0x83) and the format says which kind of
+// descriptor it was: "Vendor Specific" (0), "Vendor Id" (1), "EUI64"
+// (2), "FCPH Name" (3) or "SCSI Name String" (8).
+//
+// Two identifiers are only equivalent when their text is equal *and*
+// they come from the same kind of descriptor: the same text under two
+// different formats describes two different things (for example a
+// "SCSI Name String" is an iSCSI name, while an "EUI64" is a hex
+// address), so they must not be treated as the same device.
+//
+// If one side does not report a format, the text comparison decides.
+// That is the documented fallback: the format only describes how the
+// value is to be read, and the ambiguity check below still refuses the
+// operation when more than one disk carries the identifier.
+bool formatsCompatible(const std::string& approvedFormat,
+                       const std::string& liveFormat) {
+    if (approvedFormat.empty() || liveFormat.empty()) return true;
+    // The format names come from a fixed vocabulary, so comparing them
+    // case insensitively cannot merge two different formats.
+    return toUpper(approvedFormat) == toUpper(liveFormat);
+}
 
 // The identifiers of an identity, strongest first.
 std::vector<IdentityKey> identityKeys(const DiskIdentity& id) {
     std::vector<IdentityKey> keys;
 
-    const std::string unique = normalizeDiskIdentifier(id.uniqueId);
+    const std::string unique = trimDiskIdentifier(id.uniqueId);
     if (!isPlaceholderDiskIdentifier(unique)) {
-        keys.push_back({IdKind::UniqueId, unique});
+        keys.push_back({IdKind::UniqueId, unique,
+                        trimDiskIdentifier(id.uniqueIdFormat)});
     }
 
-    const std::string serial = normalizeDiskIdentifier(id.serialNumber);
+    const std::string serial = trimDiskIdentifier(id.serialNumber);
     if (!isPlaceholderDiskIdentifier(serial)) {
-        keys.push_back({IdKind::Serial, serial});
+        keys.push_back({IdKind::Serial, serial, std::string()});
     }
 
     return keys;
 }
 
-// The normalized identifier of a live disk for the given kind. An empty
-// string means "this disk does not report that identifier".
-std::string diskKey(const Disk& disk, IdKind kind) {
+// The identifier of a live disk for the given kind. An empty string
+// means "this disk does not report that identifier".
+std::string diskKeyValue(const Disk& disk, IdKind kind) {
     const std::string raw = kind == IdKind::UniqueId ? disk.identity.uniqueId
                                                       : disk.identity.serialNumber;
-    const std::string normalized = normalizeDiskIdentifier(raw);
-    return isPlaceholderDiskIdentifier(normalized) ? std::string() : normalized;
+    const std::string trimmed = trimDiskIdentifier(raw);
+    return isPlaceholderDiskIdentifier(trimmed) ? std::string() : trimmed;
+}
+
+std::string diskKeyFormat(const Disk& disk, IdKind kind) {
+    if (kind != IdKind::UniqueId) return std::string();
+    return trimDiskIdentifier(disk.identity.uniqueIdFormat);
+}
+
+// True when the live disk carries the approved identifier.
+bool diskMatchesKey(const Disk& disk, const IdentityKey& key) {
+    if (diskKeyValue(disk, key.kind) != key.value) return false;
+    if (key.kind != IdKind::UniqueId) return true;
+    return formatsCompatible(key.format, diskKeyFormat(disk, key.kind));
+}
+
+// A readable description of the identifier that was looked for.
+std::string describeKey(const IdentityKey& key) {
+    std::string text = std::string(idKindName(key.kind)) + " (" + key.value + ")";
+    if (key.kind == IdKind::UniqueId && !key.format.empty()) {
+        text += " [" + key.format + "]";
+    }
+    return text;
 }
 
 }  // namespace
 
-std::string normalizeDiskIdentifier(const std::string& raw) {
-    std::string out;
-    out.reserve(raw.size());
-    for (const char c : raw) {
-        const unsigned char u = static_cast<unsigned char>(c);
-        if (std::isspace(u) != 0) continue;
-        if (c == '-' || c == '_') continue;
-        out.push_back(static_cast<char>(std::toupper(u)));
+std::string trimDiskIdentifier(const std::string& raw) {
+    std::size_t begin = 0;
+    std::size_t end = raw.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(raw[begin])) != 0) {
+        ++begin;
     }
-    return out;
+    while (end > begin && std::isspace(static_cast<unsigned char>(raw[end - 1])) != 0) {
+        --end;
+    }
+    return raw.substr(begin, end - begin);
 }
 
-bool isPlaceholderDiskIdentifier(const std::string& normalized) {
-    if (normalized.empty()) return true;
-    if (consistsOf('0', normalized)) return true;
-    if (consistsOf('F', normalized)) return true;
+bool isPlaceholderDiskIdentifier(const std::string& identifier) {
+    const std::string trimmed = trimDiskIdentifier(identifier);
+    if (trimmed.empty()) return true;
+    if (consistsOf('0', trimmed)) return true;
+    if (consistsOf('F', trimmed)) return true;
+    const std::string upper = toUpper(trimmed);
     for (const char* placeholder : kPlaceholderIdentifiers) {
-        if (normalized == placeholder) return true;
+        if (upper == placeholder) return true;
     }
     return false;
 }
@@ -120,7 +181,7 @@ DiskIdentityCheck checkDiskIdentity(const DiskIdentity& approved,
     const Disk* found = nullptr;
     int matches = 0;
     for (const Disk& disk : liveDisks) {
-        if (diskKey(disk, key.kind) != key.value) continue;
+        if (!diskMatchesKey(disk, key)) continue;
         ++matches;
         if (found == nullptr) found = &disk;
     }
@@ -130,7 +191,7 @@ DiskIdentityCheck checkDiskIdentity(const DiskIdentity& approved,
         result.detail =
             std::string("The approved disk is no longer present: no disk "
                         "reports the same ") +
-            idKindName(key.kind) + " (" + key.value + ").";
+            describeKey(key) + ".";
         return result;
     }
 
@@ -138,8 +199,8 @@ DiskIdentityCheck checkDiskIdentity(const DiskIdentity& approved,
         result.match = DiskIdentityMatch::Ambiguous;
         result.detail =
             std::string("More than one disk reports the same ") +
-            idKindName(key.kind) + " (" + key.value +
-            "). The target disk is not unique - refusing to modify any disk.";
+            describeKey(key) +
+            ". The target disk is not unique - refusing to modify any disk.";
         return result;
     }
 
