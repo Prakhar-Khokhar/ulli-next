@@ -2,7 +2,7 @@
 # PowerShell GUI Version - Fixed unit conversions for proper partition placement
 # Run as Administrator: powershell -ExecutionPolicy Bypass -File linux_installer.ps1
 # Distributions: Linux Mint 22.3 "Zena" (Cinnamon Edition), CachyOS Desktop, Ubuntu 26.04 LTS, Kubuntu 26.04 LTS, Debian Live 13.7.0 KDE, Fedora 44 KDE
-# Optional rEFInd boot manager on a dedicated FAT32 partition with ext4 driver
+# Optional RefindPlus boot manager on a dedicated FAT32 partition with ext4 driver
 
 #Requires -Version 5.1
 
@@ -30,9 +30,11 @@ Add-Type -AssemblyName System.Drawing
 # Global variables
 $script:MinPartitionSizeGB = 7
 $script:MinLinuxSizeGB = 20
-$script:RefindUrl = "https://sourceforge.net/projects/refind/files/0.14.2/refind-bin-0.14.2.zip/download"
-$script:RefindFilename = "refind-bin-0.14.2.zip"
-$script:RefindSizeMB = 100  # 100 MB FAT32 partition for rEFInd
+$script:RefindPlusUrl = "https://github.com/RefindPlusRepo/RefindPlus/releases/download/v0.14.2.AF/x64-RefindPlus_001402-AF.zip"
+$script:RefindPlusFilename = "x64-RefindPlus_001402-AF.zip"
+$script:RefindPlusSha256 = "8e3aae2fd622e5f5632ef57f6cf8b692c14d278416c936da535779d2e4133434"
+$script:RefindPlusSizeMB = 100  # 100 MB FAT32 partition for RefindPlus
+$script:RefindPlusVersion = "v0.14.2.AF"
 
 # ─── Distro Data Table ────────────────────────────────────────────────────────
 $script:Distros = [ordered]@{
@@ -383,9 +385,9 @@ $autoRestartCheck.Size = New-Object System.Drawing.Size(300, 25)
 $autoRestartCheck.Checked = $true
 $form.Controls.Add($autoRestartCheck)
 
-# rEFInd checkbox
+# RefindPlus checkbox
 $refindCheck = New-Object System.Windows.Forms.CheckBox
-$refindCheck.Text = "Install rEFInd boot manager  -  requires disabling Secure Boot"
+$refindCheck.Text = "Install RefindPlus boot manager  -  requires disabling Secure Boot"
 $refindCheck.Font = $normalFont
 $refindCheck.Location = New-Object System.Drawing.Point(10, 503)
 $refindCheck.Size = New-Object System.Drawing.Size(680, 25)
@@ -632,7 +634,7 @@ function Format-AfterLayout {
                 $lines += "  LINUX_LIVE (FAT32)     $BootPartSizeGB GB  <-- $DistroName live boot"
             }
             if ($UseRefind) {
-                $lines += "  REFIND (FAT32)         0.1 GB  <-- rEFInd boot manager"
+                $lines += "  REFIND (FAT32)         0.1 GB  <-- RefindPlus boot manager"
             }
             continue
         }
@@ -654,7 +656,7 @@ function Format-AfterLayout {
         }
         $lines += "  LINUX_LIVE (FAT32)     $BootPartSizeGB GB  <-- $DistroName live boot"
         if ($UseRefind) {
-            $lines += "  REFIND (FAT32)         0.1 GB  <-- rEFInd boot manager"
+            $lines += "  REFIND (FAT32)         0.1 GB  <-- RefindPlus boot manager"
         }
     }
 
@@ -720,7 +722,13 @@ function New-UefiBootEntry {
     $bootCreated = $false
     try {
         $copyOutput = & bcdedit.exe /copy "{bootmgr}" /d "`"$DistroName`"" 2>&1
+        $copyExitCode = $LASTEXITCODE
         $copyOutputStr = $copyOutput -join " "
+
+        if ($copyExitCode -ne 0) {
+            Write-LogMessage "bcdedit /copy failed with exit code $copyExitCode`: $copyOutputStr" -IsError
+            return $false
+        }
 
         if ($copyOutputStr -match '\{[0-9a-fA-F-]+\}') {
             $newGuid = $matches[0]
@@ -734,18 +742,27 @@ function New-UefiBootEntry {
             Write-LogMessage "Setting device=partition=$DevicePartition path=$EfiPath"
 
             $r1 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "device", "partition=$DevicePartition" -Wait -PassThru -NoNewWindow
-            $r2 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "path", $EfiPath -Wait -PassThru -NoNewWindow
-            Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "description", "`"$DistroName`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
-            $r3 = Start-Process "bcdedit.exe" -ArgumentList "/set", "{fwbootmgr}", "displayorder", $newGuid, "/addfirst" -Wait -PassThru -NoNewWindow
-            $r4 = Start-Process "bcdedit.exe" -ArgumentList "/set", "{fwbootmgr}", "default", $newGuid -Wait -PassThru -NoNewWindow
-
-            if ($r1.ExitCode -eq 0 -and $r2.ExitCode -eq 0 -and $r3.ExitCode -eq 0 -and $r4.ExitCode -eq 0) {
-                Write-LogMessage "UEFI boot entry created and set as default!"
-                $bootCreated = $true
-            } else {
-                Write-LogMessage "Some bcdedit commands failed (exit codes: device=$($r1.ExitCode), path=$($r2.ExitCode), displayorder=$($r3.ExitCode), default=$($r4.ExitCode))" -IsError
-                Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue
+            if ($r1.ExitCode -ne 0) {
+                Write-LogMessage "Failed to set device for $newGuid (exit $($r1.ExitCode))" -IsError
+                Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+                return $false
             }
+            $r2 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "path", $EfiPath -Wait -PassThru -NoNewWindow
+            if ($r2.ExitCode -ne 0) {
+                Write-LogMessage "Failed to set path for $newGuid (exit $($r2.ExitCode))" -IsError
+                Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+                return $false
+            }
+            $rDesc = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "description", "`"$DistroName`"" -Wait -PassThru -NoNewWindow
+            if ($rDesc.ExitCode -ne 0) {
+                Write-LogMessage "Failed to set description for $newGuid (exit $($rDesc.ExitCode))" -IsError
+            }
+
+            $r3 = $null
+            $r4 = $null
+
+            Write-LogMessage "UEFI boot entry created (firmware default/boot order left unchanged)."
+            $bootCreated = $true
         } else {
             Write-LogMessage "bcdedit /copy did not return a GUID: $copyOutputStr" -IsError
         }
@@ -1215,7 +1232,7 @@ function Show-DiskPlan {
         $useRefind = $refindCheck.Checked
         $refindGB = if ($useRefind) { 0.1 } else { 0 }
         # Live-only mode bypasses the Linux install partition entirely: only
-        # the boot partition (+ optional rEFInd partition) needs space.
+        # the boot partition (+ optional RefindPlus partition) needs space.
         $liveOnly = $liveOnlyCheck.Checked
         $totalNeededGB = if ($liveOnly) { $script:BootPartSizeGB + $refindGB } else { $LinuxSizeGB + $script:BootPartSizeGB + $refindGB }
         $sizeGroup.Visible = -not $liveOnly
@@ -1342,7 +1359,7 @@ function Show-DiskPlan {
             $canFreeAll = ($usableFreeGB -ge ($totalNeededGB + 1))
             $canFreeBoot = ($usableFreeGB -ge ($script:BootPartSizeGB + $refindGB + 1))
 
-            $refindNote = if ($useRefind) { " + rEFInd (0.1 GB)" } else { "" }
+            $refindNote = if ($useRefind) { " + RefindPlus (0.1 GB)" } else { "" }
             if ($liveOnly) {
                 # The freed gap must be larger than the boot partition plus the
                 # gap scan's alignment/buffer, so shrink 1 GB more than needed.
@@ -1408,13 +1425,13 @@ function Show-DiskPlan {
                     $changeLines += "  $step. Create $script:BootPartSizeGB GB FAT32 boot partition (LINUX_LIVE) with $distroName files"
                     if ($useRefind) {
                         $step++
-                        $changeLines += "  $step. Create 100 MB FAT32 rEFInd partition"
+                        $changeLines += "  $step. Create 100 MB FAT32 RefindPlus partition"
                     }
                     $step++
                     $changeLines += "  $step. Leave $LinuxSizeGB GB unallocated for Linux installation"
                     $step++
                     if ($useRefind) {
-                        $changeLines += "  $step. Install rEFInd boot manager and configure UEFI boot entry"
+                        $changeLines += "  $step. Install RefindPlus boot manager and configure UEFI boot entry"
                     } else {
                         $changeLines += "  $step. Configure UEFI boot entry for $distroName"
                     }
@@ -1430,7 +1447,7 @@ function Show-DiskPlan {
                     $changeLines += "  $step. Create $($script:BootPartSizeGB) GB FAT32 boot partition (LINUX_LIVE) in existing free space"
                     if ($useRefind) {
                         $step++
-                        $changeLines += "  $step. Create 100 MB FAT32 rEFInd partition"
+                        $changeLines += "  $step. Create 100 MB FAT32 RefindPlus partition"
                     }
                     $step++
                     $remainFreeGB = [math]::Round($usableFreeGB - $script:BootPartSizeGB - $refindGB, 1)
@@ -1441,7 +1458,7 @@ function Show-DiskPlan {
                     }
                     $step++
                     if ($useRefind) {
-                        $changeLines += "  $step. Install rEFInd boot manager and configure UEFI boot entry"
+                        $changeLines += "  $step. Install RefindPlus boot manager and configure UEFI boot entry"
                     } else {
                         $changeLines += "  $step. Configure UEFI boot entry for $distroName"
                     }
@@ -1458,13 +1475,13 @@ function Show-DiskPlan {
                     $changeLines += "  $step. Create $($script:BootPartSizeGB) GB FAT32 boot partition (LINUX_LIVE) in existing free space"
                     if ($useRefind) {
                         $step++
-                        $changeLines += "  $step. Create 100 MB FAT32 rEFInd partition"
+                        $changeLines += "  $step. Create 100 MB FAT32 RefindPlus partition"
                     }
                     $step++
                     $changeLines += "  $step. Leave $LinuxSizeGB GB (from C: shrink) unallocated for Linux"
                     $step++
                     if ($useRefind) {
-                        $changeLines += "  $step. Install rEFInd boot manager and configure UEFI boot entry"
+                        $changeLines += "  $step. Install RefindPlus boot manager and configure UEFI boot entry"
                     } else {
                         $changeLines += "  $step. Configure UEFI boot entry for $distroName"
                     }
@@ -1474,7 +1491,7 @@ function Show-DiskPlan {
                         -ShrinkLetter 'C' -NewShrinkSizeGB $newCSizeGB -ShrinkLinuxOnly
                     $afterLines += "  LINUX_LIVE (FAT32)     $script:BootPartSizeGB GB  <-- $distroName live boot"
                     if ($useRefind) {
-                        $afterLines += "  REFIND (FAT32)         0.1 GB  <-- rEFInd boot manager"
+                        $afterLines += "  REFIND (FAT32)         0.1 GB  <-- RefindPlus boot manager"
                     }
                 }
             }
@@ -1650,7 +1667,7 @@ function Show-DiskPlan {
                 $changeLines += "  $step. Create $script:BootPartSizeGB GB FAT32 boot partition (LINUX_LIVE)"
                 if ($useRefind) {
                     $step++
-                    $changeLines += "  $step. Create 100 MB FAT32 rEFInd partition"
+                    $changeLines += "  $step. Create 100 MB FAT32 RefindPlus partition"
                 }
                 $step++
                 if ($liveOnly) {
@@ -1660,14 +1677,14 @@ function Show-DiskPlan {
                 }
                 $step++
                 if ($useRefind) {
-                    $changeLines += "  $step. Install rEFInd boot manager and configure UEFI boot entry"
+                    $changeLines += "  $step. Install RefindPlus boot manager and configure UEFI boot entry"
                 } else {
                     $changeLines += "  $step. Install bootloader to Windows ESP and configure UEFI boot entry for $DistroName"
                 }
 
                 $afterLines += "  LINUX_LIVE (FAT32)     $script:BootPartSizeGB GB  <-- $DistroName live boot"
                 if ($useRefind) {
-                    $afterLines += "  REFIND (FAT32)         0.1 GB  <-- rEFInd boot manager"
+                    $afterLines += "  REFIND (FAT32)         0.1 GB  <-- RefindPlus boot manager"
                 }
                 if ($liveOnly) {
                     $afterLines += "  [Unallocated - unused]  ~$usableGB GB  <-- live-only, nothing installed"
@@ -1685,7 +1702,7 @@ function Show-DiskPlan {
                 $changeLines += "  $step. Create $($script:BootPartSizeGB) GB FAT32 boot partition (LINUX_LIVE) on Disk $selDiskNum"
                 if ($useRefind) {
                     $step++
-                    $changeLines += "  $step. Create 100 MB FAT32 rEFInd partition"
+                    $changeLines += "  $step. Create 100 MB FAT32 RefindPlus partition"
                 }
                 $step++
                 if ($liveOnly) {
@@ -1695,7 +1712,7 @@ function Show-DiskPlan {
                 }
                 $step++
                 if ($useRefind) {
-                    $changeLines += "  $step. Install rEFInd boot manager and configure UEFI boot entry"
+                    $changeLines += "  $step. Install RefindPlus boot manager and configure UEFI boot entry"
                 } else {
                     $changeLines += "  $step. Configure UEFI boot entry for $DistroName"
                 }
@@ -1713,7 +1730,7 @@ function Show-DiskPlan {
                     $changeLines += "  $step. Create $($script:BootPartSizeGB) GB FAT32 boot partition (LINUX_LIVE) on Disk $selDiskNum"
                     if ($useRefind) {
                         $step++
-                        $changeLines += "  $step. Create 100 MB FAT32 rEFInd partition"
+                        $changeLines += "  $step. Create 100 MB FAT32 RefindPlus partition"
                     }
                     $step++
                     if ($liveOnly) {
@@ -1723,7 +1740,7 @@ function Show-DiskPlan {
                     }
                     $step++
                     if ($useRefind) {
-                        $changeLines += "  $step. Install rEFInd boot manager and configure UEFI boot entry"
+                        $changeLines += "  $step. Install RefindPlus boot manager and configure UEFI boot entry"
                     } else {
                         $changeLines += "  $step. Configure UEFI boot entry for $DistroName"
                     }
@@ -2112,16 +2129,21 @@ function Save-LinuxISO {
 }
 
 # ============================================================
-# rEFInd DOWNLOAD AND INSTALL
+# RefindPlus DOWNLOAD AND INSTALL
 # ============================================================
-function Save-Refind {
-    $dest = Join-Path $env:TEMP $script:RefindFilename
+function Save-RefindPlus {
+    $dest = Join-Path $env:TEMP $script:RefindPlusFilename
     if (Test-Path $dest) {
-        Write-LogMessage "Found cached rEFInd: $dest"
-        return $dest
+        $cachedHash = (Get-FileHash -Path $dest -Algorithm SHA256 -ErrorAction SilentlyContinue).Hash
+        if ($cachedHash -eq $script:RefindPlusSha256) {
+            Write-LogMessage "Found cached RefindPlus: $dest"
+            return $dest
+        }
+        Write-LogMessage "Cached RefindPlus checksum mismatch; re-downloading..." -IsError
+        Remove-Item $dest -Force -ErrorAction SilentlyContinue
     }
-    Write-LogMessage "Downloading rEFInd boot manager..."
-    Set-Status "Downloading rEFInd..."
+    Write-LogMessage "Downloading RefindPlus boot manager..."
+    Set-Status "Downloading RefindPlus..."
     try {
         Add-Type -AssemblyName System.Net.Http
         $handler = New-Object System.Net.Http.HttpClientHandler
@@ -2131,7 +2153,7 @@ function Save-Refind {
         $httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("windows-installer/1.0")
 
         $response = $httpClient.GetAsync(
-            $script:RefindUrl,
+            $script:RefindPlusUrl,
             [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
         ).Result
 
@@ -2152,7 +2174,7 @@ function Save-Refind {
                 if (($now - $lastUpdate).TotalMilliseconds -gt 500) {
                     if ($totalBytes -gt 0) {
                         $percent = [int](($totalRead / $totalBytes) * 100)
-                        Set-Status "Downloading rEFInd... $percent%"
+                        Set-Status "Downloading RefindPlus... $percent%"
                     }
                     [System.Windows.Forms.Application]::DoEvents()
                     $lastUpdate = $now
@@ -2164,8 +2186,15 @@ function Save-Refind {
             $response.Dispose()
             $httpClient.Dispose()
 
+            $actualHash = (Get-FileHash -Path $dest -Algorithm SHA256 -ErrorAction Stop).Hash
+            if ($actualHash -ne $script:RefindPlusSha256) {
+                Write-LogMessage "RefindPlus checksum mismatch! Expected $($script:RefindPlusSha256), got $actualHash" -IsError
+                Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                return $null
+            }
+
             $sizeMB = [math]::Round((Get-Item $dest).Length / 1MB, 1)
-            Write-LogMessage "rEFInd downloaded: $sizeMB MB"
+            Write-LogMessage "RefindPlus downloaded and verified: $sizeMB MB"
             Set-Status ""
             return $dest
         } else {
@@ -2173,32 +2202,32 @@ function Save-Refind {
         }
     }
     catch {
-        Write-LogMessage "rEFInd download failed: $_" -IsError
+        Write-LogMessage "RefindPlus download failed: $_" -IsError
         if (Test-Path $dest) { Remove-Item $dest -Force }
         return $null
     }
 }
 
-function Install-Refind {
+function Install-RefindPlus {
     param(
-        [string]$RefindDriveLetter,
+        [string]$RefindPlusDriveLetter,
         [string]$BootDriveLetter,
         [string]$DistroLabel,
         [string]$RamBootParam = ""
     )
 
     Write-LogMessage ""
-    Write-LogMessage "== Installing rEFInd boot manager =="
+    Write-LogMessage "== Installing RefindPlus boot manager =="
 
-    $refindZip = Save-Refind
+    $refindZip = Save-RefindPlus
     if (-not $refindZip) {
-        Write-LogMessage "Cannot install rEFInd without the download." -IsError
+        Write-LogMessage "Cannot install RefindPlus without the download." -IsError
         return $false
     }
 
-    # Extract rEFInd
-    Write-LogMessage "Extracting rEFInd..."
-    Set-Status "Extracting rEFInd..."
+    # Extract RefindPlus
+    Write-LogMessage "Extracting RefindPlus..."
+    Set-Status "Extracting RefindPlus..."
     $extractDir = Join-Path $env:TEMP "refind_extract"
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
 
@@ -2206,33 +2235,36 @@ function Install-Refind {
         Expand-Archive -Path $refindZip -DestinationPath $extractDir -Force
     }
     catch {
-        Write-LogMessage "Failed to extract rEFInd: $_" -IsError
+        Write-LogMessage "Failed to extract RefindPlus: $_" -IsError
         return $false
     }
 
-    $refindSrc = Join-Path $extractDir "refind-bin-0.14.2\refind"
-    $refindDrive = "${RefindDriveLetter}:"
-    $efiBoot = Join-Path $refindDrive "EFI\BOOT"
-    New-Item -Path $efiBoot -ItemType Directory -Force | Out-Null
-
-    Write-LogMessage "Copying rEFInd files..."
-    Set-Status "Installing rEFInd..."
-
-    # Copy refind_x64.efi as default UEFI loader
-    $srcEfi = Join-Path $refindSrc "refind_x64.efi"
-    if (Test-Path $srcEfi) {
-        Copy-Item $srcEfi (Join-Path $efiBoot "BOOTx64.EFI") -Force
-        Write-LogMessage "  Copied refind_x64.efi as BOOTx64.EFI"
-    } else {
-        Write-LogMessage "refind_x64.efi not found in extracted archive!" -IsError
-        return $false
-    }
-
-    # Copy filesystem drivers (ext4 needed to read LINUX_LIVE if ext4)
-    $driversDir = Join-Path $efiBoot "drivers_x64"
+    $refindSrc = Join-Path $extractDir "x64-RefindPlus_001402-AF"
+    $refindDrive = "${RefindPlusDriveLetter}:"
+    $refindDir = Join-Path $refindDrive "EFI\refindplus"
+    New-Item -Path $refindDir -ItemType Directory -Force | Out-Null
+    $driversDir = Join-Path $refindDir "drivers_x64"
     New-Item -Path $driversDir -ItemType Directory -Force | Out-Null
-    $driversSrc = Join-Path $refindSrc "drivers_x64"
-    foreach ($drv in @("ext4_x64.efi", "ext2_x64.efi")) {
+    $iconsDir = Join-Path $refindDir "icons"
+    New-Item -Path $iconsDir -ItemType Directory -Force | Out-Null
+
+    Write-LogMessage "Copying RefindPlus files..."
+    Set-Status "Installing RefindPlus..."
+
+    # Copy RefindPlus EFI binary
+    $srcEfi = Join-Path $refindSrc "x64_RefindPlus_REL.efi"
+    $destEfi = Join-Path $refindDir "x64_RefindPlus_REL.efi"
+    if (Test-Path $srcEfi) {
+        Copy-Item $srcEfi $destEfi -Force
+        Write-LogMessage "  Copied x64_RefindPlus_REL.efi"
+    } else {
+        Write-LogMessage "x64_RefindPlus_REL.efi not found in extracted archive!" -IsError
+        return $false
+    }
+
+    # Copy filesystem drivers
+    $driversSrc = Join-Path $refindSrc "OtherBinaries\Drivers"
+    foreach ($drv in @("x64_ext4.efi", "x64_ext2.efi")) {
         $src = Join-Path $driversSrc $drv
         if (Test-Path $src) {
             Copy-Item $src $driversDir -Force
@@ -2241,12 +2273,10 @@ function Install-Refind {
     }
 
     # Copy icons
-    $iconsSrc = Join-Path $refindSrc "icons"
+    $iconsSrc = Join-Path $refindSrc "OtherMisc\icons"
     if (Test-Path $iconsSrc) {
-        $iconsDir = Join-Path $efiBoot "icons"
-        New-Item -Path $iconsDir -ItemType Directory -Force | Out-Null
         robocopy $iconsSrc $iconsDir /E /R:2 /W:2 /NP /NFL /NDL | Out-Null
-        Write-LogMessage "  Copied rEFInd icons."
+        Write-LogMessage "  Copied RefindPlus icons."
     }
 
     # Detect boot layout on LINUX_LIVE partition
@@ -2286,9 +2316,9 @@ function Install-Refind {
         }
     }
 
-    # Write refind.conf
-    Write-LogMessage "Writing rEFInd configuration..."
-    $conf = "# rEFInd configuration - generated by ULLI`n"
+    # Write RefindPlus config
+    Write-LogMessage "Writing RefindPlus configuration..."
+    $conf = "# RefindPlus configuration - generated by ULLI`n"
     $conf += "timeout 10`n"
     $conf += "use_graphics_for linux`n"
     $conf += "scanfor internal,external,manual`n"
@@ -2332,17 +2362,17 @@ function Install-Refind {
         $conf += "}`n"
     }
     else {
-        $conf += "# Unknown layout - rEFInd will auto-scan.`n"
+        $conf += "# Unknown layout - RefindPlus will auto-scan.`n"
     }
 
-    Set-Content -Path (Join-Path $efiBoot "refind.conf") -Value $conf -Encoding UTF8 -Force
-    Write-LogMessage "rEFInd configuration written."
+    Set-Content -Path (Join-Path $refindDir "config.conf") -Value $conf -Encoding UTF8 -Force
+    Write-LogMessage "RefindPlus configuration written."
 
     # Clean up extract dir
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
 
-    Write-LogMessage "rEFInd installed successfully."
-    Write-LogMessage "  rEFInd partition: $refindDrive"
+    Write-LogMessage "RefindPlus installed successfully."
+    Write-LogMessage "  RefindPlus partition: $refindDrive"
     return $true
 }
 
@@ -2352,12 +2382,12 @@ function New-RefindPartition {
         [int]$DiskNumber,
         [int64]$AfterOffset = 0
     )
-    if (-not $PSCmdlet.ShouldProcess("rEFInd partition", "create rEFInd partition")) { return }
+    if (-not $PSCmdlet.ShouldProcess("RefindPlus partition", "create RefindPlus partition")) { return }
 
-    Write-LogMessage "Creating 100 MB rEFInd partition..."
-    Set-Status "Creating rEFInd partition..."
+    Write-LogMessage "Creating 100 MB RefindPlus partition..."
+    Set-Status "Creating RefindPlus partition..."
 
-    $refindSize = [int64]($script:RefindSizeMB * 1MB)
+    $refindSize = [int64]($script:RefindPlusSizeMB * 1MB)
     $refindDriveLetter = $null
 
     # Align offset to 1 MB boundary
@@ -2392,7 +2422,7 @@ function New-RefindPartition {
         }
 
         if (-not $refindDriveLetter) {
-            throw "Could not assign a drive letter to the rEFInd partition"
+            throw "Could not assign a drive letter to the RefindPlus partition"
         }
 
         Format-Volume -DriveLetter $refindDriveLetter `
@@ -2401,17 +2431,17 @@ function New-RefindPartition {
             -Confirm:$false `
             -ErrorAction Stop | Out-Null
 
-        Write-LogMessage "rEFInd partition created as ${refindDriveLetter}: (REFIND)"
+        Write-LogMessage "RefindPlus partition created as ${refindDriveLetter}: (REFIND)"
         return $refindDriveLetter
     }
     catch {
-        Write-LogMessage "Failed to create rEFInd partition: $_" -IsError
+        Write-LogMessage "Failed to create RefindPlus partition: $_" -IsError
 
         # Fallback: try diskpart
         if ($alignedOffset -gt 0) {
-            Write-LogMessage "Trying diskpart method for rEFInd partition..."
+            Write-LogMessage "Trying diskpart method for RefindPlus partition..."
             $offsetMB = [int64]([Math]::Floor($alignedOffset / 1MB))
-            $sizeMB = $script:RefindSizeMB
+            $sizeMB = $script:RefindPlusSizeMB
 
             $diskpartScript = @"
 select disk $DiskNumber
@@ -2450,14 +2480,14 @@ exit
                             -NewFileSystemLabel "REFIND" `
                             -Confirm:$false `
                             -ErrorAction Stop | Out-Null
-                        Write-LogMessage "rEFInd partition created via diskpart as ${refindDriveLetter}: (REFIND)"
+                        Write-LogMessage "RefindPlus partition created via diskpart as ${refindDriveLetter}: (REFIND)"
                         return $refindDriveLetter
                     }
                 }
             }
         }
 
-        Write-LogMessage "All rEFInd partition creation methods failed" -IsError
+        Write-LogMessage "All RefindPlus partition creation methods failed" -IsError
         return $null
     }
 }
@@ -2500,14 +2530,14 @@ function Start-Installation {
     $bootPartSizeGB = if ($planResult.BootPartSizeGB -gt 0) { $planResult.BootPartSizeGB } else { $script:MinPartitionSizeGB }
     $refindGB = if ($useRefind) { 0.1 } else { 0 }
     # Live-only mode bypasses the Linux install partition entirely: only the
-    # boot partition (+ optional rEFInd partition) needs space, so no shrink
+    # boot partition (+ optional RefindPlus partition) needs space, so no shrink
     # is made for Linux space.
     if ($isLiveOnly) {
         $totalNeededGB = $bootPartSizeGB + $refindGB
     } else {
         $totalNeededGB = $linuxSizeGB + $bootPartSizeGB + $refindGB
     }
-    $refindNote = if ($useRefind) { ", rEFInd: yes" } else { "" }
+    $refindNote = if ($useRefind) { ", RefindPlus: yes" } else { "" }
     $liveNote = if ($isLiveOnly) { ", Live-only: yes" } else { "" }
     Write-LogMessage "Disk plan approved. Strategy: $selectedStrategy, Target disk: $targetDiskNumber, Linux size: $linuxSizeGB GB, Boot partition: $bootPartSizeGB GB$refindNote$liveNote"
 
@@ -2763,15 +2793,15 @@ exit
                 return
             }
 
-            # Create rEFInd partition if enabled (wipe_disk)
+            # Create RefindPlus partition if enabled (wipe_disk)
             if ($useRefind) {
                 Start-Sleep -Seconds 2
                 $bootPartInfo = Get-Partition -DiskNumber $targetDiskNumber |
                     Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1
                 $refindAfterOffset = $bootPartInfo.Offset + $bootPartInfo.Size
-                $script:RefindDriveLetter = New-RefindPartition -DiskNumber $targetDiskNumber -AfterOffset $refindAfterOffset
-                if (-not $script:RefindDriveLetter) {
-                    Write-LogMessage "Warning: rEFInd partition creation failed. Continuing without rEFInd." -IsError
+                $script:RefindPlusDriveLetter = New-RefindPartition -DiskNumber $targetDiskNumber -AfterOffset $refindAfterOffset
+                if (-not $script:RefindPlusDriveLetter) {
+                    Write-LogMessage "Warning: RefindPlus partition creation failed. Continuing without RefindPlus." -IsError
                     $useRefind = $false
                 }
             }
@@ -2786,8 +2816,8 @@ exit
             Write-LogMessage ""
             Write-LogMessage "Disk $targetDiskNumber wiped and reformatted successfully:"
             Write-LogMessage "  Partition 1: LINUX_LIVE ($($bootPartSizeGB) GB, ${driveLetter}:)"
-            if ($useRefind -and $script:RefindDriveLetter) {
-                Write-LogMessage "  Partition 2: REFIND ($($script:RefindSizeMB) MB, $($script:RefindDriveLetter):)"
+            if ($useRefind -and $script:RefindPlusDriveLetter) {
+                Write-LogMessage "  Partition 2: REFIND ($($script:RefindPlusSizeMB) MB, $($script:RefindPlusDriveLetter):)"
             }
             if ($isLiveOnly) {
                 Write-LogMessage "  Unallocated: ~$unallocGB GB (unused - live-only mode)"
@@ -2941,7 +2971,7 @@ exit
 
             $bootPartitionSize = [int64]($bootPartSizeGB * 1GB)
             $alignmentSize = [int64](1MB)
-            $refindReserve = if ($useRefind) { [int64]($script:RefindSizeMB * 1MB) } else { [int64]0 }
+            $refindReserve = if ($useRefind) { [int64]($script:RefindPlusSizeMB * 1MB) } else { [int64]0 }
             $bufferSize = [int64](16MB) + $refindReserve
             $minGapRequired = $bootPartitionSize + $bufferSize + $alignmentSize
 
@@ -3212,19 +3242,19 @@ exit
             Write-LogMessage ""
             Write-LogMessage "Boot partition successfully created!"
 
-            # Create rEFInd partition if enabled (non-wipe strategies)
+            # Create RefindPlus partition if enabled (non-wipe strategies)
             if ($useRefind) {
                 $bootPartInfo = Get-Partition -DiskNumber $targetDiskNumber |
                     Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1
                 if ($bootPartInfo) {
                     $refindAfterOffset = $bootPartInfo.Offset + $bootPartInfo.Size
-                    $script:RefindDriveLetter = New-RefindPartition -DiskNumber $targetDiskNumber -AfterOffset $refindAfterOffset
-                    if (-not $script:RefindDriveLetter) {
-                        Write-LogMessage "Warning: rEFInd partition creation failed. Continuing without rEFInd." -IsError
+                    $script:RefindPlusDriveLetter = New-RefindPartition -DiskNumber $targetDiskNumber -AfterOffset $refindAfterOffset
+                    if (-not $script:RefindPlusDriveLetter) {
+                        Write-LogMessage "Warning: RefindPlus partition creation failed. Continuing without RefindPlus." -IsError
                         $useRefind = $false
                     }
                 } else {
-                    Write-LogMessage "Warning: Could not find boot partition to place rEFInd after." -IsError
+                    Write-LogMessage "Warning: Could not find boot partition to place RefindPlus after." -IsError
                     $useRefind = $false
                 }
             }
@@ -3505,16 +3535,16 @@ exit
             }
         }
 
-        # Install rEFInd if enabled
-        if ($useRefind -and $script:RefindDriveLetter) {
+        # Install RefindPlus if enabled
+        if ($useRefind -and $script:RefindPlusDriveLetter) {
             $bootDriveLetter = $script:NewDrive.TrimEnd(':')
-            $refindInstalled = Install-Refind `
-                -RefindDriveLetter $script:RefindDriveLetter `
+            $refindInstalled = Install-RefindPlus `
+                -RefindPlusDriveLetter $script:RefindPlusDriveLetter `
                 -BootDriveLetter $bootDriveLetter `
                 -DistroLabel $distroName `
                 -RamBootParam (Get-RamBootParameter -Distro $distro)
             if (-not $refindInstalled) {
-                Write-LogMessage "Warning: rEFInd installation failed. Falling back to direct boot." -IsError
+                Write-LogMessage "Warning: RefindPlus installation failed. Falling back to direct boot." -IsError
                 $useRefind = $false
             }
         }
@@ -3529,9 +3559,9 @@ exit
         }
 
         # For wipe_disk on a secondary drive: install the bootloader into the
-        # Windows ESP so the firmware can boot it. (Skip if rEFInd handles booting.)
+        # Windows ESP so the firmware can boot it. (Skip if RefindPlus handles booting.)
         $script:WipeBootInstalled = $false
-        if ($selectedStrategy -eq "wipe_disk" -and -not ($useRefind -and $script:RefindDriveLetter)) {
+        if ($selectedStrategy -eq "wipe_disk" -and -not ($useRefind -and $script:RefindPlusDriveLetter)) {
             try {
                 Write-LogMessage "Installing bootloader into Windows ESP..."
                 Set-Status "Installing bootloader into Windows ESP..."
@@ -3651,21 +3681,23 @@ exit
             Set-Status "Configuring UEFI boot priority..."
 
             try {
-                if ($useRefind -and $script:RefindDriveLetter) {
-                    # rEFInd boot entry - point to the rEFInd partition
-                    Write-LogMessage "Creating UEFI boot entry for rEFInd..."
-                    $refindDrive = "$($script:RefindDriveLetter):"
-                    $bootCreated = New-UefiBootEntry -DistroName "rEFInd - ULLI" `
-                        -DevicePartition $refindDrive -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+                if ($useRefind -and $script:RefindPlusDriveLetter) {
+                    # RefindPlus boot entry - point to the RefindPlus partition
+                    Write-LogMessage "Creating UEFI boot entry for RefindPlus..."
+                    $refindDrive = "$($script:RefindPlusDriveLetter):"
+                    $bootCreated = New-UefiBootEntry -DistroName "RefindPlus - ULLI" `
+                        -DevicePartition $refindDrive -EfiPath "\EFI\refindplus\x64_RefindPlus_REL.efi"
 
                     if ($bootCreated) {
-                        Write-LogMessage "rEFInd UEFI boot entry created and set as default!"
+                        Write-LogMessage "RefindPlus UEFI boot entry created. Windows Boot Manager remains the default."
                     } else {
-                        Write-LogMessage "Could not create rEFInd boot entry automatically" -IsError
-                        Write-LogMessage "You will need to select 'rEFInd - ULLI' manually in UEFI/BIOS boot menu" -IsError
+                        Write-LogMessage "Could not create RefindPlus boot entry automatically" -IsError
+                        Write-LogMessage "You will need to select 'RefindPlus - ULLI' manually in UEFI/BIOS boot menu" -IsError
+                        # Keep the installation valid by reverting to the direct-boot assumption.
+                        $useRefind = $false
                     }
                 } else {
-                    # Standard boot entry (no rEFInd)
+                    # Standard boot entry (no RefindPlus)
                     $bcdeditOutput = bcdedit /enum firmware 2>&1
                     $lines = $bcdeditOutput
 
@@ -3793,9 +3825,9 @@ exit
         }
         Write-LogMessage ""
 
-        if ($useRefind -and $script:RefindDriveLetter) {
+        if ($useRefind -and $script:RefindPlusDriveLetter) {
             Write-LogMessage ""
-            Write-LogMessage "rEFInd boot manager has been installed and set as the default UEFI boot entry."
+            Write-LogMessage "RefindPlus boot manager has been installed. Its firmware entry was created without changing the firmware default or boot order."
             Write-LogMessage ""
         }
 
@@ -3803,19 +3835,19 @@ exit
             Write-LogMessage "*** AUTOMATIC RESTART ENABLED ***"
             Write-LogMessage "UEFI boot priority has been configured."
             Write-LogMessage "The system will restart in 30 seconds!"
-            if ($useRefind -and $script:RefindDriveLetter) {
-                Write-LogMessage "After restart, rEFInd should appear automatically and show `"$distroName`"."
+            if ($useRefind -and $script:RefindPlusDriveLetter) {
+                Write-LogMessage "After restart, RefindPlus should appear automatically and show `"$distroName`"."
             } else {
                 Write-LogMessage "After restart, the system will boot into $distroName"
             }
             Write-LogMessage ""
         } else {
-            if ($useRefind -and $script:RefindDriveLetter) {
+            if ($useRefind -and $script:RefindPlusDriveLetter) {
                 Write-LogMessage "To boot ${distroName}:"
                 Write-LogMessage "1. Restart your computer"
-                Write-LogMessage "2. rEFInd should appear automatically and show `"$distroName`""
-                Write-LogMessage "3. If rEFInd doesn't appear, enter UEFI/BIOS (F2/F10/F12/DEL)"
-                Write-LogMessage "   and select `"rEFInd - ULLI`" from the boot menu"
+                Write-LogMessage "2. RefindPlus should appear automatically and show `"$distroName`""
+                Write-LogMessage "3. If RefindPlus doesn't appear, enter UEFI/BIOS (F2/F10/F12/DEL)"
+                Write-LogMessage "   and select `"RefindPlus - ULLI`" from the boot menu"
                 Write-LogMessage "4. Disable Secure Boot if needed"
             } else {
                 Write-LogMessage "To boot $distroName, use the UEFI boot menu:"
@@ -3841,7 +3873,7 @@ exit
         }
 
         # Auto-restart if enabled
-        if ($autoRestartCheck.Checked) {
+        if ($autoRestartCheck.Checked -and -not ($useRefind -and $script:RefindPlusDriveLetter)) {
             Write-LogMessage ""
             Write-LogMessage "Preparing for automatic restart..."
 
@@ -3899,6 +3931,11 @@ exit
             } else {
                 Write-LogMessage "Restart cancelled by user"
                 Write-LogMessage "You can restart manually when ready"
+            }
+        } else {
+            if ($useRefind -and $script:RefindPlusDriveLetter) {
+                Write-LogMessage "Automatic restart skipped: firmware default/boot order was not changed."
+                Write-LogMessage "Restart manually and select 'RefindPlus - ULLI' from the firmware boot menu."
             }
         }
     }
