@@ -393,12 +393,7 @@ $refindCheck.Add_CheckedChanged({
     if ($refindCheck.Checked) {
         $refindInfo = "RefindPlus is a great bootloader and is ideal for dual booting.`n`n" +
                       "It may require disabling Secure Boot on some systems.`n`n" +
-                      "For more information, see:`nhttps://github.com/RefindPlusRepo/RefindPlus`n`n" +
-                      "Extra info from the RefindPlus project:`n" +
-                      "- RefindPlus is a fork of rEFInd with extended functionality for Mac and PC.`n" +
-                      "- It maintains feature/configuration parity with upstream rEFInd v0.14.2.`n" +
-                      "- Only x86_64 builds are currently distributed and supported.`n" +
-                      "- It works with refind.conf and also supports its own config.conf."
+                      "For more information, see:`nhttps://github.com/RefindPlusRepo/RefindPlus"
         [System.Windows.Forms.MessageBox]::Show(
             $refindInfo,
             "RefindPlus boot manager",
