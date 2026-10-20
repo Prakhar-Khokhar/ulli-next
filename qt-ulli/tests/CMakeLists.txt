@@ -6,8 +6,10 @@ function(add_ulli_test name)
 endfunction()
 
 # UI tests need a QApplication (widgets) and a headless platform plugin.
-function(add_ulli_ui_test name)
-    qt_add_executable(test_${name} test_${name}.cpp)
+# The source file is passed explicitly: the test name and the file name do
+# not have to match.
+function(add_ulli_ui_test name source)
+    qt_add_executable(test_${name} ${source})
     target_link_libraries(test_${name} PRIVATE ulli-ui Qt6::Test Qt6::Widgets)
     add_test(NAME ${name} COMMAND test_${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
@@ -26,4 +28,4 @@ if (WIN32)
 endif()
 
 add_ulli_test(progresslog)
-add_ulli_ui_test(ui)
+add_ulli_ui_test(ui test_ui_lifecycle.cpp)
