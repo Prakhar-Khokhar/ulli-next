@@ -311,8 +311,17 @@ public:
         }
         if (!rec_->planApprovedResult) return false;
 
+        // The plan must carry the key of the current selection: the main
+        // window rejects an approval that does not match the selection.
+        std::string selectionKey = "mint";
+        if (auto* sel = findChild<ulli::ui::DistroSelector*>()) {
+            if (const std::string key = sel->selectedKey().toStdString();
+                !key.empty()) {
+                selectionKey = key;
+            }
+        }
         if (rec_->planValid) {
-            outPlan.distroKey = "mint";
+            outPlan.distroKey = selectionKey;
             outPlan.targetDiskNumber = 0;
             outPlan.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
             outPlan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
@@ -326,7 +335,7 @@ public:
                 outPlan.targetDiskSizeBytes = 500ull * 1024 * 1024 * 1024;
             }
         } else {
-            outPlan.distroKey = "mint";
+            outPlan.distroKey = selectionKey;
             outPlan.targetDiskNumber = -1;
         }
         return true;
@@ -391,6 +400,15 @@ static ulli::core::InstallPlan makePlan() {
     return plan;
 }
 
+// The ISO file name of the distribution that is currently selected.
+static QString selectedIsoFileName(ulli::ui::MainWindow* window) {
+    auto* sel = window->findChild<ulli::ui::DistroSelector*>();
+    if (!sel) return {};
+    const auto* d = sel->currentDistro();
+    if (!d) return {};
+    return QString::fromStdString(d->isoFilename());
+}
+
 static bool waitForPred(std::function<bool()> pred, int timeoutMs = 5000) {
     QElapsedTimer timer;
     timer.start();
@@ -415,9 +433,12 @@ private slots:
         QTemporaryDir cacheDir;
         QVERIFY(cacheDir.isValid());
         const auto cachePath = std::filesystem::path(cacheDir.path().toStdString());
-        // create a cached ISO file
+        // create a cached ISO file for the selected distro
         {
-            std::ofstream f(cachePath / "linuxmint-22.3-cinnamon-64bit.iso", std::ios::binary);
+            TestWindow probe(rec, cachePath, true);
+            const QString name = selectedIsoFileName(&probe);
+            QVERIFY(!name.isEmpty());
+            std::ofstream f(cachePath / name.toStdString(), std::ios::binary);
             f << "cached";
         }
 
@@ -611,7 +632,10 @@ private slots:
         QVERIFY(cacheDir.isValid());
         const auto cachePath = std::filesystem::path(cacheDir.path().toStdString());
         {
-            std::ofstream f(cachePath / "linuxmint-22.3-cinnamon-64bit.iso", std::ios::binary);
+            TestWindow probe(rec, cachePath, true);
+            const QString name = selectedIsoFileName(&probe);
+            QVERIFY(!name.isEmpty());
+            std::ofstream f(cachePath / name.toStdString(), std::ios::binary);
             f << "cached";
         }
 

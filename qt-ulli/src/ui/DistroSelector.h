@@ -46,6 +46,9 @@ public:
     // provides a digest the file has also been checksum verified.
     bool isoReady() const { return isoReady_; }
 
+    // The distro of the current selection (null for a custom ISO).
+    const core::Distro* currentDistro() const { return currentDistro_; }
+
     // True when the ISO of the current selection has been verified against
     // the catalog digest.
     bool isoVerified() const { return isoVerified_; }
