@@ -277,16 +277,11 @@ foreach ($distroId in $script:DistroKeys) {
 $distroCombo.SelectedIndex = 0
 $isoGroup.Controls.Add($distroCombo)
 
-# Show informative warning when Fedora is selected because Anaconda treats the Live partition's disk as installer media
 $distroCombo.Add_SelectedIndexChanged({
     try {
         $idx = $distroCombo.SelectedIndex
         if ($idx -ge 0 -and $idx -lt $script:DistroKeys.Count) {
             $selected = $script:Distros[$script:DistroKeys[$idx]]
-            if ($selected.Keyword -eq "Fedora") {
-                $msg = "Important: Fedora's installer (Anaconda) treats the disk that contains the Live Linux partition as the installer media and will refuse to install onto that same disk.`n`nIf you intend to install Fedora, use a separate physical disk (select the other disk in ULLI) or use Fedora as a live-only environment."
-                [System.Windows.Forms.MessageBox]::Show($msg, "Fedora installation warning", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
-            }
 
             # RAM-boot notice for distros whose live environment is loaded into RAM
             if ($selected.ToRam) {
@@ -387,12 +382,31 @@ $form.Controls.Add($autoRestartCheck)
 
 # RefindPlus checkbox
 $refindCheck = New-Object System.Windows.Forms.CheckBox
-$refindCheck.Text = "Install RefindPlus boot manager  -  requires disabling Secure Boot"
+$refindCheck.Text = "Install RefindPlus boot manager  -  may require disabling Secure Boot on some systems"
 $refindCheck.Font = $normalFont
 $refindCheck.Location = New-Object System.Drawing.Point(10, 503)
 $refindCheck.Size = New-Object System.Drawing.Size(680, 25)
 $refindCheck.Checked = $false
 $form.Controls.Add($refindCheck)
+
+$refindCheck.Add_CheckedChanged({
+    if ($refindCheck.Checked) {
+        $refindInfo = "RefindPlus is a great bootloader and is ideal for dual booting.`n`n" +
+                      "It may require disabling Secure Boot on some systems.`n`n" +
+                      "For more information, see:`nhttps://github.com/RefindPlusRepo/RefindPlus`n`n" +
+                      "Extra info from the RefindPlus project:`n" +
+                      "- RefindPlus is a fork of rEFInd with extended functionality for Mac and PC.`n" +
+                      "- It maintains feature/configuration parity with upstream rEFInd v0.14.2.`n" +
+                      "- Only x86_64 builds are currently distributed and supported.`n" +
+                      "- It works with refind.conf and also supports its own config.conf."
+        [System.Windows.Forms.MessageBox]::Show(
+            $refindInfo,
+            "RefindPlus boot manager",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    }
+})
 
 # Live-only checkbox
 $liveOnlyCheck = New-Object System.Windows.Forms.CheckBox
