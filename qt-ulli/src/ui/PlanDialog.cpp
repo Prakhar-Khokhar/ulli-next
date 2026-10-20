@@ -627,7 +627,7 @@ core::InstallPlan PlanDialog::buildPlan(const std::string& distroKey,
         // Record the identity of the disk as well: a disk number alone can
         // point at a different device later, so the model and the size are
         // re-checked before anything is written.
-        p.targetDiskModel = disk.qmodel();
+        p.targetDiskModel = disk.qmodel().toStdString();
         p.targetDiskSizeBytes = disk.sizeBytes;
     }
     p.linuxSizeBytes = static_cast<std::uint64_t>(linuxSizeSpin_->value()) * 1024 * 1024 * 1024;
