@@ -2,13 +2,30 @@
 #include "core/ProgressLog.h"
 
 #include <QFile>
-#include <QMap>
+#include <QHash>
 #include <QTemporaryDir>
-#include <QStringList>
+#include <QTextStream>
 #include <QtTest/QtTest>
 
 #include <thread>
 #include <vector>
+
+namespace {
+
+// The log file is opened in text mode, so the file itself may use CRLF
+// line endings. QTextStream normalises them to '\n' while reading.
+QStringList readLines(const QString& path) {
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+    QTextStream in(&f);
+    const QString content = in.readAll();
+    f.close();
+    QStringList lines = content.split('\n');
+    if (!lines.isEmpty() && lines.last().isEmpty()) lines.removeLast();
+    return lines;
+}
+
+}  // namespace
 
 class TestProgressLog : public QObject {
     Q_OBJECT
@@ -25,14 +42,7 @@ private slots:
         log.append("second");
         log.append("third");
 
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
-        const QString content = QString::fromUtf8(f.readAll());
-        f.close();
-
-        QStringList lines = content.split('\n');
-        if (!lines.isEmpty() && lines.last().isEmpty()) lines.removeLast();
-
+        const QStringList lines = readLines(path);
         QCOMPARE(lines.size(), 3);
         QVERIFY(lines[0].startsWith("[Info] ["));
         QVERIFY(lines[0].contains("first"));
@@ -53,7 +63,7 @@ private slots:
         const int numThreads = 4;
         const int msgsPerThread = 25;
 
-        std::vector<QString> expected;
+        QStringList expected;
         expected.reserve(numThreads * msgsPerThread);
         for (int t = 0; t < numThreads; ++t) {
             for (int i = 0; i < msgsPerThread; ++i) {
@@ -64,7 +74,7 @@ private slots:
         std::vector<std::thread> threads;
         threads.reserve(numThreads);
         for (int t = 0; t < numThreads; ++t) {
-            threads.emplace_back([&log, t]() {
+            threads.emplace_back([&log, t, msgsPerThread]() {
                 for (int i = 0; i < msgsPerThread; ++i) {
                     log.append(QString("thread-%1-msg-%2").arg(t).arg(i));
                 }
@@ -72,31 +82,26 @@ private slots:
         }
         for (auto& th : threads) th.join();
 
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::ReadOnly));
-        QStringList lines = QString::fromUtf8(f.readAll()).split('\n');
-        f.close();
-        if (!lines.isEmpty() && lines.last().isEmpty()) lines.removeLast();
-
+        const QStringList lines = readLines(path);
         QCOMPARE(lines.size(), numThreads * msgsPerThread);
 
+        // Every line must be complete: a corrupted interleaving would show
+        // up as a line that does not end with one of the messages.
         int bad = 0;
+        QHash<QString, int> counts;
         for (const QString& line : lines) {
             if (!line.startsWith("[Info] [")) { ++bad; continue; }
-            bool endsWithMsg = false;
+            bool matched = false;
             for (const QString& m : expected) {
-                if (line.endsWith(m)) { endsWithMsg = true; break; }
+                if (line.endsWith(m)) {
+                    ++counts[m];
+                    matched = true;
+                    break;
+                }
             }
-            if (!endsWithMsg) ++bad;
+            if (!matched) ++bad;
         }
         QCOMPARE(bad, 0);
-
-        QMap<QString, int> counts;
-        for (const QString& line : lines) {
-            for (const QString& m : expected) {
-                if (line.endsWith(m)) { ++counts[m]; break; }
-            }
-        }
         for (const QString& m : expected) {
             QCOMPARE(counts.value(m), 1);
         }
