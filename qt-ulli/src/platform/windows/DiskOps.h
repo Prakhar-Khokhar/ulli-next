@@ -58,6 +58,12 @@ core::Result<void> copyFiles(const std::filesystem::path& src,
 
 private:
     static std::optional<char> findFreeLetter(char startFrom = 'Z');
+
+    // Run a PowerShell script from a temp file, return trimmed stdout.
+    core::Result<QString> runPowerShellScript(const QString& script);
+
+    // Check BitLocker lock state on a given partition via PowerShell.
+    bool isBitLockerLockedOnPartition(int diskNumber, int partitionNumber);
 };
 
 }  // namespace ulli::platform::windows
