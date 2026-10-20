@@ -294,6 +294,19 @@ void DistroSelector::updateCustomIsoReadiness() {
     }
 }
 
+QString DistroSelector::selectedKey() const {
+    if (isCustom()) return QString();
+    return combo_->currentData().toString();
+}
+
+QString DistroSelector::customIsoPath() const {
+    return customPath_->text();
+}
+
+bool DistroSelector::isCustom() const {
+    return customCheck_->isChecked();
+}
+
 void DistroSelector::setIsoStage(const QString& status, int percent, bool busy) {
     if (!status.isEmpty()) {
         statusLabel_->setText(status);
