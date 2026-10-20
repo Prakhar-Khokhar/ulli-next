@@ -35,8 +35,3 @@ endif()
 add_ulli_test(progresslog)
 add_ulli_ui_test(ui test_ui_lifecycle.cpp)
 add_ulli_ui_test(workflow test_workflow.cpp)
-
-get_target_property(_inc_ui test_ui INCLUDE_DIRECTORIES)
-get_target_property(_inc_wf test_workflow INCLUDE_DIRECTORIES)
-message(STATUS "DIAG test_ui INCLUDE_DIRECTORIES: ${_inc_ui}")
-message(STATUS "DIAG test_workflow INCLUDE_DIRECTORIES: ${_inc_wf}")

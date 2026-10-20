@@ -18,7 +18,7 @@
 #include <QMetaObject>
 #include <QMessageBox>
 #include <QTemporaryDir>
-#include <QTest/QtTest>
+#include <QtTest/QtTest>
 #include <QThread>
 #include <QTimer>
 
