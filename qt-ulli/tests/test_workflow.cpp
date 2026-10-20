@@ -49,12 +49,17 @@ struct Recorder {
     std::shared_ptr<std::atomic<int>> guiTicks =
         std::make_shared<std::atomic<int>>(0);
 
+    // backend factory
+    int backendCreations = 0;
+    bool backendCreatedOffGuiThread = false;
+
     // plan dialog
     int planDialogCalls = 0;
     bool planApprovedResult = true;
     bool planValid = true;
     std::string plannedTargetDiskModel;
     std::uint64_t plannedTargetDiskSizeBytes = 0;
+    ulli::core::DiskIdentity plannedTargetDiskIdentity;
 
     // download config
     bool downloadShouldFail = false;
@@ -113,6 +118,9 @@ public:
         disk.sizeBytes = 500ull * 1024 * 1024 * 1024;
         disk.style = ulli::core::PartitionStyle::GPT;
         disk.busType = "NVMe";
+        disk.identity.uniqueId = "mock-unique-id-0";
+        disk.identity.uniqueIdFormat = "Mock";
+        disk.identity.serialNumber = "MOCKSERIAL0";
         disks.push_back(disk);
         return disks;
     }
@@ -293,6 +301,15 @@ public:
     }
 
     std::unique_ptr<ulli::core::IPlatformBackend> createBackend() override {
+        {
+            std::lock_guard<std::mutex> lock(rec_->mutex);
+            rec_->backendCreations++;
+            // The backend factory must never be dispatched from a worker
+            // thread: it is a virtual method on a GUI owned object.
+            if (std::this_thread::get_id() != rec_->guiThread) {
+                rec_->backendCreatedOffGuiThread = true;
+            }
+        }
         return std::make_unique<MockBackend>(rec_);
     }
 
@@ -309,6 +326,7 @@ public:
             if (!disks.empty()) {
                 rec_->plannedTargetDiskModel = disks[0].model;
                 rec_->plannedTargetDiskSizeBytes = disks[0].sizeBytes;
+                rec_->plannedTargetDiskIdentity = disks[0].identity;
             }
         }
         if (!rec_->planApprovedResult) return false;
@@ -332,9 +350,12 @@ public:
             if (!disks.empty()) {
                 outPlan.targetDiskModel = disks[0].model;
                 outPlan.targetDiskSizeBytes = disks[0].sizeBytes;
+                outPlan.targetDiskIdentity = disks[0].identity;
             } else {
                 outPlan.targetDiskModel = "Mock Disk Model";
                 outPlan.targetDiskSizeBytes = 500ull * 1024 * 1024 * 1024;
+                outPlan.targetDiskIdentity.uniqueId = "mock-unique-id-0";
+                outPlan.targetDiskIdentity.serialNumber = "MOCKSERIAL0";
             }
         } else {
             outPlan.distroKey = selectionKey;
@@ -883,6 +904,35 @@ private slots:
                  "plan review never reached");
         QCOMPARE(QString::fromStdString(rec->plannedTargetDiskModel), QString("Mock Disk Model"));
         QCOMPARE(rec->plannedTargetDiskSizeBytes, 500ull * 1024 * 1024 * 1024);
+        // The stable device identity has to reach the plan as well: the
+        // number alone can point at a different disk later.
+        QCOMPARE(QString::fromStdString(rec->plannedTargetDiskIdentity.uniqueId),
+                 QString("mock-unique-id-0"));
+        QCOMPARE(QString::fromStdString(rec->plannedTargetDiskIdentity.serialNumber),
+                 QString("MOCKSERIAL0"));
+    }
+
+    void backendIsCreatedOnTheGuiThread() {
+        auto rec = std::make_shared<Recorder>();
+        QTemporaryDir cacheDir;
+        QVERIFY(cacheDir.isValid());
+        const auto cachePath = std::filesystem::path(cacheDir.path().toStdString());
+
+        TestWindow w(rec, cachePath, true);
+        w.show();
+
+        // The flow creates the backend several times (disk scan, ISO
+        // download, install). None of them may happen on a worker thread:
+        // createBackend() is a virtual method on a GUI owned object.
+        QMetaObject::invokeMethod(&w, "onStartClicked", Qt::QueuedConnection);
+        QVERIFY2(waitForPred([&]() { return rec->installResultCalls >= 1; }, 20000),
+                 "the install never finished");
+
+        std::lock_guard<std::mutex> lock(rec->mutex);
+        QVERIFY2(rec->backendCreations >= 2,
+                 "the backend was not created for the scan and the download");
+        QVERIFY2(!rec->backendCreatedOffGuiThread,
+                 "the backend was created on a worker thread");
     }
 
     void engineRevalidatesPlanBeforeMutation() {

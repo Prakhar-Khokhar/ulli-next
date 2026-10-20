@@ -47,6 +47,8 @@ set(ULLI_CORE_SOURCES
     src/core/InstallEngine.h
     src/core/InstallEngine.cpp
     src/core/DiskInfo.h
+    src/core/DiskIdentity.h
+    src/core/DiskIdentity.cpp
     src/core/ProgressLog.h
     src/core/ProgressLog.cpp
     src/core/Sha256.h
@@ -55,6 +57,8 @@ set(ULLI_CORE_SOURCES
 
 set(ULLI_PLATFORM_SOURCES
     src/platform/Platform.h
+    src/platform/HttpDownload.h
+    src/platform/HttpDownload.cpp
 )
 
 if(WIN32)

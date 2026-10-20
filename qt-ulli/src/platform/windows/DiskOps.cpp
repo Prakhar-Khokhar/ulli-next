@@ -30,7 +30,9 @@
 #include "platform/windows/BitLocker.h"
 #include "platform/windows/EspOps.h"
 #include "platform/windows/Wmi.h"
+#include "core/DiskIdentity.h"
 #include "core/Sha256.h"
+#include "platform/HttpDownload.h"
 #include "platform/Platform.h"
 
 #include <QDir>
@@ -40,17 +42,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QProcess>
 #include <QProcessEnvironment>
-#include <QStorageInfo>
 #include <QTextStream>
-#include <QUrl>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QThread>
+#include <QUrl>
 
 #include <algorithm>
 #include <atomic>
@@ -239,6 +235,11 @@ std::vector<core::Disk> translateWmiDisks(const QJsonArray& arr) {
         disk.busType = d.value("BusType").toString("Unknown").toStdString();
         disk.sizeBytes = static_cast<std::uint64_t>(
             d.value("Size").toDouble(0.0));
+        disk.identity.uniqueId = d.value("UniqueId").toString().toStdString();
+        disk.identity.uniqueIdFormat =
+            d.value("UniqueIdFormat").toString().toStdString();
+        disk.identity.serialNumber =
+            d.value("SerialNumber").toString().toStdString();
         const QString style = d.value("PartitionStyle").toString();
         if (style.compare("GPT", Qt::CaseInsensitive) == 0) {
             disk.style = core::PartitionStyle::GPT;
@@ -295,8 +296,8 @@ std::vector<core::Disk> DiskOps::enumerateDisks(std::string* errorMessage) {
 }
 
 core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
-    // Re-read the live disk state and check that the plan refers to a
-    // disk that actually exists, and that the requested strategy is
+    // Re-read the live disk state and check that the plan still refers to
+    // the very same physical disk, and that the requested strategy is
     // safe to run on it.
     auto r = Wmi::runScript("list_disks");
     if (!r) return core::makeError(core::Error::Kind::Platform,
@@ -308,29 +309,27 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
     else return core::makeError(core::Error::Kind::Platform,
         "Unexpected JSON shape from WMI");
 
-    int matchedDiskNumber = -1;
-    bool isSystem = false;
-    QString matchedModel;
-    std::uint64_t matchedSize = 0;
-    for (const QJsonValue& v : arr) {
-        const QJsonObject d = v.toObject();
-        if (d.value("Number").toInt(-1) == plan.targetDiskNumber) {
-            matchedDiskNumber = plan.targetDiskNumber;
-            matchedModel = d.value("Model").toString();
-            matchedSize = static_cast<std::uint64_t>(d.value("Size").toDouble(0.0));
-            const QJsonArray parts = d.value("Partitions").toArray();
-            for (const QJsonValue& pv : parts) {
-                if (pv.toObject().value("IsSystem").toBool()) {
-                    isSystem = true;
-                }
-            }
-            break;
-        }
+    const std::vector<core::Disk> liveDisks = translateWmiDisks(arr);
+
+    // The disk number is only an enumeration index: two identical disks
+    // share model and capacity, and the number changes when the device
+    // topology changes. The approved device identity is therefore checked
+    // against a fresh enumeration before anything is written. When the
+    // identity cannot be established the operation is refused.
+    const core::DiskIdentityCheck identity =
+        core::checkDiskIdentity(plan.targetDiskIdentity,
+                                plan.targetDiskNumber, liveDisks);
+    if (!identity.ok()) {
+        return core::makeError(core::Error::Kind::InvalidInput,
+            "Disk identity check failed: " + identity.detail +
+            " The plan must be reviewed again.");
     }
-    if (matchedDiskNumber < 0) {
-        return core::makeError(core::Error::Kind::NotFound,
-            "Target disk " + std::to_string(plan.targetDiskNumber) +
-            " does not exist or is not Online");
+
+    const core::Disk& disk = *identity.disk;
+
+    bool isSystem = false;
+    for (const auto& p : disk.partitions) {
+        if (p.isSystem) isSystem = true;
     }
     if (plan.strategy == core::Strategy::WipeDisk && isSystem) {
         return core::makeError(core::Error::Kind::InvalidInput,
@@ -338,7 +337,7 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
             "Choose a non-system disk or pick a different strategy.");
     }
     if (!plan.targetDiskModel.empty()) {
-        const QString liveModel = matchedModel.trimmed();
+        const QString liveModel = disk.qmodel().trimmed();
         const QString planModel = QString::fromStdString(plan.targetDiskModel).trimmed();
         if (liveModel.compare(planModel, Qt::CaseInsensitive) != 0) {
             return core::makeError(core::Error::Kind::InvalidInput,
@@ -347,11 +346,11 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
                 "'). The plan must be reviewed again.");
         }
     }
-    if (plan.targetDiskSizeBytes > 0 && matchedSize != plan.targetDiskSizeBytes) {
+    if (plan.targetDiskSizeBytes > 0 && disk.sizeBytes != plan.targetDiskSizeBytes) {
         return core::makeError(core::Error::Kind::InvalidInput,
             "Disk identity changed: size mismatch (expected " +
             std::to_string(plan.targetDiskSizeBytes) + " bytes, found " +
-            std::to_string(matchedSize) + " bytes). The plan must be reviewed again.");
+            std::to_string(disk.sizeBytes) + " bytes). The plan must be reviewed again.");
     }
     return core::makeOk();
 }
@@ -393,10 +392,6 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
     std::function<void(int percent, const QString& status)> progressCallback,
     const std::atomic<bool>* cancelFlag) {
 
-    const auto cancelled = [&]() -> bool {
-        return cancelFlag != nullptr && cancelFlag->load();
-    };
-
     if (distro.mirrors().empty()) {
         return core::makeError<core::IsoDownload>(core::Error::Kind::NotFound,
             "No download mirrors available for " + distro.label());
@@ -416,6 +411,8 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
     };
 
     // Try each mirror in order
+    bool sawTimeout = false;
+    QString lastError;
     for (const auto& mirror : distro.mirrors()) {
         removePart();
 
@@ -423,122 +420,33 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
             progressCallback(0, QString("Connecting to %1...").arg(QString::fromStdString(mirror)));
         }
 
-        QFile file(QString::fromStdString(partPath.string()));
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            return core::makeError<core::IsoDownload>(core::Error::Kind::Io,
-                "Cannot open temporary file for writing: " + partPath.string());
-        }
+        // The transfer itself observes the cancellation flag and enforces
+        // an inactivity timeout, so a stalled mirror cannot block the
+        // installer forever.
+        const platform::HttpDownloadResult transfer = platform::httpDownload(
+            QUrl(QString::fromStdString(mirror)), destPath, progressCallback,
+            cancelFlag, platform::HttpDownloadLimits());
 
-        QNetworkAccessManager manager;
-        QNetworkRequest request(QUrl(QString::fromStdString(mirror)));
-        request.setRawHeader("User-Agent", "ULLI/1.0");
-
-        QNetworkReply* reply = manager.get(request);
-
-        QEventLoop loop;
-
-        bool cancelRequested = false;
-        bool writeFailed = false;
-        std::string writeError;
-        bool freeSpaceFailed = false;
-        std::string freeSpaceError;
-        qint64 totalSize = -1;
-        int lastPercent = -1;
-        QElapsedTimer throttle;
-        throttle.start();
-
-        QObject::connect(reply, &QNetworkReply::readyRead, [&]() {
-            if (cancelled()) {
-                cancelRequested = true;
-                reply->abort();
-                return;
-            }
-            while (reply->bytesAvailable() > 0) {
-                QByteArray chunk = reply->read(256 * 1024);
-                if (chunk.isEmpty()) break;
-                const qint64 written = file.write(chunk);
-                if (written != chunk.size()) {
-                    writeFailed = true;
-                    writeError = "Short write to temporary file: " + partPath.string();
-                    reply->abort();
-                    return;
-                }
-            }
-        });
-
-        QObject::connect(reply, &QNetworkReply::downloadProgress,
-            [&](qint64 bytesReceived, qint64 bytesTotal) {
-                if (cancelled()) {
-                    cancelRequested = true;
-                    reply->abort();
-                    return;
-                }
-                if (bytesTotal > 0) {
-                    if (totalSize < 0) {
-                        totalSize = bytesTotal;
-                        QStorageInfo storage(QString::fromStdString(destPath.parent_path().string()));
-                        if (storage.bytesAvailable() > 0) {
-                            const qint64 needed = bytesTotal + 64LL * 1024 * 1024;
-                            if (storage.bytesAvailable() < needed) {
-                                freeSpaceFailed = true;
-                                freeSpaceError = "Not enough free space in " +
-                                    destPath.parent_path().string() + ": need " +
-                                    std::to_string(bytesTotal + 64LL * 1024 * 1024) +
-                                    ", have " + std::to_string(storage.bytesAvailable());
-                                reply->abort();
-                                return;
-                            }
-                        }
-                    }
-                    const int percent = static_cast<int>((bytesReceived * 100) / bytesTotal);
-                    if (percent != lastPercent && throttle.elapsed() >= 250) {
-                        lastPercent = percent;
-                        throttle.restart();
-                        if (progressCallback) {
-                            progressCallback(percent,
-                                QString("Downloading: %1 / %2 MB")
-                                    .arg(bytesReceived / (1024 * 1024))
-                                    .arg(bytesTotal / (1024 * 1024)));
-                        }
-                    }
-                }
-            });
-
-        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-        loop.exec();
-
-        if (cancelled()) cancelRequested = true;
-
-        file.close();
-
-        if (cancelRequested || cancelled()) {
+        if (transfer.outcome == platform::HttpDownloadOutcome::Cancelled) {
             removePart();
-            reply->deleteLater();
             return core::makeError<core::IsoDownload>(core::Error::Kind::Cancelled,
                 "Download cancelled");
         }
-        if (writeFailed) {
-            removePart();
-            reply->deleteLater();
-            return core::makeError<core::IsoDownload>(core::Error::Kind::Io, writeError);
-        }
-        if (freeSpaceFailed) {
-            removePart();
-            reply->deleteLater();
-            return core::makeError<core::IsoDownload>(core::Error::Kind::Io, freeSpaceError);
-        }
-        if (reply->error() != QNetworkReply::NoError) {
-            const QString err = reply->errorString();
-            reply->deleteLater();
-            removePart();
+        if (transfer.outcome == platform::HttpDownloadOutcome::TimedOut) {
+            sawTimeout = true;
+            lastError = transfer.errorMessage;
             if (progressCallback) {
-                progressCallback(0, QString("Mirror failed: %1").arg(err));
+                progressCallback(0, QString("Mirror timed out: %1").arg(lastError));
             }
             continue;
         }
-
-        reply->deleteLater();
+        if (!transfer.ok()) {
+            lastError = transfer.errorMessage;
+            if (progressCallback) {
+                progressCallback(0, QString("Mirror failed: %1").arg(lastError));
+            }
+            continue;
+        }
 
         // Verification phase
         if (progressCallback) {
@@ -592,8 +500,15 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
         }
     }
 
+    if (sawTimeout) {
+        return core::makeError<core::IsoDownload>(core::Error::Kind::Timeout,
+            "The download timed out: " + lastError.toStdString() +
+            " Try again later or use a different mirror.");
+    }
     return core::makeError<core::IsoDownload>(core::Error::Kind::Platform,
-        "All download mirrors failed for " + distro.label());
+        "All download mirrors failed for " + distro.label() +
+        (lastError.isEmpty() ? std::string()
+                              : ": " + lastError.toStdString()));
 }
 
 core::Result<std::uint64_t> DiskOps::shrinkPartition(char driveLetter,

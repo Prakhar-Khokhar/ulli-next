@@ -73,12 +73,19 @@ $out = foreach ($d in $disks) {
         }
     }
 
+    # Device identity: UniqueId is the storage stack's own id for the
+    # device and survives a repartition, SerialNumber is the (weaker)
+    # hardware serial. Both are needed to tell two identical disks
+    # apart - the disk number alone is only an enumeration index.
     [pscustomobject]@{
         Number        = [int]$d.Number
         Model         = if ($d.Model) { [string]$d.Model } else { '' }
         BusType       = if ($d.BusType) { [string]$d.BusType } else { 'Unknown' }
         PartitionStyle= [string]$d.PartitionStyle
         Size          = [int64]$d.Size
+        UniqueId      = if ($d.UniqueId) { [string]$d.UniqueId } else { '' }
+        UniqueIdFormat= if ($d.UniqueIdFormat) { [string]$d.UniqueIdFormat } else { '' }
+        SerialNumber  = if ($d.SerialNumber) { [string]$d.SerialNumber } else { '' }
         Partitions    = $partOut
     }
 }

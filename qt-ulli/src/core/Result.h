@@ -37,6 +37,7 @@ public:
         Internal,    // bug — an invariant was violated
         NotFound,    // a required file/device/path was not found
         Io,          // filesystem I/O error
+        Timeout,     // the operation stopped making progress in time
     };
 
     Error(Kind k, std::string msg)

@@ -8,6 +8,7 @@
 #pragma once
 
 #include "core/Distro.h"
+#include "core/DiskInfo.h"
 
 #include <QString>
 
@@ -65,9 +66,15 @@ struct InstallPlan {
     // Identity of the target disk at the time the plan was approved.
     // A disk number alone is not enough: the same number can point at a
     // different device after a reboot, a dock change or a re-enumeration,
-    // so the model and the size are re-checked before anything is written.
+    // so the device identity and the model and the size are re-checked
+    // before anything is written.
     std::string targetDiskModel;
     std::uint64_t targetDiskSizeBytes = 0;
+    // The stable identity of the approved device (unique id / serial).
+    // It is re-validated against a fresh enumeration before the first
+    // destructive step; an empty identity makes the platform backend
+    // refuse the operation.
+    DiskIdentity targetDiskIdentity;
 
     // Layout
     std::uint64_t linuxSizeBytes = 30ull * 1024 * 1024 * 1024;

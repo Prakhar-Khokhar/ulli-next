@@ -40,12 +40,40 @@ struct Partition {
     bool isHidden = false;
 };
 
+// Stable identity of one physical disk.
+//
+// A disk number is not an identity: it is an enumeration index and it
+// changes when a device is attached, removed or re-enumerated. Model and
+// capacity are not an identity either: two identical drives share both.
+// The storage layer therefore exposes identifiers of the device itself:
+//
+//   * uniqueId      - the storage device id (SCSI/ATA/NVMe/USB). It is a
+//                     property of the hardware and survives a repartition,
+//                     so it is the preferred identifier.
+//   * uniqueIdFormat- how the storage stack spells the id ("SCSI",
+//                     "ATA", "NVMe", "USB", ...). Purely informational.
+//   * serialNumber  - the device serial. Weaker than the unique id: some
+//                     vendors report placeholders and some enclosures
+//                     clone the value.
+//
+// The comparison rules (and the normalization of the raw values) live in
+// core/DiskIdentity.h.
+struct DiskIdentity {
+    std::string uniqueId;
+    std::string uniqueIdFormat;
+    std::string serialNumber;
+
+    // True when the identity carries no identifier at all.
+    bool empty() const { return uniqueId.empty() && serialNumber.empty(); }
+};
+
 struct Disk {
     int number = 0;
     std::string model;
     std::string busType;            // SCSI, NVMe, SATA, USB, ...
     PartitionStyle style = PartitionStyle::Unknown;
     std::uint64_t sizeBytes = 0;
+    DiskIdentity identity;          // stable device identity
     std::vector<Partition> partitions;
     std::uint64_t unallocatedBytes = 0;
 

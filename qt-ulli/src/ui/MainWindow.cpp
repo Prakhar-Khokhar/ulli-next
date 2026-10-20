@@ -523,12 +523,17 @@ void MainWindow::beginIsoDownload(const core::Distro& distro,
     auto cancel = std::make_shared<std::atomic<bool>>(false);
     downloadCancelFlag_ = cancel;
 
-    QPointer<MainWindow> guard(this);
-    QtConcurrent::run([guard, distro, destPath, cancel, generation]() {
-        std::unique_ptr<core::IPlatformBackend> backend;
-        if (guard) backend = guard->createBackend();
-        if (!backend) return;
+    // The backend is created here, on the GUI thread, and moved into the
+    // worker. The worker must not call a method on the window: createBackend()
+    // is virtual, so dispatching it from the worker thread would run an
+    // override on a GUI owned object on the wrong thread - and the
+    // QPointer check cannot protect against the window being destroyed
+    // right after it. The shared pointer also keeps the backend alive for
+    // the whole transfer, even when the window is closed meanwhile.
+    std::shared_ptr<core::IPlatformBackend> backend(createBackend());
 
+    QPointer<MainWindow> guard(this);
+    QtConcurrent::run([guard, backend, distro, destPath, cancel, generation]() {
         auto result = backend->downloadIso(
             distro, destPath,
             [guard, generation](int percent, const QString& status) {
