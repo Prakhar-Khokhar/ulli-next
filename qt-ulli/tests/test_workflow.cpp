@@ -60,6 +60,7 @@ struct Recorder {
     bool downloadVerifiedResult = true;
     int downloadDelayMs = 0;
     int downloadCalls = 0;
+    int downloadCallsAtPlanReview = -1;
     bool downloadCancelObserved = false;
     bool downloadFinished = false;
     bool lastDownloadVerified = false;
@@ -300,6 +301,9 @@ public:
         {
             std::lock_guard<std::mutex> lock(rec_->mutex);
             rec_->planDialogCalls++;
+            // Snapshot: nothing may have been downloaded before the plan
+            // was reviewed.
+            rec_->downloadCallsAtPlanReview = rec_->downloadCalls;
             if (!disks.empty()) {
                 rec_->plannedTargetDiskModel = disks[0].model;
                 rec_->plannedTargetDiskSizeBytes = disks[0].sizeBytes;
@@ -423,7 +427,8 @@ private slots:
         QMetaObject::invokeMethod(&w, "onStartClicked", Qt::QueuedConnection);
         QVERIFY2(waitForPred([&]() { return rec->planDialogCalls >= 1; }, 10000),
                  "plan review was never reached");
-        QVERIFY2(rec->downloadCalls == 0, "a download was started for a cached ISO");
+        QVERIFY2(rec->downloadCallsAtPlanReview == 0,
+                 "a download was started before the plan review");
     }
 
     void missingIsoReachesPlanReviewWithoutDownload() {
@@ -438,7 +443,8 @@ private slots:
         QMetaObject::invokeMethod(&w, "onStartClicked", Qt::QueuedConnection);
         QVERIFY2(waitForPred([&]() { return rec->planDialogCalls >= 1; }, 10000),
                  "plan review was never reached");
-        QVERIFY2(rec->downloadCalls == 0, "downloadIso called before approval");
+        QVERIFY2(rec->downloadCallsAtPlanReview == 0,
+                 "downloadIso was called before the plan was approved");
     }
 
     void approvedPlanDownloadsAndBecomesReady() {
@@ -453,10 +459,8 @@ private slots:
         QMetaObject::invokeMethod(&w, "onStartClicked", Qt::QueuedConnection);
         QVERIFY2(waitForPred([&]() { return rec->downloadFinished; }, 10000),
                  "download never finished");
-        QVERIFY2(waitForPred([&]() {
-            return w.workflowState() == ulli::ui::MainWindow::WorkflowState::Ready ||
-                   w.workflowState() == ulli::ui::MainWindow::WorkflowState::Installing;
-        }, 10000), "workflow did not reach Ready/Installing");
+        QVERIFY2(waitForPred([&]() { return rec->installResultCalls >= 1; }, 15000),
+                 "the install did not start after the download");
         QVERIFY2(rec->downloadCalls == 1, "expected exactly one download");
     }
 

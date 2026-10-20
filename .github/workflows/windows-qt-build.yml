@@ -50,6 +50,16 @@ jobs:
       - name: Build
         run: cmake --build build/windows --config Release --parallel 2
 
+      - name: Diagnostic (workflow test report)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE "build/windows/Release/test_workflow.exe"
+          if (Test-Path $exe) {
+            & $exe -o workflow-results.txt,txt *>&1 | Out-Null
+            if (Test-Path workflow-results.txt) { Get-Content workflow-results.txt }
+          }
+
       - name: Run unit tests
         run: ctest --test-dir build/windows -C Release --output-on-failure
         env:
