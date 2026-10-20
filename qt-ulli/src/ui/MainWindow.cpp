@@ -47,12 +47,6 @@ std::unique_ptr<core::IPlatformBackend> createPlatformBackend() {
     return std::make_unique<platform::DiskOps>();
 }
 
-qint64 fileSizeOrZero(const std::filesystem::path& path) {
-    std::error_code ec;
-    const auto size = std::filesystem::file_size(path, ec);
-    return ec ? 0 : static_cast<qint64>(size);
-}
-
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -410,7 +404,7 @@ void MainWindow::ensureIsoAvailable(const core::InstallPlan& plan) {
                     .arg(QString::fromStdString(plan.isoPath.string())));
             return;
         }
-        distro_->notifyIsoReady(fileSizeOrZero(plan.isoPath), false);
+        distro_->notifyIsoReady(false);
         if (approvedPlan_) approvedPlan_->isoPath = plan.isoPath;
         setWorkflowState(WorkflowState::Ready);
         startApprovedPlan();
@@ -429,15 +423,11 @@ void MainWindow::ensureIsoAvailable(const core::InstallPlan& plan) {
     const std::filesystem::path cached = isoCachePathFor(*distro);
     std::error_code ec;
     if (std::filesystem::exists(cached, ec) && !ec) {
-        // A cached ISO is reused - but only when it is the very file that
-        // was verified before. Otherwise it is verified again.
-        if (distro_->isoVerified() &&
-            distro_->verifiedIsoSize() == fileSizeOrZero(cached)) {
-            if (approvedPlan_) approvedPlan_->isoPath = cached;
-            setWorkflowState(WorkflowState::Ready);
-            startApprovedPlan();
-            return;
-        }
+        // A cached ISO is never reused because it was verified earlier: the
+        // file can be replaced or modified after that verification, and a
+        // matching file size proves nothing about the content. The cached
+        // file is therefore checked against the digest from the catalog
+        // again before it is used.
         verifyCachedIso(*distro, cached);
         return;
     }
@@ -464,16 +454,19 @@ void MainWindow::verifyCachedIso(const core::Distro& distro,
             auto r = core::Sha256::verifyFile(path, expected);
             ok = static_cast<bool>(r);
         }
-        const qint64 size = fileSizeOrZero(path);
+        // The file may only be claimed to be verified when it was checked
+        // against a trusted digest. Without a digest nothing was verified.
+        const bool verified = ok && hasChecksum;
         if (!guard) return;
-        QMetaObject::invokeMethod(guard.data(), [guard, generation, ok, size]() {
-            if (!guard) return;
-            guard->onIsoVerificationFinished(ok, size, generation);
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(guard.data(),
+            [guard, generation, ok, verified]() {
+                if (!guard) return;
+                guard->onIsoVerificationFinished(ok, verified, generation);
+            }, Qt::QueuedConnection);
     });
 }
 
-void MainWindow::onIsoVerificationFinished(bool ok, qint64 fileSize,
+void MainWindow::onIsoVerificationFinished(bool ok, bool verified,
                                             quint64 generation) {
     if (generation != workflowGeneration_) {
         // A stale verification result (the selection changed meanwhile).
@@ -485,15 +478,38 @@ void MainWindow::onIsoVerificationFinished(bool ok, qint64 fileSize,
     if (!ok) {
         approvedPlan_.reset();
         setWorkflowState(WorkflowState::Failed);
-        distro_->setIsoStage(tr("The cached ISO does not match the expected checksum."), 0, false);
+        // The cached file did not pass the digest check: it must not be
+        // reported as ready - or as verified - any more.
+        distro_->notifyIsoInvalid();
+        const QString isoPath = QString::fromStdString(cachedIsoPath_.string());
+        distro_->setIsoStage(
+            tr("The cached ISO does not match the expected checksum: %1")
+                .arg(isoPath), 0, false);
         QMessageBox::warning(this, tr("ULLI"),
-            tr("The cached ISO does not match the checksum from the catalog. "
-               "It will be downloaded again."));
+            tr("The cached ISO does not match the checksum from the catalog:\n\n"
+               "%1\n\n"
+               "The installation was stopped and the cached file was not "
+               "used. Remove the file and start the installation again to "
+               "download a fresh copy.").arg(isoPath));
         return;
     }
     if (!approvedPlan_) return;
+    const QString isoPath = QString::fromStdString(cachedIsoPath_.string());
+    if (verified) {
+        distro_->setIsoStage(tr("✓ ISO verified: %1").arg(isoPath), 0, false);
+    } else {
+        // The catalog has no digest for this ISO: the file is usable, but
+        // it must not be claimed to be cryptographically verified.
+        logBackend_->append(
+            tr("The cached ISO could not be checksum verified: the catalog "
+               "has no trusted digest for it."),
+            core::ProgressLog::Severity::Warn);
+        distro_->setIsoStage(
+            tr("⚠ ISO present but not verified — the catalog has no checksum "
+               "for it: %1").arg(isoPath), 0, false);
+    }
     approvedPlan_->isoPath = cachedIsoPath_;
-    distro_->notifyIsoReady(fileSize, true);
+    distro_->notifyIsoReady(verified);
     setWorkflowState(WorkflowState::Ready);
     startApprovedPlan();
 }
@@ -577,7 +593,7 @@ void MainWindow::onIsoDownloadFinished(core::Result<core::IsoDownload> result,
             core::ProgressLog::Severity::Warn);
     }
     if (approvedPlan_) approvedPlan_->isoPath = download.path;
-    distro_->notifyIsoReady(fileSizeOrZero(download.path), download.verified);
+    distro_->notifyIsoReady(download.verified);
     setWorkflowState(WorkflowState::Ready);
     startApprovedPlan();
 }

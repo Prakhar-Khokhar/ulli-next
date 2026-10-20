@@ -130,7 +130,7 @@ private:
     void onIsoDownloadProgress(int percent, const QString& status);
     void onIsoDownloadFinished(core::Result<core::IsoDownload> result, quint64 generation);
     void verifyCachedIso(const core::Distro& distro, const std::filesystem::path& path);
-    void onIsoVerificationFinished(bool ok, qint64 fileSize, quint64 generation);
+    void onIsoVerificationFinished(bool ok, bool verified, quint64 generation);
     void startApprovedPlan();
     void invalidateApproval(const QString& reason);
     bool approvalMatchesSelection(const core::InstallPlan& plan) const;

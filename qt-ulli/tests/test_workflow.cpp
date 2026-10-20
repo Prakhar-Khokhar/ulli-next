@@ -23,8 +23,10 @@
 #include <QTimer>
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -657,6 +659,110 @@ private slots:
         }
         QVERIFY2(rec->downloadCalls == downloadsAfterFirst,
                  "cached ISO was not reused (a download started)");
+    }
+
+    // Regression test for the ISO cache integrity: a cached ISO is only
+    // reused after its content was checked against the digest from the
+    // catalog again. A file that was modified after the verification -
+    // even with the exact same size - must not be installed.
+    void tamperedCachedIsoIsNotInstalled() {
+        auto rec = std::make_shared<Recorder>();
+        QTemporaryDir cacheDir;
+        QVERIFY(cacheDir.isValid());
+        const auto cachePath = std::filesystem::path(cacheDir.path().toStdString());
+
+        TestWindow w(rec, cachePath, true);
+        w.show();
+
+        // 1. Nothing is cached yet: the ISO is downloaded and the backend
+        //    reports the transfer as checksum verified.
+        QMetaObject::invokeMethod(&w, "onStartClicked", Qt::QueuedConnection);
+        QVERIFY2(waitForPred([&]() { return rec->installResultCalls >= 1; }, 20000),
+                 "the install never started after the download");
+        QCOMPARE(rec->downloadCalls, 1);
+
+        // 2. The cached file is modified in place. The size stays exactly
+        //    the same - only the content changes.
+        const std::filesystem::path cached =
+            cachePath / selectedIsoFileName(&w).toStdString();
+        std::error_code ec;
+        const auto sizeBefore = std::filesystem::file_size(cached, ec);
+        QVERIFY2(!ec, "the downloaded ISO is not in the cache");
+        QVERIFY(sizeBefore > 0);
+        {
+            std::string content;
+            {
+                std::ifstream in(cached, std::ios::binary);
+                QVERIFY(in.good());
+                content.assign(std::istreambuf_iterator<char>(in),
+                               std::istreambuf_iterator<char>());
+            }
+            QCOMPARE(static_cast<std::uintmax_t>(content.size()), sizeBefore);
+            // Flip a bit of the first byte: the content differs, the size
+            // stays exactly the same.
+            content[0] = static_cast<char>(content[0] ^ 0x20);
+            std::ofstream out(cached, std::ios::binary | std::ios::trunc);
+            QVERIFY(out.good());
+            out.write(content.data(), static_cast<std::streamsize>(content.size()));
+            out.flush();
+            QVERIFY(out.good());
+        }
+        const auto sizeAfter = std::filesystem::file_size(cached, ec);
+        QVERIFY(!ec);
+        QCOMPARE(sizeAfter, sizeBefore);
+
+        // 3. The second attempt must check the content again and refuse the
+        //    modified file instead of installing it.
+        QMetaObject::invokeMethod(&w, "onStartClicked", Qt::QueuedConnection);
+        QVERIFY2(waitForPred([&]() {
+                       return w.workflowState() ==
+                                  ulli::ui::MainWindow::WorkflowState::Failed ||
+                              rec->installResultCalls >= 2;
+                   }, 20000),
+                 "the second attempt neither failed nor completed");
+        QCOMPARE(rec->installResultCalls, 1);
+        QVERIFY2(w.workflowState() == ulli::ui::MainWindow::WorkflowState::Failed,
+                 "the workflow did not fail on the modified cached ISO");
+        QCOMPARE(rec->downloadCalls, 1);
+
+        // The rejection comes from the digest check, not from a missing file.
+        auto* sel = w.findChild<ulli::ui::DistroSelector*>();
+        QVERIFY(sel);
+        QVERIFY2(sel->isoStatusText().contains(QStringLiteral("checksum")),
+                 "the cached ISO was not rejected by the checksum check");
+
+        // A rejected ISO must not stay marked as ready or verified.
+        QVERIFY2(!sel->isoReady(),
+                 "the rejected ISO is still marked as ready");
+        QVERIFY2(!sel->isoVerified(),
+                 "the rejected ISO is still marked as verified");
+    }
+
+    // A file that is modified while keeping its exact size must not pass
+    // the digest check: the size alone says nothing about the content.
+    void sameSizeModificationBreaksTheDigestCheck() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const auto file = std::filesystem::path(tmp.path().toStdString()) / "test.bin";
+        {
+            std::ofstream f(file, std::ios::binary);
+            f << "hello world";
+        }
+        auto digest = ulli::core::Sha256::hashFile(file);
+        QVERIFY(digest);
+
+        {
+            std::fstream f(file, std::ios::binary | std::ios::in | std::ios::out);
+            QVERIFY(f.good());
+            f.seekp(0);
+            f.write("H", 1);
+            f.flush();
+            QVERIFY(f.good());
+        }
+        std::error_code ec;
+        QCOMPARE(std::filesystem::file_size(file, ec), static_cast<std::uintmax_t>(11));
+        QVERIFY(!ec);
+        QVERIFY(!ulli::core::Sha256::verifyFile(file, digest.value()));
     }
 
     void changingSelectionInvalidatesApproval() {

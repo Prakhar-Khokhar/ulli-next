@@ -216,9 +216,7 @@ void DistroSelector::onIsoVerificationFinished() {
                                       .arg(QString::fromStdString(isoPath.string())));
             statusLabel_->setStyleSheet("color: #c60; font-size: 11px;");
         }
-        std::error_code ec;
-        const auto size = std::filesystem::file_size(isoPath, ec);
-        notifyIsoReady(ec ? 0 : static_cast<qint64>(size), verified);
+        notifyIsoReady(verified);
     } else {
         statusLabel_->setText(tr("⚠ ISO found but verification failed: %1")
                                   .arg(QString::fromStdString(isoPath.string())));
@@ -261,15 +259,19 @@ void DistroSelector::setIsoReady(bool ready) {
     isoReady_ = ready;
     if (!ready) {
         isoVerified_ = false;
-        verifiedIsoSize_ = 0;
     }
     emit isoReadinessChanged(isoReady_);
 }
 
-void DistroSelector::notifyIsoReady(qint64 fileSize, bool verified) {
+void DistroSelector::notifyIsoReady(bool verified) {
     isoVerified_ = verified;
-    verifiedIsoSize_ = fileSize;
     setIsoReady(true);
+}
+
+void DistroSelector::notifyIsoInvalid() {
+    // The ISO was rejected: it is not ready and not verified any more.
+    // The status text is set by the caller (setIsoStage).
+    setIsoReady(false);
 }
 
 void DistroSelector::updateCustomIsoReadiness() {
@@ -286,9 +288,7 @@ void DistroSelector::updateCustomIsoReadiness() {
         std::filesystem::path(path.toStdString()), ec) && !ec;
     setIsoReady(isFile);
     if (isFile) {
-        const auto size = std::filesystem::file_size(
-            std::filesystem::path(path.toStdString()), ec);
-        notifyIsoReady(ec ? 0 : static_cast<qint64>(size), false);
+        notifyIsoReady(false);
         statusLabel_->setText(tr("Custom ISO: %1").arg(path));
         statusLabel_->setStyleSheet("color: #666; font-size: 11px;");
     }

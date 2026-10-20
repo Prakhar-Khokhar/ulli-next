@@ -60,15 +60,20 @@ public:
     // ISO, which has its own path).
     std::filesystem::path isoCachePath() const;
 
-    // Size of the file that was verified. Used to notice that the cached
-    // file was replaced since the verification.
-    qint64 verifiedIsoSize() const { return verifiedIsoSize_; }
-
     // Drives the download / verification stage display from the main window.
     void setIsoStage(const QString& status, int percent, bool busy);
 
     // Called by the main window once an ISO has been fetched and checked.
-    void notifyIsoReady(qint64 fileSize, bool verified);
+    // `verified` is true only when the content was checked against a
+    // trusted digest. It is never derived from the size of the file: a
+    // file can be modified without changing its size.
+    void notifyIsoReady(bool verified);
+
+    // Called by the main window when the ISO of the current selection was
+    // rejected - for example because the cached file does not match the
+    // expected digest. A rejected ISO is neither ready nor verified, so it
+    // must not be offered for an installation any more.
+    void notifyIsoInvalid();
 
     signals:
     void selectionChanged();
@@ -105,7 +110,6 @@ private:
     // provides a digest).
     bool isoReady_ = false;
     bool isoVerified_ = false;
-    qint64 verifiedIsoSize_ = 0;
 };
 
 }  // namespace ulli::ui
