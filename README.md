@@ -1,5 +1,7 @@
 # ULLI-Next
 
+**ULLI stands for USB-less Linux Installer.**
+
 **Install and boot Linux from an internal drive—without first creating a bootable USB stick.**
 
 ULLI-Next is a community-maintained fork of [ULLI](https://github.com/rltvty2/ulli), originally created by [rltvty2](https://github.com/rltvty2/). It is maintained by Prakhar Khokhar.
@@ -44,7 +46,7 @@ A **Custom ISO** option allows use of distributions outside the built-in catalog
 - Storage strategies for existing free space, volume shrinking, secondary drives, and explicit disk wiping.
 - **Live Only** mode with an approximately 7 GiB FAT32 staging partition.
 - **Full Install** planning with at least approximately 30 GiB of additional Linux space.
-- Direct UEFI boot configuration and optional rEFInd boot management.
+- Direct UEFI boot configuration in the legacy Windows PowerShell installer, including an optional rEFInd boot-manager path.
 - Windows-specific components for disk enumeration, EFI/BCD handling, BitLocker checks, and storage operations.
 - Qt GUI components for distro selection, installation planning, partition preview, progress, and logs.
 
@@ -55,9 +57,15 @@ Exact support depends on the implementation and platform; not every path has bee
 - Use a compatible UEFI system and review every disk/partition choice carefully.
 - Back up important files before installation.
 - BitLocker may need to be suspended or decrypted, depending on the scenario.
-- Secure Boot may need to be disabled for some configurations; **rEFInd requires Secure Boot to be disabled**.
+- Secure Boot requirements depend on the bootloader and installation path. The legacy Windows PowerShell installer's optional rEFInd mode requires Secure Boot to be disabled.
 - Firmware may not automatically select the new Linux boot option.
 - Successful operation on one computer does not guarantee the same result on another.
+
+## Legacy Windows PowerShell bootloader: rEFInd
+
+The legacy `windows/ulli-windows.ps1` installer includes an **optional upstream rEFInd 0.14.2** path. When selected, the script plans for an additional 100 MB FAT32 partition labeled `REFIND`, placed after the `LINUX_LIVE` boot partition. It downloads the rEFInd archive from SourceForge, installs the EFI loader and supporting filesystem drivers/icons, detects the Linux image's boot-file layout, and generates a `refind.conf` menu entry using the distro's kernel arguments where available. It then creates a UEFI boot entry named `rEFInd - ULLI`; when automatic restart is enabled, the script attempts to make that entry the default. The existing Windows EFI System Partition is not used as the rEFInd installation destination. If the optional rEFInd setup fails, the script is intended to continue with direct boot where possible.
+
+**This is the existing rEFInd implementation in the legacy PowerShell script—not RefindPlus.** RefindPlus has **not** been implemented in the newer Qt 6/C++ Windows installer, and work on that integration has not started. Do not assume RefindPlus will behave like this existing rEFInd path or share its Secure Boot limitations; any future integration needs its own implementation and hardware testing.
 
 ## Running the legacy installer
 
