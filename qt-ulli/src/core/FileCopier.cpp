@@ -63,9 +63,12 @@ bool collectDirectory(const std::filesystem::path& directory,
 
         CopyEntry copyEntry;
         copyEntry.source = entryPath;
-        std::error_code relEc;
-        copyEntry.relative = std::filesystem::relative(entryPath, root, relEc);
-        if (relEc) {
+        // The relative path is computed lexically: std::filesystem::relative
+        // works on the canonical paths and would therefore resolve a
+        // symbolic link to its target - the link would be copied under the
+        // name of its target and overwrite it.
+        copyEntry.relative = entryPath.lexically_relative(root);
+        if (copyEntry.relative.empty()) {
             copyEntry.relative = entryPath.filename();
         }
 
