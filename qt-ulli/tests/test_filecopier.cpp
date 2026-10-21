@@ -52,6 +52,23 @@ bool requireOk(const ulli::core::Result<T>& result, const char* what) {
     return false;
 }
 
+// Dumps a copy plan to stderr, so a failing check can be diagnosed from
+// the CI log.
+void dumpPlan(const char* what, const ulli::core::CopyPlan& plan) {
+    std::string text = std::string("[filecopier] ") + what + ": files=" +
+        std::to_string(plan.fileCount) + " bytes=" +
+        std::to_string(plan.totalBytes) + " dirs=" +
+        std::to_string(plan.directories.size()) + " skipped=";
+    for (const std::string& entry : plan.skipped) {
+        text += "{" + entry + "}";
+    }
+    text += " entries=";
+    for (const auto& entry : plan.files) {
+        text += "{" + entry.relative.string() + "}";
+    }
+    trace(text);
+}
+
 std::string readFile(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(in)),
@@ -94,6 +111,7 @@ void TestFileCopier::aSymlinkToAFileIsCopiedByContent() {
 
     auto plan = ulli::core::enumerateCopyPlan(source);
     QVERIFY(requireOk(plan, "enumerateCopyPlan"));
+    dumpPlan("symlinkFile", plan.value());
     // The link is copied with the content of its target, like robocopy.
     QCOMPARE(plan.value().fileCount, std::uint64_t(2));
 
@@ -119,6 +137,7 @@ void TestFileCopier::aSymlinkToADirectoryIsNotTraversed() {
 
     auto plan = ulli::core::enumerateCopyPlan(source);
     QVERIFY(requireOk(plan, "enumerateCopyPlan"));
+    dumpPlan("symlinkDir", plan.value());
     // The link to the directory is not traversed, so its content is not
     // copied a second time.
     QCOMPARE(plan.value().fileCount, std::uint64_t(1));
@@ -126,6 +145,10 @@ void TestFileCopier::aSymlinkToADirectoryIsNotTraversed() {
 
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination);
     QVERIFY(requireOk(stats, "copyCopyPlan"));
+    trace(std::string("[filecopier] destination has real/file.bin: ") +
+          (std::filesystem::exists(destination / "real" / "file.bin") ? "yes" : "no") +
+          " has linkdir/file.bin: " +
+          (std::filesystem::exists(destination / "linkdir" / "file.bin") ? "yes" : "no"));
     QVERIFY(std::filesystem::exists(destination / "real" / "file.bin"));
     QVERIFY(!std::filesystem::exists(destination / "linkdir" / "file.bin"));
 }
