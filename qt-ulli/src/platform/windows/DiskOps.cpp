@@ -1311,6 +1311,8 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
     Start-Sleep -Milliseconds 500
 }
 if (-not $volume -or -not $volume.DriveLetter) {
+    # Do not leave the image attached when it cannot be used.
+    if ($attachedByUs) { Dismount-DiskImage -ImagePath $imagePath -ErrorAction SilentlyContinue }
     Write-Output '{"error":"The mounted ISO did not get a drive letter"}'
     exit 1
 }
