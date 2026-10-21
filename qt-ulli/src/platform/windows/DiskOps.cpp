@@ -1280,34 +1280,100 @@ if ($volume -and $volume.DriveLetter) {
 
 core::Result<std::filesystem::path> DiskOps::mountIso(
     const std::filesystem::path& iso) {
-    QProcess proc;
-    proc.start("powershell", {"-NoProfile", "-Command",
-        QString("(Mount-DiskImage -ImagePath '%1' -PassThru | "
-                "Get-Volume | Select-Object -First 1).DriveLetter").arg(
-                    QString::fromStdString(iso.string()))});
-    if (!proc.waitForFinished(15000)) {
-        return core::makeError<std::filesystem::path>(core::Error::Kind::Platform,
-            "Mount-DiskImage timed out");
-    }
-    const QString letter = QString::fromLocal8Bit(proc.readAll()).trimmed();
-    if (letter.isEmpty() || proc.exitCode() != 0) {
-        return core::makeError<std::filesystem::path>(core::Error::Kind::Platform,
-            "Mount-DiskImage failed: " + QString::fromLocal8Bit(proc.readAll()).toStdString());
-    }
-    return core::makeOk<std::filesystem::path>(std::filesystem::path(
-        (letter + ":\\").toStdString()));
+    // Mount the ISO and resolve the drive letter of the volume that
+    // belongs to *that* image. A plain Get-Volume returns any volume of
+    // the machine, so the lookup is scoped to the mounted image with
+    // -DiskImage (the legacy PowerShell installer does the same).
+    QString script = QString(R"PS1(
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+$imagePath = '%1'
+
+$image = $null
+$attachedByUs = $false
+try {
+    $image = Mount-DiskImage -ImagePath $imagePath -StorageType ISO -PassThru -ErrorAction Stop
+    $attachedByUs = $true
+} catch {
+    # The image can already be attached from an earlier run. Use it, but
+    # remember that it was not attached by us: it must not be dismounted.
+    $image = Get-DiskImage -ImagePath $imagePath -ErrorAction Stop
+    if (-not $image) { throw }
 }
 
-void DiskOps::unmountIso(const std::filesystem::path& mount) {
-    Q_UNUSED(mount);
-    QProcess::execute("powershell", {"-NoProfile", "-Command",
-        "Get-DiskImage | Where-Object { $_.Attached -eq $true } | Dismount-DiskImage"});
+# Windows needs a moment to expose the volume of a freshly mounted
+# image, so the lookup is retried for a few seconds.
+$volume = $null
+for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    $volume = Get-Volume -DiskImage $image -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($volume -and $volume.DriveLetter) { break }
+    Start-Sleep -Milliseconds 500
+}
+if (-not $volume -or -not $volume.DriveLetter) {
+    Write-Output '{"error":"The mounted ISO did not get a drive letter"}'
+    exit 1
+}
+
+$attached = 'false'
+if ($attachedByUs) { $attached = 'true' }
+Write-Output ('{{"driveLetter":"{0}", "attachedByUs":{1}}}' -f "$($volume.DriveLetter):", $attached)
+)PS1").arg(QString::fromStdString(iso.string()).replace("'", "''"));
+
+    auto r = runPowerShellScript(script);
+    if (!r) {
+        return core::makeError<std::filesystem::path>(r.error().kind(),
+            "Mount-DiskImage failed: " + r.error().message());
+    }
+
+    QJsonParseError perr{};
+    const QJsonDocument doc = QJsonDocument::fromJson(r.value().toUtf8(), &perr);
+    if (perr.error != QJsonParseError::NoError) {
+        return core::makeError<std::filesystem::path>(core::Error::Kind::Platform,
+            "Mount-DiskImage did not return a valid result: " +
+            perr.errorString().toStdString());
+    }
+    const QJsonObject obj = doc.object();
+    if (obj.contains("error")) {
+        return core::makeError<std::filesystem::path>(core::Error::Kind::Platform,
+            "Mount-DiskImage failed: " +
+            obj.value("error").toString().toStdString());
+    }
+
+    const QString letter = obj.value("driveLetter").toString().trimmed();
+    if (letter.size() != 2 || letter.at(1) != QLatin1Char(':')) {
+        return core::makeError<std::filesystem::path>(core::Error::Kind::Platform,
+            "Mount-DiskImage returned no usable drive letter: '" +
+            letter.toStdString() + "'");
+    }
+    isoAttachedByUs_ = obj.value("attachedByUs").toBool();
+    return core::makeOk<std::filesystem::path>(
+        std::filesystem::path(letter.toStdString()));
+}
+
+void DiskOps::unmountIso(const std::filesystem::path& iso) {
+    // Only the image that this installation attached is dismounted. An
+    // image that was already attached (or that the user mounted) stays
+    // attached, and no other image is touched.
+    if (!isoAttachedByUs_) {
+        return;
+    }
+    isoAttachedByUs_ = false;
+    const QString script = QString(R"PS1(
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+Dismount-DiskImage -ImagePath '%1' -ErrorAction SilentlyContinue
+)PS1").arg(QString::fromStdString(iso.string()).replace("'", "''"));
+    // Best effort: a failure to dismount must not mask the result of the
+    // installation.
+    (void)runPowerShellScript(script);
 }
 
 core::Result<void> DiskOps::copyFiles(const std::filesystem::path& src,
-                                        const std::filesystem::path& dst,
-                                        const core::Distro* distro,
-                                        std::function<bool()> cancelCallback) {
+                                       const std::filesystem::path& dst,
+                                       const core::Distro* distro,
+                                       std::function<bool()> cancelCallback,
+                                       core::CopyProgressCallback progress) {
     // ─── Pre-copy verification ─────────────────────────────────────────
     // 1. Verify source (mounted ISO) exists and is readable
     if (!std::filesystem::exists(src)) {
@@ -1320,6 +1386,12 @@ core::Result<void> DiskOps::copyFiles(const std::filesystem::path& src,
         return core::makeError(core::Error::Kind::NotFound,
             "Destination staging partition does not exist: " + dst.string());
     }
+
+    const auto report = [&progress](const std::string& detail) {
+        if (progress) progress(0, "Preparing the copy", detail);
+    };
+
+    report("Copying the ISO contents from " + src.string() + " to " + dst.string());
 
     // 3. Verify staging partition is FAT32 and get free space
     // Use PowerShell to query the volume
@@ -1361,144 +1433,45 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}}}' -f $fs
 
     const QString fs = verifyObj.value("filesystem").toString();
     const qulonglong freeBytes = verifyObj.value("freeBytes").toVariant().toULongLong();
-    const qulonglong totalBytes = verifyObj.value("totalBytes").toVariant().toULongLong();
 
     if (fs.compare("FAT32", Qt::CaseInsensitive) != 0) {
         return core::makeError(core::Error::Kind::Platform,
             "Staging partition is not FAT32 (got: " + fs.toStdString() + ")");
     }
 
-    // 4. Check if staging has enough space (estimate ISO contents size)
-    // We'll do a quick scan of the source to estimate size
-    std::uint64_t estimatedSize = 0;
-    std::uint64_t fileCount = 0;
-    std::uint64_t maxFileSize = 0;
-
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(src)) {
-        if (cancelCallback && cancelCallback()) {
-            return core::makeCancelled();
-        }
-        if (entry.is_regular_file()) {
-            std::error_code ec;
-            auto fsize = std::filesystem::file_size(entry, ec);
-            if (!ec) {
-                estimatedSize += fsize;
-                maxFileSize = std::max(maxFileSize, fsize);
-                fileCount++;
-            }
+    // 4. The mounted image has to contain the expected files. The legacy
+    //    installer asks the user in this case; there is no prompt here,
+    //    so the problem is reported and the copy continues.
+    if (distro && !distro->validationFile().empty()) {
+        const std::filesystem::path validation = src / distro->validationFile();
+        if (!std::filesystem::exists(validation)) {
+            report("Warning: the mounted ISO does not contain '" +
+                   distro->validationFile() + "'. It may not be a valid image.");
         }
     }
 
-    // Check for FAT32 4 GiB limit
-    constexpr std::uint64_t FAT32_MAX_FILE_SIZE = 4ull * 1024 * 1024 * 1024 - 1; // 4 GiB - 1
-    if (maxFileSize > FAT32_MAX_FILE_SIZE) {
-        return core::makeError(core::Error::Kind::Platform,
-            "ISO contains file larger than FAT32 4 GiB limit: " +
-            std::to_string(maxFileSize) + " bytes. Cannot copy to FAT32 staging.");
+    // ─── Enumerate the source once ─────────────────────────────────────
+    // The plan holds the files, the directories, the total size and the
+    // largest file. The safety checks use it, and the copy uses it as
+    // well, so the source tree is not walked a second time.
+    core::CopyLimits limits;
+    // FAT32 cannot store a file of 4 GiB or more.
+    constexpr std::uint64_t FAT32_MAX_FILE_SIZE = 4ull * 1024 * 1024 * 1024 - 1;
+    limits.maxFileSizeBytes = FAT32_MAX_FILE_SIZE;
+
+    auto plan = core::enumerateCopyPlan(src, cancelCallback, progress);
+    if (!plan) {
+        return core::makeError(plan.error().kind(), plan.error().message());
     }
+    const core::CopyPlan& copyPlan = plan.value();
+    const std::uint64_t estimatedSize = copyPlan.totalBytes;
 
-    // Add 10% overhead for filesystem metadata
-    const std::uint64_t requiredBytes = estimatedSize + (estimatedSize / 10);
-    if (freeBytes < requiredBytes) {
-        return core::makeError(core::Error::Kind::Platform,
-            "Insufficient space on staging partition. Need ~" +
-            std::to_string(requiredBytes) + " bytes, have " +
-            std::to_string(freeBytes) + " bytes free.");
-    }
-
-    // ─── Copy with cancellation support ────────────────────────────────
-    // Use Qt's file operations for fine-grained cancellation control
-    QDir srcDir(QString::fromStdString(src.string()));
-    QDir dstDir(QString::fromStdString(dst.string()));
-
-    if (!srcDir.exists()) {
-        return core::makeError(core::Error::Kind::NotFound,
-            "Source directory not accessible: " + src.string());
-    }
-
-    if (!dstDir.exists()) {
-        // Destination should exist from createLayout, but ensure it
-        if (!dstDir.mkpath(".")) {
-            return core::makeError(core::Error::Kind::Io,
-                "Cannot create destination directory: " + dst.string());
-        }
-    }
-
-    // Recursive copy function
-    auto copyRecursive = [&](const QDir& sDir, const QDir& dDir,
-                             const std::function<bool()>& cancelCheck,
-                             auto&& selfRef) -> core::Result<void> {
-        // Create subdirectories first
-        for (const QFileInfo& info : sDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            if (cancelCheck && cancelCheck()) {
-                return core::makeCancelled();
-            }
-
-            QDir nextSrcDir(info.absoluteFilePath());
-            QString subDirName = info.fileName();
-            QDir nextDstDir = dDir;
-            if (!nextDstDir.mkpath(subDirName)) {
-                return core::makeError(core::Error::Kind::Io,
-                    "Cannot create directory: " + nextDstDir.filePath(subDirName).toStdString());
-            }
-            nextDstDir.cd(subDirName);
-
-            auto subResult = selfRef(nextSrcDir, nextDstDir, cancelCheck, selfRef);
-            if (!subResult) return subResult;
-        }
-
-        // Copy files
-        for (const QFileInfo& info : sDir.entryInfoList(QDir::Files)) {
-            if (cancelCheck && cancelCheck()) {
-                return core::makeCancelled();
-            }
-
-            QString srcFile = info.absoluteFilePath();
-            QString dstFile = dDir.filePath(info.fileName());
-
-            // Check file size against FAT32 limit
-            if (static_cast<std::uint64_t>(info.size()) > FAT32_MAX_FILE_SIZE) {
-                return core::makeError(core::Error::Kind::Platform,
-                    "File exceeds FAT32 4 GiB limit: " + srcFile.toStdString() +
-                    " (" + std::to_string(info.size()) + " bytes)");
-            }
-
-            // Copy file with retry logic
-            bool copied = false;
-            for (int attempt = 0; attempt < 3 && !copied; ++attempt) {
-                if (cancelCheck && cancelCheck()) {
-                    return core::makeCancelled();
-                }
-                copied = QFile::copy(srcFile, dstFile);
-                if (!copied && attempt < 2) {
-                    QThread::msleep(500); // Brief pause before retry
-                }
-            }
-            if (!copied) {
-                return core::makeError(core::Error::Kind::Io,
-                    "Failed to copy file after retries: " + srcFile.toStdString());
-            }
-
-            // Preserve file timestamps
-            QFile dstFileObj(dstFile);
-            if (dstFileObj.open(QIODevice::ReadOnly)) {
-                dstFileObj.setFileTime(info.fileTime(QFileDevice::FileModificationTime),
-                                       QFileDevice::FileModificationTime);
-                dstFileObj.close();
-            }
-        }
-        return core::makeOk();
-    };
-
-    auto copyResult = copyRecursive(srcDir, dstDir, cancelCallback, copyRecursive);
+    // ─── Copy ──────────────────────────────────────────────────────────
+    auto copyResult = core::copyCopyPlan(copyPlan, dst, freeBytes, limits,
+                                         cancelCallback, progress);
     if (!copyResult) {
-        // On failure, try to clean up partially copied files
-        // (best effort - don't fail on cleanup errors)
-        return copyResult;
-    }
-
-    if (cancelCallback && cancelCallback()) {
-        return core::makeCancelled();
+        return core::makeError(copyResult.error().kind(),
+            copyResult.error().message());
     }
 
     // ─── Post-copy verification ────────────────────────────────────────
@@ -1544,17 +1517,23 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}}}' -f $fs
 
     // Verify total copied size is sensible (at least 50% of estimated)
     std::uint64_t copiedSize = 0;
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dst)) {
+    std::error_code walkEc;
+    for (std::filesystem::recursive_directory_iterator it(dst, walkEc), end;
+         it != end; it.increment(walkEc)) {
         if (cancelCallback && cancelCallback()) {
             return core::makeCancelled();
         }
-        if (entry.is_regular_file()) {
-            std::error_code ec;
-            copiedSize += std::filesystem::file_size(entry, ec);
+        std::error_code typeEc;
+        if (it->is_regular_file(typeEc) && !typeEc) {
+            std::error_code sizeEc;
+            copiedSize += std::filesystem::file_size(*it, sizeEc);
+        }
+        if (walkEc) {
+            break;
         }
     }
 
-    if (copiedSize < estimatedSize / 2) {
+    if (estimatedSize > 0 && copiedSize < estimatedSize / 2) {
         return core::makeError(core::Error::Kind::Platform,
             "Copied size suspiciously small: " + std::to_string(copiedSize) +
             " vs estimated " + std::to_string(estimatedSize));

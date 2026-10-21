@@ -23,6 +23,7 @@
 
 #include "core/DiskInfo.h"
 #include "core/Distro.h"
+#include "core/FileCopier.h"
 #include "core/InstallPlan.h"
 #include "core/ProgressLog.h"
 #include "core/Result.h"
@@ -117,21 +118,28 @@ public:
                                       std::filesystem::path& refindMount,
                                       std::function<bool()> cancelCallback = nullptr) = 0;
 
-    // Mount the ISO and return the mount path.
+    // Mount the ISO and return the mount path. The mount has to resolve
+    // the volume that belongs to the mounted image, not an arbitrary
+    // volume of the machine.
     virtual Result<std::filesystem::path> mountIso(
         const std::filesystem::path& iso) = 0;
 
-    // Unmount the ISO. Best-effort; never returns an error to the
-    // caller (caller cannot recover).
-    virtual void unmountIso(const std::filesystem::path& mount) = 0;
+    // Dismount the ISO image that was used for this installation. Only
+    // that image is dismounted: images that were already attached, or
+    // that the user mounted, stay attached. Best-effort; never returns
+    // an error to the caller (the caller cannot recover).
+    virtual void unmountIso(const std::filesystem::path& iso) = 0;
 
-    // Recursive copy from src to dst. Windows: robocopy /E. Linux: cp -a.
-    // cancelCallback is invoked between files to check for user cancellation.
-    // distro is provided for post-copy verification of required files.
+    // Recursive copy from src to dst. Windows: the live ISO contents.
+    // cancelCallback is invoked between files to check for user
+    // cancellation. distro is provided for post-copy verification of
+    // required files. The progress callback reports the phase and the
+    // progress of the copy; it is called from the worker thread.
     virtual Result<void> copyFiles(const std::filesystem::path& src,
                                    const std::filesystem::path& dst,
                                    const Distro* distro,
-                                   std::function<bool()> cancelCallback = nullptr) = 0;
+                                   std::function<bool()> cancelCallback = nullptr,
+                                   CopyProgressCallback progress = nullptr) = 0;
 
     // Distro-specific config patches (LABEL= etc.). On Windows the
     // patches happen on the FAT32 boot partition; on Linux they

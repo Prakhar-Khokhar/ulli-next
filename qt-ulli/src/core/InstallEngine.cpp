@@ -189,7 +189,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     // 6. Mount ISO + copy
-    emit stageChanged("Copying live ISO contents");
+    emit stageChanged("Mounting live ISO");
     emit progressChanged(kProgressCopy);
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
     // Re-validate before copy
@@ -197,8 +197,28 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     auto isoMount = backend_->mountIso(plan.isoPath);
     if (!isoMount) return makeError(isoMount.error().kind(), isoMount.error().message());
     {
-        auto copyR = backend_->copyFiles(isoMount.value(), bootMount, distro, cancelCallback);
-        backend_->unmountIso(isoMount.value());
+        // The backend reports the phase and the progress from the worker
+        // thread. The engine forwards it to the UI, which receives the
+        // engine signals through their queued connection.
+        std::string lastPhase;
+        auto report = [this, &lastPhase](int percent, const std::string& phase,
+                                         const std::string& detail) {
+            if (phase != lastPhase) {
+                lastPhase = phase;
+                emit stageChanged(QString::fromStdString(phase));
+            }
+            if (!detail.empty()) {
+                log_->append(QString::fromStdString(detail),
+                             ProgressLog::Severity::Info);
+            }
+            const int mapped = kProgressCopy +
+                percent * (kProgressPatch - kProgressCopy) / 100;
+            emit progressChanged(mapped);
+        };
+        auto copyR = backend_->copyFiles(isoMount.value(), bootMount, distro,
+                                         cancelCallback, report);
+        // Dismount only the image this installation used.
+        backend_->unmountIso(plan.isoPath);
         if (!copyR) {
             // Rollback staging partition on copy failure
             backend_->rollbackStagingPartition(plan);

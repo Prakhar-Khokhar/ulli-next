@@ -270,7 +270,11 @@ public:
     void unmountIso(const std::filesystem::path&) override {}
     ulli::core::Result<void> copyFiles(
         const std::filesystem::path&, const std::filesystem::path&,
-        const ulli::core::Distro*, std::function<bool()>) override {
+        const ulli::core::Distro*, std::function<bool()>,
+        ulli::core::CopyProgressCallback progress) override {
+        if (progress) {
+            progress(50, "Copying ISO contents", "mock copy progress");
+        }
         return ulli::core::makeOk();
     }
     ulli::core::Result<void> patchDistroBootConfig(

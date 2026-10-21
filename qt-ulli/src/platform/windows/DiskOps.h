@@ -45,11 +45,12 @@ core::Result<void> createLayout(const core::InstallPlan& plan,
                                      std::function<bool()> cancelCallback = nullptr) override;
     core::Result<std::filesystem::path> mountIso(
         const std::filesystem::path& iso) override;
-    void unmountIso(const std::filesystem::path& mount) override;
+    void unmountIso(const std::filesystem::path& iso) override;
 core::Result<void> copyFiles(const std::filesystem::path& src,
                                  const std::filesystem::path& dst,
                                  const core::Distro* distro,
-                                 std::function<bool()> cancelCallback = nullptr) override;
+                                 std::function<bool()> cancelCallback = nullptr,
+                                 core::CopyProgressCallback progress = nullptr) override;
     core::Result<void> patchDistroBootConfig(const core::Distro& d,
                                              const core::InstallPlan& plan) override;
     core::Result<void> installRefind(const core::InstallPlan& plan) override;
@@ -66,6 +67,11 @@ private:
 
     // Check BitLocker lock state on a given partition via PowerShell.
     bool isBitLockerLockedOnPartition(int diskNumber, int partitionNumber);
+
+    // True when this installation attached the ISO image itself. An image
+    // that was already attached (or that the user mounted) is left alone
+    // when the installation ends.
+    bool isoAttachedByUs_ = false;
 };
 
 }  // namespace ulli::platform::windows

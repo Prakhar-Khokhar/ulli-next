@@ -48,6 +48,8 @@ set(ULLI_CORE_SOURCES
     src/core/InstallEngine.cpp
     src/core/DiskInfo.h
     src/core/DiskLayout.h
+    src/core/FileCopier.h
+    src/core/FileCopier.cpp
     src/core/DiskIdentity.h
     src/core/DiskIdentity.cpp
     src/core/ProgressLog.h
