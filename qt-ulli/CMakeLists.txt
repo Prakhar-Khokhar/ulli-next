@@ -50,6 +50,7 @@ set(ULLI_CORE_SOURCES
     src/core/DiskIdentity.h
     src/core/DiskIdentity.cpp
     src/core/ProgressLog.h
+    src/core/ScriptDiagnostics.h
     src/core/ProgressLog.cpp
     src/core/Sha256.h
     src/core/Sha256.cpp

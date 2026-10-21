@@ -13,6 +13,8 @@
 
 #include "platform/windows/Wmi.h"
 
+#include "core/ScriptDiagnostics.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -168,9 +170,14 @@ core::Result<QJsonDocument> Wmi::runScript(const char* scriptName) {
             std::string("PowerShell script timed out: ") + scriptName);
     }
     if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
+        // Both streams are reported: the scripts can leave a partial
+        // result on standard output, and PowerShell reports its own
+        // errors on standard error.
         const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
+        const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
         return core::makeError<QJsonDocument>(core::Error::Kind::Platform,
-            std::string("PowerShell script '") + scriptName + "' failed: " + err.toStdString());
+            std::string("PowerShell script '") + scriptName + "' failed: " +
+            core::joinScriptOutput(err, out));
     }
     const QByteArray raw = proc.readAllStandardOutput();
     if (raw.isEmpty()) {
@@ -213,9 +220,14 @@ core::Result<QString> Wmi::runScriptText(const char* scriptName) {
             std::string("PowerShell script timed out: ") + scriptName);
     }
     if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
+        // Both streams are reported: the scripts can leave a partial
+        // result on standard output, and PowerShell reports its own
+        // errors on standard error.
         const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
+        const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
         return core::makeError<QString>(core::Error::Kind::Platform,
-            std::string("PowerShell script '") + scriptName + "' failed: " + err.toStdString());
+            std::string("PowerShell script '") + scriptName + "' failed: " +
+            core::joinScriptOutput(err, out));
     }
     const QByteArray raw = proc.readAllStandardOutput();
     return core::makeOk(QString::fromLocal8Bit(raw).trimmed());

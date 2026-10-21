@@ -31,6 +31,7 @@
 #include "platform/windows/EspOps.h"
 #include "platform/windows/Wmi.h"
 #include "core/DiskIdentity.h"
+#include "core/ScriptDiagnostics.h"
 #include "core/Sha256.h"
 #include "platform/HttpDownload.h"
 #include "platform/Platform.h"
@@ -720,10 +721,16 @@ core::Result<QString> DiskOps::runPowerShellScript(const QString& script) {
             "PowerShell script timed out");
     }
     if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
+        // A failing script can report its problem on either stream: the
+        // createLayout scripts write a JSON error object to standard
+        // output and exit with 1, the errors of PowerShell itself go to
+        // standard error. Both are needed to understand the failure.
         const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
+        const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
         QFile::remove(scriptPath);
         return core::makeError<QString>(core::Error::Kind::Platform,
-            "PowerShell script failed (exit " + std::to_string(proc.exitCode()) + "): " + err.toStdString());
+            "PowerShell script failed (exit " + std::to_string(proc.exitCode()) + "): " +
+            core::joinScriptOutput(err, out));
     }
     const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput()).trimmed();
     QFile::remove(scriptPath);
@@ -985,7 +992,10 @@ Write-Output ('{{"diskNumber":{0}, "gapOffset":{1}, "gapSize":{2}, "stagingSizeB
     }
 
     auto validateResult = runPowerShellScript(validateScript);
-    if (!validateResult) return core::makeError(validateResult.error().kind(), validateResult.error().message());
+    if (!validateResult) {
+        return core::makeError(validateResult.error().kind(),
+            "Pre-create validation failed: " + validateResult.error().message());
+    }
 
     QJsonParseError perr{};
     QJsonDocument validateDoc = QJsonDocument::fromJson(validateResult.value().toUtf8(), &perr);
@@ -996,7 +1006,7 @@ Write-Output ('{{"diskNumber":{0}, "gapOffset":{1}, "gapSize":{2}, "stagingSizeB
     QJsonObject validateObj = validateDoc.object();
     if (validateObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
-            validateObj.value("error").toString().toStdString());
+            "Pre-create validation failed: " + validateObj.value("error").toString().toStdString());
     }
 
     const int diskNumber = validateObj.value("diskNumber").toInt();
@@ -1047,7 +1057,10 @@ Write-Output ('{{"partitionNumber":{0}, "offset":{1}, "size":{2}, "filesystem":"
         .arg(static_cast<qulonglong>(stagingSizeBytes));
 
     auto createResult = runPowerShellScript(createScript);
-    if (!createResult) return core::makeError(createResult.error().kind(), createResult.error().message());
+    if (!createResult) {
+        return core::makeError(createResult.error().kind(),
+            "Create partition failed: " + createResult.error().message());
+    }
 
     QJsonDocument createDoc = QJsonDocument::fromJson(createResult.value().toUtf8(), &perr);
     if (perr.error != QJsonParseError::NoError) {
@@ -1057,7 +1070,7 @@ Write-Output ('{{"partitionNumber":{0}, "offset":{1}, "size":{2}, "filesystem":"
     QJsonObject createObj = createDoc.object();
     if (createObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
-            createObj.value("error").toString().toStdString());
+            "Create partition failed: " + createObj.value("error").toString().toStdString());
     }
 
     const int partitionNumber = createObj.value("partitionNumber").toInt();
@@ -1159,7 +1172,10 @@ Write-Output ('{{"success":true, "remainingUnallocated":{0}, "partitionNumber":{
         .arg(targetPartitionNumber);
 
     auto verifyResult = runPowerShellScript(verifyScript);
-    if (!verifyResult) return core::makeError(verifyResult.error().kind(), verifyResult.error().message());
+    if (!verifyResult) {
+        return core::makeError(verifyResult.error().kind(),
+            "Post-create verification failed: " + verifyResult.error().message());
+    }
 
     QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
     if (perr.error != QJsonParseError::NoError) {
@@ -1169,7 +1185,7 @@ Write-Output ('{{"success":true, "remainingUnallocated":{0}, "partitionNumber":{
     QJsonObject verifyObj = verifyDoc.object();
     if (verifyObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
-            verifyObj.value("error").toString().toStdString());
+            "Post-create verification failed: " + verifyObj.value("error").toString().toStdString());
     }
 
     // Store staging partition identity for later verification
