@@ -143,7 +143,8 @@ public:
 
     ulli::core::Result<void> copyFiles(
         const std::filesystem::path&, const std::filesystem::path&,
-        const ulli::core::Distro*, std::function<bool()>) override {
+        const ulli::core::Distro*, std::function<bool()>,
+        ulli::core::CopyProgressCallback) override {
         return ulli::core::makeOk();
     }
 
