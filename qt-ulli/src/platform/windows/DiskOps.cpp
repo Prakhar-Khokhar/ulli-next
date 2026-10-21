@@ -31,6 +31,7 @@
 #include "platform/windows/EspOps.h"
 #include "platform/windows/Wmi.h"
 #include "core/DiskIdentity.h"
+#include "core/DiskLayout.h"
 #include "core/ScriptDiagnostics.h"
 #include "core/Sha256.h"
 #include "platform/HttpDownload.h"
@@ -1084,7 +1085,8 @@ Write-Output ('{{"partitionNumber":{0}, "offset":{1}, "size":{2}, "filesystem":"
 
     // Step 3: Post-create verification
     // Verify: exactly one new partition appeared, size matches, filesystem is FAT32,
-    // offset matches expected gap offset, remaining unallocated space exists
+    // offset matches expected gap offset, and the free space that is left in the
+    // region the staging partition was created in matches the expectation.
     QString verifyScript = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -1093,9 +1095,8 @@ $diskNumber = %1
 $expectedPartitionNumber = %2
 $expectedOffset = %3
 $expectedSize = %4
-$stagingSizeBytes = %5
-$totalFreedBytes = %6
-$targetPartitionNumber = %7
+$regionSize = %5
+$targetPartitionNumber = %6
 
 $disk = Get-Disk -Number $diskNumber -ErrorAction Stop
 $partitions = Get-Partition -DiskNumber $diskNumber -ErrorAction SilentlyContinue | Sort-Object Offset
@@ -1143,32 +1144,21 @@ if ($targetPartitionNumber -gt 0) {
     # Note: Size may have changed slightly due to alignment, but offset should be stable
 }
 
-# Calculate remaining unallocated space after staging partition
+# Report the extents of the partitions on the disk. The free space that
+# is left in the region the staging partition was created in is computed
+# by the installer from these extents: free space elsewhere on the disk
+# is not part of that region and must not influence the check.
 $allParts = @($partitions)
-$totalUsed = 0
-foreach ($p in $allParts) {
-    $totalUsed += $p.Size
-}
-$remainingUnallocated = $disk.Size - $totalUsed
-
-# Verify remaining unallocated is approximately what we expect
-$expectedRemaining = $totalFreedBytes - $stagingSizeBytes
-if ($expectedRemaining -lt 0) { $expectedRemaining = 0 }
-
-# Allow some tolerance for alignment (10 MB)
-$remainingDiff = [math]::Abs($remainingUnallocated - $expectedRemaining)
-if ($remainingDiff -gt 10485760) {
-    Write-Output ('{{"error":"Remaining unallocated space mismatch. Expected ~{0}, got {1}"}}' -f $expectedRemaining, $remainingUnallocated)
-    exit 1
+$extentOut = foreach ($p in $allParts) {
+    ('{{"offset":{0}, "size":{1}}}' -f $p.Offset, $p.Size)
 }
 
-Write-Output ('{{"success":true, "remainingUnallocated":{0}, "partitionNumber":{1}, "size":{2}, "offset":{3}, "filesystem":"{4}", "gptGuid":"{5}"}}' -f $remainingUnallocated, $newPartition.PartitionNumber, $newPartition.Size, $newPartition.Offset, $volume.FileSystem, $newPartition.GptType)
+Write-Output ('{{"success":true, "partitionNumber":{0}, "size":{1}, "offset":{2}, "filesystem":"{3}", "gptGuid":"{4}", "extents":[{5}]}}' -f $newPartition.PartitionNumber, $newPartition.Size, $newPartition.Offset, $volume.FileSystem, $newPartition.GptType, ($extentOut -join ','))
 )PS1").arg(diskNumber)
         .arg(partitionNumber)
         .arg(static_cast<qulonglong>(gapOffset))
         .arg(static_cast<qulonglong>(stagingSizeBytes))
-        .arg(static_cast<qulonglong>(stagingSizeBytes))
-        .arg(static_cast<qulonglong>(totalFreedBytes))
+        .arg(static_cast<qulonglong>(gapSize))
         .arg(targetPartitionNumber);
 
     auto verifyResult = runPowerShellScript(verifyScript);
@@ -1186,6 +1176,36 @@ Write-Output ('{{"success":true, "remainingUnallocated":{0}, "partitionNumber":{
     if (verifyObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
             "Post-create verification failed: " + verifyObj.value("error").toString().toStdString());
+    }
+
+    // The free space that is left in the region the staging partition was
+    // created in has to match the expectation. The region was measured
+    // before the creation, so the expectation is based on that measurement
+    // and not on the planned size of the installation: free space
+    // elsewhere on the disk is not part of the region and must not
+    // influence the check.
+    std::vector<core::DiskExtent> extents;
+    const QJsonArray extentArray = verifyObj.value("extents").toArray();
+    for (const QJsonValue& value : extentArray) {
+        const QJsonObject extentObject = value.toObject();
+        core::DiskExtent extent;
+        extent.offset = extentObject.value("offset").toVariant().toULongLong();
+        extent.size = extentObject.value("size").toVariant().toULongLong();
+        extents.push_back(extent);
+    }
+
+    const std::uint64_t freeInRegion =
+        core::freeSpaceInRegion(gapOffset, gapSize, extents);
+    const std::uint64_t expectedFree = gapSize > stagingSizeBytes
+        ? gapSize - stagingSizeBytes
+        : 0;
+    // The tolerance covers the alignment of the partition boundaries.
+    constexpr std::uint64_t kFreeSpaceToleranceBytes = 10ull * 1024 * 1024;
+    if (!core::freeSpaceMatches(freeInRegion, expectedFree, kFreeSpaceToleranceBytes)) {
+        return core::makeError(core::Error::Kind::Platform,
+            "Post-create verification failed: free space in the target region "
+            "mismatch. Expected ~" + std::to_string(expectedFree) +
+            " bytes, got " + std::to_string(freeInRegion) + " bytes");
     }
 
     // Store staging partition identity for later verification
