@@ -11,6 +11,7 @@
 
 #include <QTemporaryDir>
 
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -29,6 +30,26 @@ void writeFile(const std::filesystem::path& path, const std::string& content) {
     std::filesystem::create_directories(path.parent_path(), ec);
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out << content;
+}
+
+// The QTest report goes to stdout, which the Windows CI runner does not
+// keep in the log. These breadcrumbs go to stderr and make a failing test
+// visible there.
+void trace(const std::string& what) {
+    std::fprintf(stderr, "[filecopier] %s\n", what.c_str());
+    std::fflush(stderr);
+}
+
+// Checks a result and reports the reason on stderr. Without it a failed
+// check would be followed by an exception on value() and the report of
+// the test would be lost.
+template <typename T>
+bool requireOk(const ulli::core::Result<T>& result, const char* what) {
+    if (result.isOk()) {
+        return true;
+    }
+    trace(std::string(what) + " failed: " + result.error().message());
+    return false;
 }
 
 std::string readFile(const std::filesystem::path& path) {
@@ -58,6 +79,7 @@ private slots:
 };
 
 void TestFileCopier::aSymlinkToAFileIsCopiedByContent() {
+    trace("aSymlinkToAFileIsCopiedByContent");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -71,17 +93,18 @@ void TestFileCopier::aSymlinkToAFileIsCopiedByContent() {
     }
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
     // The link is copied with the content of its target, like robocopy.
     QCOMPARE(plan.value().fileCount, std::uint64_t(2));
 
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination);
-    QVERIFY(stats.isOk());
+    QVERIFY(requireOk(stats, "copyCopyPlan"));
     QVERIFY(std::filesystem::exists(destination / "link.bin"));
     QCOMPARE(readFile(destination / "link.bin"), std::string("payload"));
 }
 
 void TestFileCopier::aSymlinkToADirectoryIsNotTraversed() {
+    trace("aSymlinkToADirectoryIsNotTraversed");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -95,19 +118,20 @@ void TestFileCopier::aSymlinkToADirectoryIsNotTraversed() {
     }
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
     // The link to the directory is not traversed, so its content is not
     // copied a second time.
     QCOMPARE(plan.value().fileCount, std::uint64_t(1));
     QCOMPARE(plan.value().skipped.size(), std::size_t(1));
 
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination);
-    QVERIFY(stats.isOk());
+    QVERIFY(requireOk(stats, "copyCopyPlan"));
     QVERIFY(std::filesystem::exists(destination / "real" / "file.bin"));
     QVERIFY(!std::filesystem::exists(destination / "linkdir" / "file.bin"));
 }
 
 void TestFileCopier::nestedAndEmptyDirectoriesAreCopied() {
+    trace("nestedAndEmptyDirectoriesAreCopied");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -120,11 +144,11 @@ void TestFileCopier::nestedAndEmptyDirectoriesAreCopied() {
     QVERIFY(!ec);
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
     QCOMPARE(plan.value().fileCount, std::uint64_t(2));
 
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination);
-    QVERIFY(stats.isOk());
+    QVERIFY(requireOk(stats, "copyCopyPlan"));
     QCOMPARE(stats.value().filesCopied, std::uint64_t(2));
 
     QVERIFY(std::filesystem::exists(destination / "casper" / "vmlinuz"));
@@ -134,6 +158,7 @@ void TestFileCopier::nestedAndEmptyDirectoriesAreCopied() {
 }
 
 void TestFileCopier::hiddenFilesAreCopied() {
+    trace("hiddenFilesAreCopied");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -145,16 +170,17 @@ void TestFileCopier::hiddenFilesAreCopied() {
     writeFile(source / "visible.txt", "public");
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
     QCOMPARE(plan.value().fileCount, std::uint64_t(2));
 
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination);
-    QVERIFY(stats.isOk());
+    QVERIFY(requireOk(stats, "copyCopyPlan"));
     QVERIFY(std::filesystem::exists(destination / ".hidden"));
     QCOMPARE(readFile(destination / ".hidden"), std::string("secret"));
 }
 
 void TestFileCopier::thePlanHoldsTheSizeAndTheFileCount() {
+    trace("thePlanHoldsTheSizeAndTheFileCount");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -163,7 +189,7 @@ void TestFileCopier::thePlanHoldsTheSizeAndTheFileCount() {
     writeFile(source / "sub" / "b.bin", std::string(2000, 'b'));
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
     QCOMPARE(plan.value().fileCount, std::uint64_t(2));
     QCOMPARE(plan.value().totalBytes, std::uint64_t(3000));
     QCOMPARE(plan.value().largestFileBytes, std::uint64_t(2000));
@@ -171,6 +197,7 @@ void TestFileCopier::thePlanHoldsTheSizeAndTheFileCount() {
 }
 
 void TestFileCopier::anOversizedFileIsRejected() {
+    trace("anOversizedFileIsRejected");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -179,7 +206,7 @@ void TestFileCopier::anOversizedFileIsRejected() {
     writeFile(source / "big.bin", "too big for fat32");
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
 
     CopyLimits limits;
     limits.maxFileSizeBytes = 4;  // smaller than the file
@@ -191,6 +218,7 @@ void TestFileCopier::anOversizedFileIsRejected() {
 }
 
 void TestFileCopier::anInsufficientDestinationIsRejected() {
+    trace("anInsufficientDestinationIsRejected");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -199,7 +227,7 @@ void TestFileCopier::anInsufficientDestinationIsRejected() {
     writeFile(source / "payload.bin", std::string(10000, 'x'));
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
 
     // The destination has less space than the payload needs.
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination, 100);
@@ -209,11 +237,12 @@ void TestFileCopier::anInsufficientDestinationIsRejected() {
 
     // With enough space the copy runs.
     auto ok = ulli::core::copyCopyPlan(plan.value(), destination, 100000);
-    QVERIFY(ok.isOk());
+    QVERIFY(requireOk(ok, "copyCopyPlan"));
     QVERIFY(std::filesystem::exists(destination / "payload.bin"));
 }
 
 void TestFileCopier::cancellationStopsTheEnumeration() {
+    trace("cancellationStopsTheEnumeration");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -227,6 +256,7 @@ void TestFileCopier::cancellationStopsTheEnumeration() {
 }
 
 void TestFileCopier::cancellationStopsTheCopy() {
+    trace("cancellationStopsTheCopy");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -236,7 +266,7 @@ void TestFileCopier::cancellationStopsTheCopy() {
     }
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
 
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination, 0,
                                             CopyLimits(), []() { return true; });
@@ -245,6 +275,7 @@ void TestFileCopier::cancellationStopsTheCopy() {
 }
 
 void TestFileCopier::aFailingCopyReportsTheRelativePath() {
+    trace("aFailingCopyReportsTheRelativePath");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -253,7 +284,7 @@ void TestFileCopier::aFailingCopyReportsTheRelativePath() {
     writeFile(source / "sub" / "broken.bin", "data");
 
     auto plan = ulli::core::enumerateCopyPlan(source);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
 
     // A directory where the file has to be: the copy of the file fails
     // and the error names the file and the destination.
@@ -270,6 +301,7 @@ void TestFileCopier::aFailingCopyReportsTheRelativePath() {
 }
 
 void TestFileCopier::theCopyReportsProgress() {
+    trace("theCopyReportsProgress");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto source = std::filesystem::path(dir.path().toStdString()) / "iso";
@@ -292,10 +324,10 @@ void TestFileCopier::theCopyReportsProgress() {
     };
 
     auto plan = ulli::core::enumerateCopyPlan(source, nullptr, progress);
-    QVERIFY(plan.isOk());
+    QVERIFY(requireOk(plan, "enumerateCopyPlan"));
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination, 0,
                                            CopyLimits(), nullptr, progress);
-    QVERIFY(stats.isOk());
+    QVERIFY(requireOk(stats, "copyCopyPlan"));
 
     // The enumeration, the copy and the finalizing are reported as
     // separate phases, and the copy reports a growing percentage that ends
@@ -311,6 +343,7 @@ void TestFileCopier::theCopyReportsProgress() {
 }
 
 void TestFileCopier::aMissingSourceIsReported() {
+    trace("aMissingSourceIsReported");
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto missing = std::filesystem::path(dir.path().toStdString()) / "nope";
