@@ -223,7 +223,7 @@ void TestFileCopier::cancellationStopsTheEnumeration() {
 
     auto plan = ulli::core::enumerateCopyPlan(source, []() { return true; });
     QVERIFY(!plan.isOk());
-    QCOMPARE(plan.error().kind, ulli::core::Error::Kind::Cancelled);
+    QCOMPARE(plan.error().kind(), ulli::core::Error::Kind::Cancelled);
 }
 
 void TestFileCopier::cancellationStopsTheCopy() {
@@ -241,7 +241,7 @@ void TestFileCopier::cancellationStopsTheCopy() {
     auto stats = ulli::core::copyCopyPlan(plan.value(), destination, 0,
                                             CopyLimits(), []() { return true; });
     QVERIFY(!stats.isOk());
-    QCOMPARE(stats.error().kind, ulli::core::Error::Kind::Cancelled);
+    QCOMPARE(stats.error().kind(), ulli::core::Error::Kind::Cancelled);
 }
 
 void TestFileCopier::aFailingCopyReportsTheRelativePath() {
@@ -255,10 +255,6 @@ void TestFileCopier::aFailingCopyReportsTheRelativePath() {
     auto plan = ulli::core::enumerateCopyPlan(source);
     QVERIFY(plan.isOk());
 
-    // A destination that cannot be written makes the copy fail.
-    std::error_code ec;
-    std::filesystem::create_directories(destination, ec);
-    QVERIFY(!ec);
     // A directory where the file has to be: the copy of the file fails
     // and the error names the file and the destination.
     std::error_code ec;
@@ -321,7 +317,7 @@ void TestFileCopier::aMissingSourceIsReported() {
 
     auto plan = ulli::core::enumerateCopyPlan(missing);
     QVERIFY(!plan.isOk());
-    QCOMPARE(plan.error().kind, ulli::core::Error::Kind::NotFound);
+    QCOMPARE(plan.error().kind(), ulli::core::Error::Kind::NotFound);
 }
 
 QTEST_MAIN(TestFileCopier)
