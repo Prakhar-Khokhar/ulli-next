@@ -81,6 +81,10 @@ public:
         return checkExpectation("wipe");
     }
 
+    // The destination the copy was called with. It has to be the mount
+    // root that createLayout verified.
+    std::filesystem::path copyDestination;
+
     Result<void> createLayout(const InstallPlan&, std::filesystem::path& bootMount,
                               std::filesystem::path& refindMount,
                               std::function<bool()>) override {
@@ -97,9 +101,11 @@ public:
 
     void unmountIso(const std::filesystem::path&) override {}
 
-    Result<void> copyFiles(const std::filesystem::path&, const std::filesystem::path&,
+    Result<void> copyFiles(const std::filesystem::path&,
+                           const std::filesystem::path& dst,
                            const Distro*, std::function<bool()>,
                            CopyProgressCallback) override {
+        copyDestination = dst;
         return checkExpectation("copy");
     }
 
@@ -250,6 +256,10 @@ private slots:
         // Progress should reach 100
         QVERIFY(progressSpy.count() > 0);
         QCOMPARE(progressSpy.last()[0].toInt(), 100);
+
+        // The copy has to write to the mount root that createLayout
+        // verified - not to a guessed path.
+        QCOMPARE(backend.copyDestination.string(), std::string("/mnt/boot"));
     }
 
     void testFailurePropagation() {

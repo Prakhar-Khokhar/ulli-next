@@ -39,6 +39,8 @@ endif()
 # ─── Sources ─────────────────────────────────────────────────────────────────
 set(ULLI_CORE_SOURCES
     src/core/Result.h
+    src/core/StagingMount.h
+    src/core/StagingMount.cpp
     src/core/Catalog.h
     src/core/Catalog.cpp
     src/core/Distro.h

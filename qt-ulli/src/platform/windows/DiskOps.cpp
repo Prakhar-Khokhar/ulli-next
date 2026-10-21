@@ -32,6 +32,7 @@
 #include "platform/windows/Wmi.h"
 #include "core/DiskIdentity.h"
 #include "core/DiskLayout.h"
+#include "core/StagingMount.h"
 #include "core/ScriptDiagnostics.h"
 #include "core/Sha256.h"
 #include "platform/HttpDownload.h"
@@ -1219,27 +1220,41 @@ Write-Output ('{{"success":true, "partitionNumber":{0}, "size":{1}, "offset":{2}
             verifyObj.value("gptGuid").toString().toStdString();
     }
 
-    // Step 4: Assign a temporary drive letter for ISO copying
-    // Use LetterGuard pattern - assign letter, track it, ensure cleanup
+    // Step 4: Establish the mount root of the staging partition.
+    //
+    // The drive letter is never guessed. Add-PartitionAccessPath without an
+    // explicit access path lets Windows pick a free letter of its own, so
+    // assuming a letter (Z:) would be wrong - the partition ends up
+    // somewhere else and the copy would write to the wrong place (or to
+    // nothing at all). The letter that is really assigned is read back
+    // from the partition and its volume, and only that letter is used.
+    QString commandOutput;
     char assignedLetter = 0;
-    bool letterWasPreExisting = false;
     if (!driveLetter.isEmpty() && driveLetter.at(0).isLetter()) {
+        // The creation already produced a letter for the partition.
         assignedLetter = driveLetter.at(0).toLatin1();
-        letterWasPreExisting = true;
     } else {
-        // Find and assign a free letter
-        auto freeLetter = findFreeLetter('Z');
-        if (freeLetter) {
-            assignedLetter = *freeLetter;
-            QString assignScript = QString("Add-PartitionAccessPath -DiskNumber %1 -PartitionNumber %2 -AssignDriveLetter")
-                .arg(diskNumber).arg(partitionNumber);
-            auto assignResult = runPowerShellScript(assignScript);
-            if (!assignResult) {
-                // Non-fatal - we can still proceed without a drive letter
-                assignedLetter = 0;
-            } else {
-                // Verify the letter was actually assigned and is accessible
-                QString verifyLetterScript = QString(R"PS1(
+        const QString assignScript = QString(
+            "Add-PartitionAccessPath -DiskNumber %1 -PartitionNumber %2 -AssignDriveLetter")
+            .arg(diskNumber).arg(partitionNumber);
+        auto assignResult = runPowerShellScript(assignScript);
+        if (!assignResult) {
+            return core::makeError(core::Error::Kind::Platform,
+                core::stagingMountErrorMessage(diskNumber, partitionNumber, '\0',
+                                               assignResult.error().message()));
+        }
+        commandOutput = assignResult.value().toStdString();
+    }
+
+    // Independent verification: ask Windows which letter the partition
+    // really has. Windows can need a moment to publish it, so the lookup
+    // is retried a few times.
+    char verifiedLetter = 0;
+    for (int attempt = 0; attempt < 3 && verifiedLetter == 0; ++attempt) {
+        if (attempt > 0) {
+            QThread::msleep(500);
+        }
+        const QString verifyLetterScript = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $partition = Get-Partition -DiskNumber %1 -PartitionNumber %2 -ErrorAction Stop
@@ -1248,17 +1263,33 @@ if ($volume -and $volume.DriveLetter) {
     Write-Output ('{{"driveLetter":"{0}"}}' -f $volume.DriveLetter)
 } else {
     Write-Output '{"driveLetter":""}'
+}
 )PS1").arg(diskNumber).arg(partitionNumber);
-                auto verifyResult = runPowerShellScript(verifyLetterScript);
-                if (verifyResult) {
-                    QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
-                    if (perr.error == QJsonParseError::NoError) {
-                        QJsonObject verifyObj = verifyDoc.object();
-                        QString actualLetter = verifyObj.value("driveLetter").toString();
-                        if (actualLetter.isEmpty() || actualLetter.at(0).toLatin1() != assignedLetter) {
-                            // Letter assignment didn't stick - fallback
-                            assignedLetter = 0;
-                        }
+        auto verifyResult = runPowerShellScript(verifyLetterScript);
+        if (!verifyResult) {
+            commandOutput = verifyResult.error().message();
+            continue;
+        }
+        QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
+        if (perr.error != QJsonParseError::NoError) {
+            commandOutput = verifyResult.value().toStdString();
+            continue;
+        }
+        const QString actualLetter =
+            verifyDoc.object().value("driveLetter").toString().trimmed();
+        if (!actualLetter.isEmpty() && actualLetter.at(0).isLetter()) {
+            verifiedLetter = actualLetter.at(0).toLatin1();
+        }
+    }
+
+    const core::StagingMount mount = core::decideStagingMount(
+        diskNumber, partitionNumber, verifiedLetter, assignedLetter, commandOutput);
+    if (!mount.ok) {
+        // Without a mounted volume the file copy has no directory to write
+        // to. Continuing would copy into a partition that does not exist.
+        return core::makeError(core::Error::Kind::Platform, mount.errorMessage);
+    }
+    bootMount = std::filesystem::path(mount.root);
                     }
                 }
             }
@@ -1838,16 +1869,6 @@ void DiskOps::restartSystem() {
     // This method is only called if the user has confirmed the
     // countdown. It is intentionally a fast no-arg shutdown.
     QProcess::startDetached("shutdown", {"/r", "/t", "0", "/f"});
-}
-
-std::optional<char> DiskOps::findFreeLetter(char startFrom) {
-    for (char c = startFrom; c >= 'C'; --c) {
-        std::filesystem::path testPath(std::string(1, c) + ":\\");
-        if (!std::filesystem::exists(testPath)) {
-            return c;
-        }
-    }
-    return std::nullopt;
 }
 
 }  // namespace ulli::platform::windows

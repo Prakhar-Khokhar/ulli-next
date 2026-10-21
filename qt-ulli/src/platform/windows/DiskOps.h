@@ -60,8 +60,6 @@ core::Result<void> copyFiles(const std::filesystem::path& src,
     void restartSystem() override;
 
 private:
-    static std::optional<char> findFreeLetter(char startFrom = 'Z');
-
     // Run a PowerShell script from a temp file, return trimmed stdout.
     core::Result<QString> runPowerShellScript(const QString& script);
 

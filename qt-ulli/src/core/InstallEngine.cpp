@@ -186,6 +186,13 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     if (auto r = backend_->createLayout(plan, bootMount, refindMount, cancelCallback); !r) return r;
     plan.bootPartitionMount = bootMount;
     if (!refindMount.empty()) plan.refindPartitionMount = refindMount;
+    // The staging partition identity and the mount root it was verified at.
+    // The copy uses exactly this root.
+    log_->append(QString("Staging partition on disk %1 (partition %2) mounted at %3")
+                     .arg(plan.targetDiskNumber)
+                     .arg(plan.stagingPartitionNumber)
+                     .arg(QString::fromStdString(bootMount.string())),
+                 ProgressLog::Severity::Info);
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
 
     // 6. Mount ISO + copy
@@ -196,6 +203,10 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     if (auto r = backend_->validatePlanForDisk(plan); !r) return r;
     auto isoMount = backend_->mountIso(plan.isoPath);
     if (!isoMount) return makeError(isoMount.error().kind(), isoMount.error().message());
+    log_->append(QString("Copying the ISO contents from %1 to %2")
+                     .arg(QString::fromStdString(isoMount.value().string()))
+                     .arg(QString::fromStdString(bootMount.string())),
+                 ProgressLog::Severity::Info);
     {
         // The backend reports the phase and the progress from the worker
         // thread. The engine forwards it to the UI, which receives the
