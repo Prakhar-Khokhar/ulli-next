@@ -238,7 +238,7 @@ private slots:
             "Pre-flight checks",
             "Resolving ISO",
             "Creating partitions and filesystems",
-            "Copying live ISO contents",
+            "Mounting live ISO",
             "Patching distro boot configuration",
             "Creating UEFI boot entry",
             "Cleaning up"

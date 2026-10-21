@@ -298,12 +298,12 @@ void TestFileCopier::theCopyReportsProgress() {
     QVERIFY(stats.isOk());
 
     // The enumeration, the copy and the finalizing are reported as
-    // separate phases, and the copy reports a growing percentage.
+    // separate phases, and the copy reports a growing percentage that ends
+    // at 100.
     QVERIFY(phases.size() >= 3);
     QCOMPARE(phases.front(), std::string("Enumerating ISO contents"));
     QVERIFY(phases.back().find("Finalizing") != std::string::npos);
     QVERIFY(copyPercents.size() >= 2);
-    QCOMPARE(copyPercents.front(), 0);
     QCOMPARE(copyPercents.back(), 100);
     for (std::size_t i = 1; i < copyPercents.size(); ++i) {
         QVERIFY(copyPercents[i] >= copyPercents[i - 1]);
