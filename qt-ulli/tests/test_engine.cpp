@@ -82,8 +82,13 @@ public:
     }
 
     // The destination the copy was called with. It has to be the mount
-    // root that createLayout verified.
-    std::filesystem::path copyDestination;
+    // root that createLayout verified. The test keeps a handle to it: the
+    // mock itself is moved into the engine.
+    std::shared_ptr<std::filesystem::path> copyDestination;
+
+    void setCopyDestination(std::shared_ptr<std::filesystem::path> dest) {
+        copyDestination = std::move(dest);
+    }
 
     Result<void> createLayout(const InstallPlan&, std::filesystem::path& bootMount,
                               std::filesystem::path& refindMount,
@@ -105,7 +110,7 @@ public:
                            const std::filesystem::path& dst,
                            const Distro*, std::function<bool()>,
                            CopyProgressCallback) override {
-        copyDestination = dst;
+        if (copyDestination) *copyDestination = dst;
         return checkExpectation("copy");
     }
 
@@ -214,6 +219,9 @@ private slots:
         disk.style = PartitionStyle::GPT;
         backend.setDisks({disk});
 
+        auto copyDestination = std::make_shared<std::filesystem::path>();
+        backend.setCopyDestination(copyDestination);
+
         ProgressLog log;
         InstallEngine engine(std::make_unique<MockBackend>(std::move(backend)), &catalog_, &log);
 
@@ -259,7 +267,8 @@ private slots:
 
         // The copy has to write to the mount root that createLayout
         // verified - not to a guessed path.
-        QCOMPARE(backend.copyDestination.string(), std::string("/mnt/boot"));
+        QVERIFY(copyDestination != nullptr);
+        QCOMPARE(copyDestination->string(), std::string("/mnt/boot"));
     }
 
     void testFailurePropagation() {
