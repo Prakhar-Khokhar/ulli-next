@@ -226,7 +226,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
                 percent * (kProgressPatch - kProgressCopy) / 100;
             emit progressChanged(mapped);
         };
-        auto copyR = backend_->copyFiles(isoMount.value(), bootMount, distro,
+        auto copyR = backend_->copyFiles(isoMount.value(), bootMount, distro, plan,
                                          cancelCallback, report);
         // Dismount only the image this installation used.
         backend_->unmountIso(plan.isoPath);

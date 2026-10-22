@@ -30,6 +30,7 @@ private:
     std::filesystem::path testSrc_;
     std::filesystem::path testDst_;
     bool stagingIsFat32_ = false;
+    InstallPlan testPlan_;
 
     // Skips the test when the staging temp dir is not FAT32. copyFiles
     // enforces a FAT32 staging gate that production must keep; on Windows
@@ -124,6 +125,11 @@ private slots:
                            "https://debian.org", "Debian", "live\\vmlinuz", true,
                            "live/vmlinuz");
         catalog_ = Catalog::fromDistros(std::move(distros));
+
+        // A minimal plan with the staging partition identity recorded,
+        // sufficient for tests that proceed past the existence checks.
+        testPlan_.targetDiskNumber = 0;
+        testPlan_.stagingPartitionNumber = 1;
     }
 
     // Test 1: ISO size metadata handling
@@ -194,7 +200,7 @@ private slots:
         std::filesystem::path missingSrc = "/nonexistent/iso";
         std::function<bool()> noCancel = []() { return false; };
 
-        auto result = ops.copyFiles(missingSrc, testDst_, nullptr, noCancel);
+        auto result = ops.copyFiles(missingSrc, testDst_, nullptr, testPlan_, noCancel);
         QVERIFY(!result);
         QCOMPARE(result.error().kind(), Error::Kind::NotFound);
     }
@@ -213,7 +219,7 @@ private slots:
         QVERIFY(distro != nullptr);
         std::function<bool()> noCancel = []() { return false; };
 
-        auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
         QVERIFY(!result);
         QVERIFY(result.error().message().find("Required file missing") != std::string::npos);
     }
@@ -228,7 +234,7 @@ private slots:
         QVERIFY(distro != nullptr);
         std::function<bool()> noCancel = []() { return false; };
 
-        auto result = ops.copyFiles(testSrc_, missingDst, distro, noCancel);
+        auto result = ops.copyFiles(testSrc_, missingDst, distro, testPlan_, noCancel);
         QVERIFY(!result);
         QCOMPARE(result.error().kind(), Error::Kind::NotFound);
     }
@@ -255,7 +261,7 @@ private slots:
             return true;
         };
 
-        auto result = ops.copyFiles(testSrc_, testDst_, distro, cancelCallback);
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, cancelCallback);
         QVERIFY(!result);
         QVERIFY(result.error().kind() == Error::Kind::Cancelled || cancelCalled);
     }
@@ -287,7 +293,7 @@ private slots:
             return callCount > 5; // Cancel after a few calls
         };
 
-        auto result = ops.copyFiles(testSrc_, testDst_, distro, cancelCallback);
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, cancelCallback);
         // Should either be cancelled or complete (depending on timing)
         if (!result) {
             QVERIFY(result.error().kind() == Error::Kind::Cancelled);
@@ -311,7 +317,7 @@ private slots:
         QVERIFY(distro != nullptr);
         std::function<bool()> noCancel = []() { return false; };
 
-        auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
         QVERIFY(!result);
         QVERIFY(result.error().message().find("Required file missing") != std::string::npos);
     }
@@ -328,7 +334,7 @@ private slots:
         QVERIFY(distro != nullptr);
         std::function<bool()> noCancel = []() { return false; };
 
-        auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
         // Should succeed with our minimal structure
         if (!result) {
             qDebug() << "Copy failed:" << QString::fromStdString(result.error().message());
@@ -358,7 +364,7 @@ private slots:
         QVERIFY(distro != nullptr);
         std::function<bool()> noCancel = []() { return false; };
 
-        auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
         // Should succeed - existing files should not be deleted
         QVERIFY(result);
 
@@ -396,7 +402,7 @@ private slots:
             QVERIFY(distro != nullptr);
             std::function<bool()> noCancel = []() { return false; };
 
-            auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+            auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
             QVERIFY(result);
             QVERIFY(std::filesystem::exists(testDst_ / "LiveOS" / "squashfs.img"));
             QVERIFY(std::filesystem::exists(testDst_ / "isolinux" / "vmlinuz"));
@@ -411,7 +417,7 @@ private slots:
             QVERIFY(distro != nullptr);
             std::function<bool()> noCancel = []() { return false; };
 
-            auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+            auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
             QVERIFY(result);
             QVERIFY(std::filesystem::exists(testDst_ / "arch" / "boot" / "x86_64" / "vmlinuz-linux-cachyos"));
             QVERIFY(std::filesystem::exists(testDst_ / "arch" / "boot" / "x86_64" / "initramfs-linux-cachyos.img"));
@@ -426,7 +432,7 @@ private slots:
             QVERIFY(distro != nullptr);
             std::function<bool()> noCancel = []() { return false; };
 
-            auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+            auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
             QVERIFY(result);
             QVERIFY(std::filesystem::exists(testDst_ / "live" / "vmlinuz"));
             QVERIFY(std::filesystem::exists(testDst_ / "live" / "initrd.img"));
@@ -441,12 +447,35 @@ private slots:
             QVERIFY(distro != nullptr);
             std::function<bool()> noCancel = []() { return false; };
 
-            auto result = ops.copyFiles(testSrc_, testDst_, distro, noCancel);
+            auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
             QVERIFY(result);
             QVERIFY(std::filesystem::exists(testDst_ / "casper" / "vmlinuz"));
             QVERIFY(std::filesystem::exists(testDst_ / "casper" / "initrd"));
             QVERIFY(std::filesystem::exists(testDst_ / "casper" / "filesystem.squashfs"));
         }
+    }
+
+    // Test 19: Missing staging partition identity prevents copyFiles from
+    // running the volume query. Regression guard: the old code used the
+    // fragile Get-Volume -Path lookup, which returned no volume in the test
+    // VM and aborted the copy stage. The new code requires the partition
+    // identity recorded by createLayout and fails closed when it is absent.
+    void testMissingPartitionIdentity() {
+        createMockIsoStructure("mint");
+
+        DiskOps ops;
+        const Distro* distro = catalog_.find("mint");
+        QVERIFY(distro != nullptr);
+        std::function<bool()> noCancel = []() { return false; };
+
+        InstallPlan plan;
+        // Intentionally do NOT set stagingPartitionNumber.
+        plan.targetDiskNumber = 0;
+
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, plan, noCancel);
+        QVERIFY(!result);
+        QVERIFY(result.error().message().find("Staging partition identity")
+                != std::string::npos);
     }
 };
 

@@ -1394,6 +1394,7 @@ Dismount-DiskImage -ImagePath '%1' -ErrorAction SilentlyContinue
 core::Result<void> DiskOps::copyFiles(const std::filesystem::path& src,
                                        const std::filesystem::path& dst,
                                        const core::Distro* distro,
+                                       const core::InstallPlan& plan,
                                        std::function<bool()> cancelCallback,
                                        core::CopyProgressCallback progress) {
     // ─── Pre-copy verification ─────────────────────────────────────────
@@ -1415,50 +1416,122 @@ core::Result<void> DiskOps::copyFiles(const std::filesystem::path& src,
 
     report("Copying the ISO contents from " + src.string() + " to " + dst.string());
 
-    // 3. Verify staging partition is FAT32 and get free space
-    // Use PowerShell to query the volume
+    // 3. Verify staging partition is FAT32 and get free space.
+    //
+    // The staging partition is looked up by the identity that
+    // createLayout recorded (disk number + partition number), not by the
+    // drive-letter path. Get-Volume -Path 'D:\' is fragile: in some VM
+    // configurations it returns no volume even when the partition and its
+    // volume exist, which aborts the copy before it starts. Querying the
+    // exact partition and then its associated volume is the supported
+    // Windows Storage API pattern and never picks an arbitrary volume.
+    if (!plan.stagingPartitionNumber.has_value()) {
+        return core::makeError(core::Error::Kind::InvalidInput,
+            "Staging partition identity is not recorded; cannot verify staging volume");
+    }
+    if (plan.targetDiskNumber < 0) {
+        return core::makeError(core::Error::Kind::InvalidInput,
+            "Staging partition identity is not recorded; cannot verify staging volume");
+    }
+    const int diskNumber = plan.targetDiskNumber;
+    const int partitionNumber = plan.stagingPartitionNumber.value();
+
+    // Drive letter that createLayout already verified is on the staging
+    // partition. The volume we find here must use exactly this letter.
+    const QString dstStr = QString::fromStdString(dst.string());
+    QString expectedLetterStr;
+    if (dstStr.size() >= 2 && dstStr.at(0).isLetter() &&
+        dstStr.at(1) == QLatin1Char(':')) {
+        expectedLetterStr = dstStr.at(0);
+    }
+
     QString verifyScript = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$path = '%1'
-$volume = Get-Volume -Path $path -ErrorAction SilentlyContinue
-if (-not $volume) {
-    Write-Output '{"error":"Could not get volume for path"}'
+$diskNumber = %1
+$partitionNumber = %2
+$expectedDriveLetter = '%3'
+
+# Get the exact staging partition on the target disk.
+$partition = Get-Partition -DiskNumber $diskNumber -PartitionNumber $partitionNumber -ErrorAction SilentlyContinue
+if (-not $partition) {
+    Write-Output ('{{"error":"Staging partition not found on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
     exit 1
 }
 
-$fs = $volume.FileSystem
-$sizeRemaining = $volume.SizeRemaining
-$sizeTotal = $volume.Size
+# Get the volume associated with that exact partition (never an arbitrary volume).
+$volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
+if (-not $volume) {
+    Write-Output ('{{"error":"No volume associated with staging partition on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
+    exit 1
+}
 
-Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}}}' -f $fs, $sizeRemaining, $sizeTotal)
-)PS1").arg(QString::fromStdString(dst.string()).replace("'", "''"));
+# Verify filesystem is FAT32
+$fs = $volume.FileSystem
+if (-not $fs -or $fs -ne 'FAT32') {
+    Write-Output ('{{"error":"Staging volume is not FAT32 (got: {0})"}}' -f (if ($volume) { $volume.FileSystem } else { 'none' }))
+    exit 1
+}
+
+# Verify the volume's drive letter matches the staging mount root that
+# createLayout already verified.
+$driveLetter = if ($volume.DriveLetter) { [string]$volume.DriveLetter } else { '' }
+if (-not $driveLetter) {
+    Write-Output ('{{"error":"Staging volume on disk {0} partition {1} has no drive letter"}}' -f $diskNumber, $partitionNumber)
+    exit 1
+}
+
+if ($expectedDriveLetter -and $driveLetter -ne $expectedDriveLetter) {
+    Write-Output ('{{"error":"Staging volume drive letter mismatch. Expected: {0}, found: {1}"}}' -f $expectedDriveLetter, $driveLetter)
+    exit 1
+}
+
+$freeBytes = $volume.SizeRemaining
+$totalBytes = $volume.Size
+
+Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}, "driveLetter":"{3}"}}' -f $fs, $freeBytes, $totalBytes, $driveLetter)
+)PS1").arg(diskNumber).arg(partitionNumber).arg(expectedLetterStr);
 
     auto verifyResult = runPowerShellScript(verifyScript);
     if (!verifyResult) {
         return core::makeError(verifyResult.error().kind(),
-            "Staging verification failed: " + verifyResult.error().message());
+            "Staging verification failed (disk " + std::to_string(diskNumber) +
+            ", partition " + std::to_string(partitionNumber) +
+            ", mount " + dst.string() + "): " + verifyResult.error().message());
     }
 
     QJsonParseError perr{};
     QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
     if (perr.error != QJsonParseError::NoError) {
         return core::makeError(core::Error::Kind::Platform,
-            "Staging verification output was not valid JSON");
+            "Staging verification output was not valid JSON (disk " +
+            std::to_string(diskNumber) + ", partition " +
+            std::to_string(partitionNumber) + ", mount " + dst.string() +
+            "): " + perr.errorString().toStdString());
     }
     QJsonObject verifyObj = verifyDoc.object();
     if (verifyObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
-            verifyObj.value("error").toString().toStdString());
+            "Staging verification failed: " + verifyObj.value("error").toString().toStdString());
     }
 
     const QString fs = verifyObj.value("filesystem").toString();
     const qulonglong freeBytes = verifyObj.value("freeBytes").toVariant().toULongLong();
+    const qulonglong totalBytes = verifyObj.value("totalBytes").toVariant().toULongLong();
 
     if (fs.compare("FAT32", Qt::CaseInsensitive) != 0) {
         return core::makeError(core::Error::Kind::Platform,
             "Staging partition is not FAT32 (got: " + fs.toStdString() + ")");
+    }
+
+    // Verify total space can be read reliably. A zero total means the
+    // volume query returned no usable size data.
+    if (totalBytes == 0) {
+        return core::makeError(core::Error::Kind::Platform,
+            "Staging volume reports zero total bytes (disk " +
+            std::to_string(diskNumber) + ", partition " +
+            std::to_string(partitionNumber) + ")");
     }
 
     // 4. The mounted image has to contain the expected files. The legacy
@@ -1481,11 +1554,12 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}}}' -f $fs
     constexpr std::uint64_t FAT32_MAX_FILE_SIZE = 4ull * 1024 * 1024 * 1024 - 1;
     limits.maxFileSizeBytes = FAT32_MAX_FILE_SIZE;
 
-    auto plan = core::enumerateCopyPlan(src, cancelCallback, progress);
-    if (!plan) {
-        return core::makeError(plan.error().kind(), plan.error().message());
+    auto copyPlanResult = core::enumerateCopyPlan(src, cancelCallback, progress);
+    if (!copyPlanResult) {
+        return core::makeError(copyPlanResult.error().kind(),
+            copyPlanResult.error().message());
     }
-    const core::CopyPlan& copyPlan = plan.value();
+    const core::CopyPlan& copyPlan = copyPlanResult.value();
     const std::uint64_t estimatedSize = copyPlan.totalBytes;
 
     // ─── Copy ──────────────────────────────────────────────────────────

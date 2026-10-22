@@ -108,7 +108,8 @@ public:
 
     Result<void> copyFiles(const std::filesystem::path&,
                            const std::filesystem::path& dst,
-                           const Distro*, std::function<bool()>,
+                           const Distro*, const InstallPlan&,
+                           std::function<bool()>,
                            CopyProgressCallback) override {
         if (copyDestination) *copyDestination = dst;
         return checkExpectation("copy");

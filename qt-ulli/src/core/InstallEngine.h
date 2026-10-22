@@ -138,6 +138,7 @@ public:
     virtual Result<void> copyFiles(const std::filesystem::path& src,
                                    const std::filesystem::path& dst,
                                    const Distro* distro,
+                                   const InstallPlan& plan,
                                    std::function<bool()> cancelCallback = nullptr,
                                    CopyProgressCallback progress = nullptr) = 0;
 
