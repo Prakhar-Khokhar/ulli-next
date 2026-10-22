@@ -190,7 +190,7 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
     // The copy uses exactly this root.
     log_->append(QString("Staging partition on disk %1 (partition %2) mounted at %3")
                      .arg(plan.targetDiskNumber)
-                     .arg(plan.stagingPartitionNumber)
+                     .arg(plan.stagingPartitionNumber.value_or(0))
                      .arg(QString::fromStdString(bootMount.string())),
                  ProgressLog::Severity::Info);
     if (cancelFlag_.loadAcquire() != 0) return makeCancelled();

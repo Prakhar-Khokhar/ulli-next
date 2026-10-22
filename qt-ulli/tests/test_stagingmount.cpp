@@ -51,7 +51,7 @@ void TestStagingMount::aLetterOtherThanTheCandidateIsUsed() {
 void TestStagingMount::withoutAVerifiedLetterTheMountFails() {
     // The verification did not yield a letter: the copy has no directory
     // to write to, so the installation must stop.
-    const auto mount = decideStagingMount(0, 2, 0, 'Z', "no volume found");
+    const auto mount = decideStagingMount(0, 2, '\0', 'Z', "no volume found");
     QVERIFY(!mount.ok);
     QVERIFY(mount.root.empty());
     QVERIFY(!mount.errorMessage.empty());

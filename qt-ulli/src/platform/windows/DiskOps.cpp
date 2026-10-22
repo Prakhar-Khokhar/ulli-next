@@ -1243,7 +1243,7 @@ Write-Output ('{{"success":true, "partitionNumber":{0}, "size":{1}, "offset":{2}
                 core::stagingMountErrorMessage(diskNumber, partitionNumber, '\0',
                                                assignResult.error().message()));
         }
-        commandOutput = assignResult.value().toStdString();
+        commandOutput = assignResult.value();
     }
 
     // Independent verification: ask Windows which letter the partition
@@ -1267,12 +1267,12 @@ if ($volume -and $volume.DriveLetter) {
 )PS1").arg(diskNumber).arg(partitionNumber);
         auto verifyResult = runPowerShellScript(verifyLetterScript);
         if (!verifyResult) {
-            commandOutput = verifyResult.error().message();
+            commandOutput = QString::fromStdString(verifyResult.error().message());
             continue;
         }
         QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
         if (perr.error != QJsonParseError::NoError) {
-            commandOutput = verifyResult.value().toStdString();
+            commandOutput = verifyResult.value();
             continue;
         }
         const QString actualLetter =
@@ -1283,25 +1283,14 @@ if ($volume -and $volume.DriveLetter) {
     }
 
     const core::StagingMount mount = core::decideStagingMount(
-        diskNumber, partitionNumber, verifiedLetter, assignedLetter, commandOutput);
+        diskNumber, partitionNumber, verifiedLetter, assignedLetter,
+        commandOutput.toStdString());
     if (!mount.ok) {
         // Without a mounted volume the file copy has no directory to write
         // to. Continuing would copy into a partition that does not exist.
         return core::makeError(core::Error::Kind::Platform, mount.errorMessage);
     }
     bootMount = std::filesystem::path(mount.root);
-                    }
-                }
-            }
-        }
-    }
-
-    if (assignedLetter) {
-        bootMount = std::filesystem::path(std::string(1, assignedLetter) + ":\\");
-    } else {
-        // Fallback: use the partition path directly
-        bootMount = std::filesystem::path("\\\\.\\PHYSICALDRIVE" + std::to_string(diskNumber) + "\\PARTITION" + std::to_string(partitionNumber));
-    }
 
     // Note: rEFInd partition creation is deferred to Phase 2.3+
     (void)refindMount;
