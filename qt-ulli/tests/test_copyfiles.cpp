@@ -533,11 +533,11 @@ private slots:
         QVERIFY(distro != nullptr);
         std::function<bool()> noCancel = []() { return false; };
 
-        // A path like "D:" without backslash has a root name but no root
-        // directory: it is relative to the current directory on that drive,
-        // not the drive root. copyFiles must reject it.
+        // A relative path without a drive letter has no root name and no
+        // root directory: it is relative to the current directory, not a
+        // drive root. copyFiles must reject it before any file operations.
         InstallPlan badPlan = testPlan_;
-        std::filesystem::path badDst("D:");  // no trailing backslash
+        std::filesystem::path badDst("casper/initrd");  // relative, no root
 
         auto result = ops.copyFiles(testSrc_, badDst, distro, badPlan, noCancel);
         QVERIFY(!result);
