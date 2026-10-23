@@ -514,7 +514,7 @@ private slots:
             reqPath /= reqFilePath;
 
             QCOMPARE(reqPath.root_name().string(), std::string(root.substr(0, 2)));
-            QCOMPARE(reqPath.parent_path().string(), root);
+            QCOMPARE(reqPath.parent_path(), dst / "casper");
             QCOMPARE(reqPath.filename().string(), std::string("initrd"));
         }
     }
@@ -523,12 +523,9 @@ private slots:
     // without the trailing backslash) is rejected by copyFiles. This guards
     // against path resolution targeting the current directory on a drive
     // instead of the drive root, which could happen when drive letters are
-    // reassigned between runs. Requires FAT32 staging for the volume query
-    // gate to be reached; skipped on NTFS CI runners.
+    // reassigned between runs. Checked at the top of copyFiles, before any
+    // file operations, so no FAT32 volume is needed.
     void testMissingRootPathRejected() {
-        if (!stagingIsFat32()) {
-            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
-        }
         createMockIsoStructure("mint");
 
         DiskOps ops;
