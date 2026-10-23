@@ -24,7 +24,8 @@ public:
            std::string keyword = {},
            std::string validationFile = {},
            bool isHybrid = false,
-           std::string livePath = {});
+           std::string livePath = {},
+           std::vector<std::string> initrdVariants = {});
 
     const std::string& key() const noexcept { return key_; }
     const std::string& label() const noexcept { return label_; }
@@ -36,6 +37,7 @@ public:
     const std::string& validationFile() const noexcept { return validationFile_; }
     bool isHybrid() const noexcept { return isHybrid_; }
     const std::string& livePath() const noexcept { return livePath_; }
+    const std::vector<std::string>& initrdVariants() const noexcept { return initrdVariants_; }
 
     QString qlabel() const { return QString::fromStdString(label_); }
     QStringList qmirrors() const;
@@ -58,6 +60,7 @@ private:
     std::string validationFile_;
     bool isHybrid_ = false;
     std::string livePath_;
+    std::vector<std::string> initrdVariants_;
 };
 
 }  // namespace ulli::core

@@ -59,6 +59,16 @@ namespace ulli::platform::windows {
 
 namespace {
 
+// Join a vector of strings with a delimiter.
+std::string join(const std::vector<std::string>& vec, const std::string& delim) {
+    if (vec.empty()) return std::string();
+    std::string result = vec[0];
+    for (size_t i = 1; i < vec.size(); ++i) {
+        result += delim + vec[i];
+    }
+    return result;
+}
+
 // Run an external tool, return a typed Result. Never throws.
 core::Result<QString> runTool(const QString& program,
                               const QStringList& args,
@@ -1609,10 +1619,15 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}, "driveLe
             requiredFiles.push_back("live/initrd.img");
             requiredFiles.push_back("live/filesystem.squashfs");
         } else {
-            // Ubuntu, Kubuntu, Mint (Caspar-based)
+            // Ubuntu, Kubuntu, Mint, Linux Lite (Caspar-based)
             requiredFiles.push_back("casper/vmlinuz");
-            requiredFiles.push_back("casper/initrd");
             requiredFiles.push_back("casper/filesystem.squashfs");
+        }
+
+        // Add initrd variants from the distro catalog. At least one must exist.
+        const auto& initrdVariants = distro->initrdVariants();
+        if (!initrdVariants.empty()) {
+            // We'll handle initrd variants separately: at least one must exist.
         }
 
         for (const auto& reqFile : requiredFiles) {
@@ -1645,6 +1660,37 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}, "driveLe
                 return core::makeError(core::Error::Kind::Io,
                     "Cannot verify required file after copy: " + reqPath.string() +
                     " (" + reqEc.message() + ")");
+            }
+        }
+
+        // Verify initrd variants: at least one must exist.
+        const auto& initrdVariantsCheck = distro->initrdVariants();
+        if (!initrdVariantsCheck.empty()) {
+            if (cancelCallback && cancelCallback()) {
+                return core::makeCancelled();
+            }
+            bool anyInitrdExists = false;
+            std::filesystem::path foundInitrdPath;
+            for (const auto& initrdVariant : initrdVariantsCheck) {
+                std::filesystem::path reqPath = dst;
+                std::filesystem::path reqFilePath(initrdVariant);
+                reqPath /= reqFilePath;
+
+                std::error_code reqEc;
+                if (std::filesystem::exists(reqPath, reqEc)) {
+                    anyInitrdExists = true;
+                    foundInitrdPath = reqPath;
+                    break;
+                }
+            }
+            if (!anyInitrdExists) {
+                // Report the first variant as the expected path for clarity
+                std::filesystem::path reqPath = dst;
+                std::filesystem::path reqFilePath(initrdVariantsCheck.front());
+                reqPath /= reqFilePath;
+                return core::makeError(core::Error::Kind::Platform,
+                    "Required file missing after copy: " + reqPath.string() +
+                    " (accepted variants: " + join(initrdVariantsCheck, ", ") + ")");
             }
         }
     }

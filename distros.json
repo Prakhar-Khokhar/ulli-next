@@ -13,7 +13,8 @@
         "download_msg": "Please download Linux Mint 22.3 Cinnamon (64-bit) and save it as:",
         "keyword": "Mint",
         "validation_file": "casper\\vmlinuz",
-        "is_hybrid": false
+        "is_hybrid": false,
+        "initrd_variants": ["casper/initrd", "casper/initrd.lz", "casper/initrd.gz"]
     },
     "cachyos": {
         "label": "CachyOS Desktop (approx. 3 GB)",
@@ -26,7 +27,8 @@
         "download_msg": "Please download CachyOS Desktop and save it as:",
         "keyword": "CachyOS",
         "validation_file": "arch\\boot\\x86_64\\vmlinuz-linux-cachyos",
-        "is_hybrid": true
+        "is_hybrid": true,
+        "initrd_variants": ["arch/boot/x86_64/initramfs-linux-cachyos.img"]
     },
     "ubuntu": {
         "label": "Ubuntu 26.04 LTS - GNOME Edition (approx. 6.1 GB)",
@@ -41,7 +43,8 @@
         "download_msg": "Please download Ubuntu 26.04 LTS (64-bit) and save it as:",
         "keyword": "Ubuntu",
         "validation_file": "casper\\vmlinuz",
-        "is_hybrid": false
+        "is_hybrid": false,
+        "initrd_variants": ["casper/initrd", "casper/initrd.lz", "casper/initrd.gz"]
     },
     "kubuntu": {
         "label": "Kubuntu 26.04 LTS - KDE Plasma 6 Edition (approx. 4.7 GB)",
@@ -56,7 +59,8 @@
         "download_msg": "Please download Kubuntu 26.04 LTS (64-bit) and save it as:",
         "keyword": "Kubuntu",
         "validation_file": "casper\\vmlinuz",
-        "is_hybrid": false
+        "is_hybrid": false,
+        "initrd_variants": ["casper/initrd", "casper/initrd.lz", "casper/initrd.gz"]
     },
     "linux-lite": {
         "label": "Linux Lite 8.0 - Xfce Edition (approx. 2.36 GB)",
@@ -72,7 +76,8 @@
         "download_msg": "Please download Linux Lite 8.0 (64-bit) and save it as:",
         "keyword": "Linux Lite",
         "validation_file": "casper\\vmlinuz",
-        "is_hybrid": true
+        "is_hybrid": true,
+        "initrd_variants": ["casper/initrd", "casper/initrd.lz", "casper/initrd.gz"]
     },
     "debian": {
         "label": "Debian Live 13.6.0 - KDE Edition (approx. 3.9 GB)",
@@ -87,7 +92,8 @@
         "download_msg": "Please download Debian Live 13.6.0 KDE (amd64) and save it as:",
         "keyword": "Debian",
         "validation_file": "live\\vmlinuz",
-        "is_hybrid": true
+        "is_hybrid": true,
+        "initrd_variants": ["live/initrd.img"]
     },
     "fedora": {
         "label": "Fedora 43 - KDE Plasma Desktop (approx. 3.0 GB)",
@@ -101,6 +107,7 @@
         "download_msg": "Please download Fedora 43 KDE Plasma Desktop (x86_64) and save it as:",
         "keyword": "Fedora",
         "validation_file": "LiveOS\\squashfs.img",
-        "is_hybrid": true
+        "is_hybrid": true,
+        "initrd_variants": ["isolinux/initrd.img"]
     }
 }

@@ -18,7 +18,8 @@ namespace ulli::core {
 Distro::Distro(std::string key, std::string label, std::string isoFilename,
                std::string sha256, std::vector<std::string> mirrors,
                std::string downloadPage, std::string keyword,
-               std::string validationFile, bool isHybrid, std::string livePath)
+               std::string validationFile, bool isHybrid, std::string livePath,
+               std::vector<std::string> initrdVariants)
     : key_(std::move(key))
     , label_(std::move(label))
     , isoFilename_(std::move(isoFilename))
@@ -28,7 +29,8 @@ Distro::Distro(std::string key, std::string label, std::string isoFilename,
     , keyword_(std::move(keyword))
     , validationFile_(std::move(validationFile))
     , isHybrid_(isHybrid)
-    , livePath_(std::move(livePath)) {}
+    , livePath_(std::move(livePath))
+    , initrdVariants_(std::move(initrdVariants)) {}
 
 QStringList Distro::qmirrors() const {
     QStringList out;
@@ -50,27 +52,31 @@ const std::vector<Distro>& Catalog::fallbackDistros() {
           "https://mirrors.seas.harvard.edu/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso",
           "https://mirror.arizona.edu/linuxmint/stable/22.3/linuxmint-22.3-cinnamon-64bit.iso"},
          "https://linuxmint.com/edition.php?id=326", "Mint", "casper\\vmlinuz", false,
-         "casper/vmlinuz"},
+         "casper/vmlinuz",
+         {"casper/initrd", "casper/initrd.lz", "casper/initrd.gz"}},
         {"cachyos", "CachyOS Desktop", "cachyos-desktop-linux-260809.iso",
          "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c",
          {"https://cdn77.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso"},
          "https://cachyos.org/download/", "CachyOS",
          "arch\\boot\\x86_64\\vmlinuz-linux-cachyos", true,
-         "boot/vmlinuz-linux-cachyos"},
+         "boot/vmlinuz-linux-cachyos",
+         {"arch/boot/x86_64/initramfs-linux-cachyos.img"}},
         {"ubuntu", "Ubuntu 26.04 LTS", "ubuntu-26.04-desktop-amd64.iso",
          "487f87faaf547ea30e0aba4d5b53346292571256b25333a978db1692bcee9dd2",
          {"https://gsl-syd.mm.fcix.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
           "https://mirror.xenyth.net/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
           "https://ftp.udx.icscoe.jp/Linux/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso"},
          "https://ubuntu.com/download/desktop", "Ubuntu", "casper\\vmlinuz", false,
-         "casper/vmlinuz"},
+         "casper/vmlinuz",
+         {"casper/initrd", "casper/initrd.lz", "casper/initrd.gz"}},
         {"kubuntu", "Kubuntu 26.04 LTS", "kubuntu-26.04-desktop-amd64.iso",
          "95ce9cf68f13015b9a88bd1ef86fcf7eda77c99979fda48c69e28aa0a84f88ac",
          {"https://ftp.linux.org.tr/kubuntu/26.04/release/kubuntu-26.04-desktop-amd64.iso",
           "https://www.mirrorservice.org/sites/cdimage.ubuntu.com/cdimage/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso",
           "https://cdimage.ubuntu.com/kubuntu/releases/26.04/release/kubuntu-26.04-desktop-amd64.iso"},
          "https://kubuntu.org/getkubuntu/", "Kubuntu", "casper\\vmlinuz", false,
-         "casper/vmlinuz"},
+         "casper/vmlinuz",
+         {"casper/initrd", "casper/initrd.lz", "casper/initrd.gz"}},
         {"linux-lite", "Linux Lite 8.0 - Xfce", "linux-lite-8.0-64bit.iso",
          "7cfc63baf597156a0a5ecac87e860aff3967279694b19fa67fb410a34802857e",
          {"https://mirror.freedif.org/LinuxLiteOS/isos/linux-lite-8.0-64bit.iso",
@@ -78,20 +84,23 @@ const std::vector<Distro>& Catalog::fallbackDistros() {
           "https://www.mirrorservice.org/sites/repo.linuxliteos.com/linuxlite/isos/8.0/linux-lite-8.0-64bit.iso",
           "https://mirrors.sjtug.sjtu.edu.cn/linuxliteos/isos/8.0/linux-lite-8.0-64bit.iso"},
          "https://www.linuxliteos.com/download.php", "Linux Lite", "casper\\vmlinuz", true,
-         "casper/vmlinuz"},
+         "casper/vmlinuz",
+         {"casper/initrd", "casper/initrd.lz", "casper/initrd.gz"}},
         {"debian", "Debian Live 13.6.0 KDE", "debian-live-13.6.0-amd64-kde.iso",
          "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639",
          {"https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
           "https://mirrors.edge.kernel.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso",
           "https://mirror.csclub.uwaterloo.ca/debian-cd/current-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-kde.iso"},
          "https://www.debian.org/CD/live/", "Debian", "live\\vmlinuz", true,
-         "live/vmlinuz"},
+         "live/vmlinuz",
+         {"live/initrd.img"}},
         {"fedora", "Fedora 43 KDE", "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
          "181fe3e265fb5850c929f5afb7bdca91bb433b570ef39ece4a7076187435fdab",
          {"https://mirror.telepoint.bg/fedora/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
           "https://mirrors.netix.net/fedora/linux/releases/43/KDE/x86_64/iso/Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso"},
          "https://fedoraproject.org/kde/download/", "Fedora", "LiveOS\\squashfs.img", true,
-         "LiveOS/squashfs.img"},
+         "LiveOS/squashfs.img",
+         {"isolinux/initrd.img"}},
     };
     return kFallback;
 }
@@ -131,6 +140,14 @@ std::optional<Catalog> tryLoadFromFile(const std::filesystem::path& path) {
         std::string livePath = validation;
         std::replace(livePath.begin(), livePath.end(), '\\', '/');
 
+        // Optional initrd_variants array — defaults to empty if not present.
+        std::vector<std::string> initrdVariants;
+        if (const QJsonValue iv = e.value("initrd_variants"); iv.isArray()) {
+            for (const QJsonValue& v : iv.toArray()) {
+                initrdVariants.push_back(v.toString().toStdString());
+            }
+        }
+
         Distro d(
             it.key().toStdString(),
             e.value("label").toString().toStdString(),
@@ -141,7 +158,8 @@ std::optional<Catalog> tryLoadFromFile(const std::filesystem::path& path) {
             e.value("keyword").toString().toStdString(),
             std::move(validation),
             e.value("is_hybrid").toBool(false),
-            std::move(livePath)
+            std::move(livePath),
+            std::move(initrdVariants)
         );
         if (!d.valid()) {
             std::cerr << "WARN: skipping invalid entry '" << it.key().toStdString()

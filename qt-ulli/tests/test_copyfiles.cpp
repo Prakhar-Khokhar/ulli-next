@@ -41,7 +41,8 @@ private:
     // helper method, so the call is inlined in each test below.
     bool stagingIsFat32() const { return stagingIsFat32_; }
 
-    void createMockIsoStructure(const std::string& distroKeyword) {
+    void createMockIsoStructure(const std::string& distroKeyword,
+                            const std::string& initrdVariant = "initrd") {
         // Remove existing structure
         std::error_code ec;
         std::filesystem::remove_all(testSrc_, ec);
@@ -71,7 +72,7 @@ private:
             // Ubuntu, Kubuntu, Mint (Caspar-based)
             std::filesystem::create_directories(testSrc_ / "casper");
             QFile(testSrc_ / "casper" / "vmlinuz").open(QIODevice::WriteOnly);
-            QFile(testSrc_ / "casper" / "initrd").open(QIODevice::WriteOnly);
+            QFile(testSrc_ / "casper" / initrdVariant).open(QIODevice::WriteOnly);
             QFile(testSrc_ / "casper" / "filesystem.squashfs").open(QIODevice::WriteOnly);
         }
 
@@ -103,27 +104,32 @@ private slots:
                            "a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4",
                            std::vector<std::string>{"https://example.com/mint.iso"},
                            "https://linuxmint.com", "Mint", "casper\\vmlinuz", false,
-                           "casper/vmlinuz");
+                           "casper/vmlinuz",
+                           std::vector<std::string>{"casper/initrd", "casper/initrd.lz", "casper/initrd.gz"});
         distros.emplace_back("ubuntu", "Ubuntu 24.04.4 LTS", "ubuntu-24.04.4-desktop-amd64.iso",
                            "3a4c9877b483ab46d7c3fbe165a0db275e1ae3cfe56a5657e5a47c2f99a99d1e",
                            std::vector<std::string>{"https://example.com/ubuntu.iso"},
                            "https://ubuntu.com", "Ubuntu", "casper\\vmlinuz", false,
-                           "casper/vmlinuz");
+                           "casper/vmlinuz",
+                           std::vector<std::string>{"casper/initrd", "casper/initrd.lz", "casper/initrd.gz"});
         distros.emplace_back("fedora", "Fedora 43 KDE", "Fedora-KDE-Desktop-Live-43-1.6.x86_64.iso",
                            "181fe3e265fb5850c9a4bb337bdca91bb433b570ef39ece4a7076187435fdab",
                            std::vector<std::string>{"https://example.com/fedora.iso"},
                            "https://fedoraproject.org", "Fedora", "LiveOS\\squashfs.img", true,
-                           "LiveOS/squashfs.img");
+                           "LiveOS/squashfs.img",
+                           std::vector<std::string>{"isolinux/initrd.img"});
         distros.emplace_back("cachyos", "CachyOS Desktop", "cachyos-desktop-linux-260809.iso",
                            "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c",
                            std::vector<std::string>{"https://example.com/cachyos.iso"},
                            "https://cachyos.org", "CachyOS", "arch\\boot\\x86_64\\vmlinuz-linux-cachyos", true,
-                           "boot/vmlinuz-linux-cachyos");
+                           "boot/vmlinuz-linux-cachyos",
+                           std::vector<std::string>{"arch/boot/x86_64/initramfs-linux-cachyos.img"});
         distros.emplace_back("debian", "Debian Live 13.6.0 KDE", "debian-live-13.6.0-amd64-kde.iso",
                            "426984f7edf034f4cd49f6218e706a6086588359d34fa0328676451b4a679639",
                            std::vector<std::string>{"https://example.com/debian.iso"},
                            "https://debian.org", "Debian", "live\\vmlinuz", true,
-                           "live/vmlinuz");
+                           "live/vmlinuz",
+                           std::vector<std::string>{"live/initrd.img"});
         catalog_ = Catalog::fromDistros(std::move(distros));
 
         // A minimal plan with the staging partition identity recorded,
@@ -455,6 +461,58 @@ private slots:
         }
     }
 
+    // Test 18b: Casper initrd variants (.lz, .gz) are accepted
+    void testCasperInitrdVariants() {
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
+        const std::vector<std::string> variants = {"initrd", "initrd.lz", "initrd.gz"};
+        for (const auto& variant : variants) {
+            createMockIsoStructure("mint", variant);
+            DiskOps ops;
+            const Distro* distro = catalog_.find("mint");
+            QVERIFY(distro != nullptr);
+            std::function<bool()> noCancel = []() { return false; };
+
+            auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
+            if (!result) {
+                qDebug() << "Copy failed for variant" << QString::fromStdString(variant)
+                         << ":" << QString::fromStdString(result.error().message());
+            }
+            QVERIFY(result);
+            // Verify the specific variant was copied
+            QVERIFY(std::filesystem::exists(testDst_ / "casper" / variant));
+            QVERIFY(std::filesystem::exists(testDst_ / "casper" / "vmlinuz"));
+            QVERIFY(std::filesystem::exists(testDst_ / "casper" / "filesystem.squashfs"));
+            QVERIFY(std::filesystem::exists(testDst_ / "EFI" / "BOOT" / "BOOTx64.EFI"));
+
+            // Clean up for next iteration
+            std::error_code ec;
+            std::filesystem::remove_all(testDst_, ec);
+            std::filesystem::create_directories(testDst_);
+        }
+    }
+
+    // Test 18c: Missing initrd (none of the variants present) fails verification
+    void testMissingInitrdFails() {
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
+        createMockIsoStructure("mint", "initrd");
+        // Remove the initrd file
+        std::filesystem::remove(testSrc_ / "casper" / "initrd");
+
+        DiskOps ops;
+        const Distro* distro = catalog_.find("mint");
+        QVERIFY(distro != nullptr);
+        std::function<bool()> noCancel = []() { return false; };
+
+        auto result = ops.copyFiles(testSrc_, testDst_, distro, testPlan_, noCancel);
+        QVERIFY(!result);
+        QVERIFY(result.error().message().find("Required file missing") != std::string::npos);
+        QVERIFY(result.error().message().find("accepted variants") != std::string::npos);
+    }
+
     // Test 19: Missing staging partition identity prevents copyFiles from
     // running the volume query. Regression guard: the old code used the
     // fragile Get-Volume -Path lookup, which returned no volume in the test
@@ -560,6 +618,28 @@ private slots:
         QVERIFY(reqPath.has_root_path());
         // The root must match testDst_'s root (same drive).
         QCOMPARE(reqPath.root_name(), testDst_.root_name());
+    }
+
+    // Test 24: Custom ISO (nullptr distro) skips required-file verification.
+    // This verifies that the custom ISO path bypasses post-copy verification,
+    // which is the current behavior (distro == nullptr).
+    void testCustomIsoSkipsVerification() {
+        if (!stagingIsFat32()) {
+            QSKIP("Staging temp dir is not FAT32; copyFiles requires FAT32 staging");
+        }
+        // Create a minimal ISO structure WITHOUT required files
+        createMockIsoStructure("mint", "initrd");
+        std::filesystem::remove(testSrc_ / "casper" / "initrd");
+        std::filesystem::remove(testSrc_ / "casper" / "vmlinuz");
+        std::filesystem::remove(testSrc_ / "EFI" / "BOOT" / "BOOTx64.EFI");
+
+        DiskOps ops;
+        // Pass nullptr for distro (custom ISO path)
+        std::function<bool()> noCancel = []() { return false; };
+
+        auto result = ops.copyFiles(testSrc_, testDst_, nullptr, testPlan_, noCancel);
+        // Should succeed even though required files are missing
+        QVERIFY(result);
     }
 };
 
