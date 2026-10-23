@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/cmake_install.cmake",
-		"/home/prakhark/ULLI beta/ulli-next/qt-ulli/build/tests/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
