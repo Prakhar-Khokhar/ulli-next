@@ -1397,6 +1397,23 @@ core::Result<void> DiskOps::copyFiles(const std::filesystem::path& src,
                                        const core::InstallPlan& plan,
                                        std::function<bool()> cancelCallback,
                                        core::CopyProgressCallback progress) {
+    // 0. Validate destination is a properly rooted path. On Windows, a path
+    //    like "D:" (drive letter without trailing backslash) is drive-relative,
+    //    not root-relative: resolving required files against it would target the
+    //    current directory on that drive instead of the drive root, causing
+    //    verification to inspect the wrong location when drive letters are
+    //    reassigned between runs. createLayout always records a properly rooted
+    //    mount path (e.g. "D:\"), so reject anything else.
+    //    This check targets the specific broken pattern: a root name (drive
+    //    letter) without a root directory. Paths like "/nonexistent/staging"
+    //    (root directory but no root name) are not affected and fall through
+    //    to the normal existence check below.
+    if (dst.has_root_name() && !dst.has_root_directory()) {
+        return core::makeError(core::Error::Kind::InvalidInput,
+            "Staging mount root has drive letter but no root directory: " +
+            dst.string());
+    }
+
     // ─── Pre-copy verification ─────────────────────────────────────────
     // 1. Verify source (mounted ISO) exists and is readable
     if (!std::filesystem::exists(src)) {

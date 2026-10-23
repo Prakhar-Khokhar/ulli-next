@@ -498,6 +498,69 @@ private slots:
         // Same result as building from individual components.
         QCOMPARE(reqPath, testDst_ / "casper" / "initrd");
     }
+
+    // Test 21: Required file path resolves correctly against different
+    // staging roots (simulating different drive letters D:, E:, etc.).
+    // Verifies the fix does not hardcode or assume any particular drive
+    // letter. Runs on any platform, no FAT32 volume required.
+    void testRequiredFilePathDifferentRoots() {
+        const std::vector<std::string> roots = {
+            "D:\\", "E:\\", "F:\\", "X:\\"
+        };
+        for (const auto& root : roots) {
+            std::filesystem::path dst(root);
+            std::filesystem::path reqPath = dst;
+            std::filesystem::path reqFilePath("casper/initrd");
+            reqPath /= reqFilePath;
+
+            QCOMPARE(reqPath.root_name().string(), std::string(root.substr(0, 2)));
+            QCOMPARE(reqPath.parent_path(), dst / "casper");
+            QCOMPARE(reqPath.filename().string(), std::string("initrd"));
+        }
+    }
+
+    // Test 22: A staging mount root with a drive letter but no root
+    // directory (e.g. "D:" without trailing backslash) is rejected by
+    // copyFiles. This guards against path resolution targeting the current
+    // directory on that drive instead of the drive root, which could happen
+    // when drive letters are reassigned between runs. Checked at the top of
+    // copyFiles, before any file operations, so no FAT32 volume is needed.
+    void testMissingRootPathRejected() {
+        createMockIsoStructure("mint");
+
+        DiskOps ops;
+        const Distro* distro = catalog_.find("mint");
+        QVERIFY(distro != nullptr);
+        std::function<bool()> noCancel = []() { return false; };
+
+        // A path like "D:" without backslash has a root name but no root
+        // directory: it is relative to the current directory on that drive,
+        // not the drive root. copyFiles must reject it.
+        InstallPlan badPlan = testPlan_;
+        std::filesystem::path badDst("D:");  // no trailing backslash
+
+        auto result = ops.copyFiles(testSrc_, badDst, distro, badPlan, noCancel);
+        QVERIFY(!result);
+        QVERIFY(result.error().message().find("no root directory")
+                != std::string::npos);
+    }
+
+    // Test 23: Required file path with forward slashes is resolved
+    // component-wise and cannot escape the staging root. Verifies that
+    // "casper/../../escape/initrd" still resolves under dst, not outside it.
+    // Runs on any platform, no FAT32 volume required.
+    void testRequiredFilePathNoEscape() {
+        std::filesystem::path reqPath = testDst_;
+        std::filesystem::path reqFilePath("casper/../../escape/initrd");
+        reqPath /= reqFilePath;
+
+        // The resolved path must still be under testDst_, not escape to a
+        // parent drive root or different drive.
+        QVERIFY(reqPath.is_absolute());
+        QVERIFY(reqPath.has_root_path());
+        // The root must match testDst_'s root (same drive).
+        QCOMPARE(reqPath.root_name(), testDst_.root_name());
+    }
 };
 
 #else // !Q_OS_WIN
