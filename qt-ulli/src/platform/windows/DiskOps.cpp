@@ -1598,6 +1598,18 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}, "driveLe
             requiredFiles.push_back("casper/filesystem.squashfs");
         }
 
+        // dst must be an absolute path with a root directory (e.g. "D:\").
+        // A path like "D:" without the backslash would resolve relative to
+        // the current directory on that drive instead of the drive root,
+        // causing the lookup to target the wrong location when drive letters
+        // are reassigned between runs. createLayout verifies and records
+        // the actual drive letter, so dst should always be rooted here.
+        if (!dst.is_absolute() || !dst.has_root_path()) {
+            return core::makeError(core::Error::Kind::InvalidInput,
+                "Staging mount root is not an absolute path with root: " +
+                dst.string());
+        }
+
         for (const auto& reqFile : requiredFiles) {
             if (cancelCallback && cancelCallback()) {
                 return core::makeCancelled();
@@ -1615,7 +1627,13 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}, "driveLe
             std::error_code reqEc;
             const bool reqExists = std::filesystem::exists(reqPath, reqEc);
             if (!reqExists) {
-                if (reqEc == std::errc::no_such_file_or_directory) {
+                // No error code means the filesystem query succeeded and
+                // determined the file does not exist. Treat this the same
+                // as no_such_file_or_directory: a genuinely missing file,
+                // not an I/O error. A stale ERROR_SUCCESS ("The operation
+                // completed successfully") from a prior operation must not
+                // be misclassified as an I/O failure.
+                if (reqEc == std::errc::no_such_file_or_directory || !reqEc) {
                     return core::makeError(core::Error::Kind::Platform,
                         "Required file missing after copy: " + reqPath.string());
                 }
