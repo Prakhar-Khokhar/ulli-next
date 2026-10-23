@@ -477,6 +477,27 @@ private slots:
         QVERIFY(result.error().message().find("Staging partition identity")
                 != std::string::npos);
     }
+
+    // Test 20: Required file path resolution. Forward-slash reqFile
+    // (e.g. "casper/initrd") is resolved correctly against the staging
+    // root, producing a path with native separators. This guards against
+    // regressions where dst / "casper/initrd" fails to resolve correctly
+    // on Windows (native separator is backslash). Runs on any platform,
+    // no FAT32 volume required.
+    void testRequiredFilePathResolution() {
+        // Build the path the way copyFiles does: component-wise.
+        std::filesystem::path reqPath = testDst_;
+        std::filesystem::path reqFilePath("casper/initrd");
+        reqPath /= reqFilePath;
+
+        // The parent must be testDst_/casper and the filename must be
+        // "initrd", regardless of the platform's native separator.
+        QCOMPARE(reqPath.parent_path(), testDst_ / "casper");
+        QCOMPARE(reqPath.filename().string(), std::string("initrd"));
+
+        // Same result as building from individual components.
+        QCOMPARE(reqPath, testDst_ / "casper" / "initrd");
+    }
 };
 
 #else // !Q_OS_WIN

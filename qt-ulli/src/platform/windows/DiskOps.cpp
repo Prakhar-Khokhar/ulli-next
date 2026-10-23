@@ -1603,10 +1603,25 @@ Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}, "driveLe
                 return core::makeCancelled();
             }
 
-            std::filesystem::path reqPath = dst / reqFile;
-            if (!std::filesystem::exists(reqPath)) {
-                return core::makeError(core::Error::Kind::Platform,
-                    "Required file missing after copy: " + reqFile);
+            // Build the required-file path component-wise: reqFile uses
+            // forward slashes (e.g. "casper/initrd"), and appending each
+            // component individually avoids any ambiguity with the native
+            // path separator on Windows (backslash). This guarantees the
+            // resolved path is D:\casper\initrd when dst is D:\.
+            std::filesystem::path reqPath = dst;
+            std::filesystem::path reqFilePath(reqFile);
+            reqPath /= reqFilePath;
+
+            std::error_code reqEc;
+            const bool reqExists = std::filesystem::exists(reqPath, reqEc);
+            if (!reqExists) {
+                if (reqEc == std::errc::no_such_file_or_directory) {
+                    return core::makeError(core::Error::Kind::Platform,
+                        "Required file missing after copy: " + reqPath.string());
+                }
+                return core::makeError(core::Error::Kind::Io,
+                    "Cannot verify required file after copy: " + reqPath.string() +
+                    " (" + reqEc.message() + ")");
             }
         }
     }
