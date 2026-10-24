@@ -883,7 +883,14 @@ function New-UefiBootEntry {
             return $null
         }
 
-        if ($copyOutputStr -notmatch '\{[0-9a-fA-F-]+\}') {
+        # A realistic Windows /copy success looks like:
+        #   "The entry was successfully copied to {11111111-1111-1111-1111-111111111111}."
+        # Accept only a single, canonical GUID in braces. A malformed or
+        # non-canonical identifier such as {123} must not be mistaken for an
+        # entry GUID, and zero or multiple candidates are ambiguous -> fail closed.
+        $guidPattern = '\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}'
+
+        if ($copyOutputStr -notmatch $guidPattern) {
             # bcdedit /copy may have created an entry, but its identity cannot be
             # determined from the output. Do not delete anything we cannot identify,
             # to avoid removing an unrelated firmware entry.
@@ -891,7 +898,7 @@ function New-UefiBootEntry {
             Write-LogMessage "A firmware entry may have been created but its identity is unknown; it will not be deleted or modified." -IsError
             return $null
         }
-        $guidMatches = [regex]::Matches($copyOutputStr, '\{[0-9a-fA-F-]+\}')
+        $guidMatches = [regex]::Matches($copyOutputStr, $guidPattern)
         if ($guidMatches.Count -ne 1) {
             # Zero or more than one GUID: missing or ambiguous identity. Do not
             # guess which identifier belongs to the newly created entry, and never
@@ -1012,23 +1019,62 @@ function Test-UelliEntryDevice {
 function Get-UelliDriveLetterFromDevicePath {
     param([string]$DevicePath)
     # Resolve a native device path such as partition=\Device\HarddiskVolumeN to
-    # a Windows drive letter. Requires the Storage cmdlets and real system state,
-    # so this can only be verified on Windows. On any failure return $null so the
-    # caller treats the device as unresolved (fail-closed: never reuse an entry
-    # whose device cannot be confirmed). Do not guess a drive letter from a
-    # device string that looks similar.
+    # a Windows drive letter without guessing from the string.
+    #
+    # Method: QueryDosDevice (kernel32.dll) is the documented Win32 API for
+    # translating MS-DOS device names (drive letters) to their NT device paths.
+    # For each drive letter A-Z we ask Windows what NT path it maps to, and
+    # return the letter only when the OS-reported mapping exactly equals the
+    # requested \Device\HarddiskVolumeN. A drive letter is never inferred from
+    # string similarity, partition numbers, or volume ordering.
+    #
+    # This has not been validated on a real Windows system (development and
+    # testing run on Linux). kernel32.dll and QueryDosDevice are Windows-only;
+    # on any failure - including the resolver being unavailable off-Windows -
+    # the function returns $null so the caller treats the device as unresolved
+    # (fail-closed: an entry whose device cannot be confirmed is never reused).
     if ($DevicePath -notmatch '^partition=(\\Device\\HarddiskVolume\d+)\s*$') {
         return $null
     }
-    $volumePath = $matches[1]
-    try {
-        $partition = Get-Partition -Access $volumePath -ErrorAction Stop | Select-Object -First 1
-        if ($partition -and $partition.DriveLetter) {
-            return $partition.DriveLetter
+    $targetDevice = $matches[1]
+
+    $typeName = 'UelliNativeMethods'
+    if (-not ([Type]::GetType($typeName))) {
+        try {
+            $typeDefinition = @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class UelliNativeMethods {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    public static extern int QueryDosDevice(string lpDeviceName, StringBuilder lpTargetPath, int ucchMax);
+}
+'@
+            $null = Add-Type -TypeDefinition $typeDefinition -ErrorAction Stop
+        } catch {
+            return $null
         }
-    } catch {
-        return $null
     }
+
+    foreach ($letter in 'A'..'Z') {
+        $deviceName = "${letter}:"
+        try {
+            $sb = New-Object System.Text.StringBuilder 260
+            $result = [UelliNativeMethods]::QueryDosDevice($deviceName, $sb, 260)
+            if ($result -gt 0) {
+                $ntPath = (($sb.ToString() -split [char]0)[0]).TrimEnd('\')
+                if ($ntPath -ieq $targetDevice) {
+                    return $letter
+                }
+            }
+        } catch {
+            # QueryDosDevice is Windows-only. On any failure skip this letter
+            # and continue; never guess a mapping.
+            continue
+        }
+    }
+
     return $null
 }
 
@@ -4312,6 +4358,11 @@ exit
         }
     }
     catch {
+        # Any exception escaping after boot configuration set readiness to true
+        # must not leave a successful-readiness state behind. Reset it here so
+        # status text and restart eligibility reflect the failure, not a stale
+        # success from this or a previous run.
+        $script:uefiBootReady = $false
         Write-LogMessage "Installation error: $_" -IsError
         Set-Status "Installation failed!"
     }

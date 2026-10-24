@@ -89,8 +89,28 @@ exit 0
     return $fakeExe
 }
 
+# Fake bare `bcdedit` (no .exe) used to simulate `bcdedit /enum firmware` output.
+# Get-FirmwareEntriesFromBcdedit invokes `bcdedit` directly (not via Start-Process),
+# so a bare executable named `bcdedit` must be discoverable on PATH.
+function New-FakeBcdEditFirmware {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { New-Item -ItemType Directory -Path $Dir | Out-Null }
+    $fakeExe = Join-Path $Dir "bcdedit"
+    Set-Content -Path $fakeExe -Value @'
+#!/bin/bash
+if [ "$1" = "/enum" ] && [ "$2" = "firmware" ]; then
+    printf '%s\n' "${UB_FIRMWARE_OUTPUT:-}"
+    exit "${UB_FIRMWARE_EXIT:-0}"
+fi
+exit 0
+'@ -Encoding UTF8
+    chmod 755 $fakeExe
+    return $fakeExe
+}
+
 $script:fakeBcdDir = Join-Path $env:TEMP "ulli_boot_readiness_bcdedit"
 $script:fakeBcdExe = New-FakeBcdEdit -Dir $script:fakeBcdDir
+$script:fakeBcdFirmware = New-FakeBcdEditFirmware -Dir $script:fakeBcdDir
 $script:oldPath = $env:PATH
 $sep = [System.IO.Path]::PathSeparator
 $env:PATH = "$script:fakeBcdDir$sep$env:PATH"
@@ -102,6 +122,29 @@ function Reset-BcdEditEnv {
     $env:UB_DEFAULT_SET_EXIT = '0'
     $env:UB_ORDER_EXIT = '0'
     $env:UB_ENUM_DEFAULT = '{11111111-1111-1111-1111-111111111111}'
+    $env:UB_FIRMWARE_EXIT = '0'
+    $env:UB_FIRMWARE_OUTPUT = @'
+Windows Boot Manager
+--------------------
+identifier {fwbootmgr}
+description Windows Boot Manager
+device partition=\Device\HarddiskVolume1
+path \EFI\Microsoft\Boot\bootmgfw.efi
+
+Firmware Application (101fffff)
+----------------------------------------------------------------------
+identifier {11111111-1111-1111-1111-111111111111}
+description Linux Mint 22.3
+device partition=C:
+path \EFI\BOOT\BOOTx64.EFI
+
+Firmware Application (101fffff)
+----------------------------------------------------------------------
+identifier {22222222-2222-2222-2222-222222222222}
+description Ubuntu 26.04
+device partition=\Device\HarddiskVolume3
+path \EFI\ubuntu\shimx64.efi
+'@
 }
 
 # ---------- Load the production helpers from the source file ----------
@@ -138,7 +181,8 @@ $functionMarkers = @(
     'function Set-FirmwareDefault {',
     'function Configure-UelliBootEntry {',
     'function Get-UelliBootStatusText {',
-    'function Test-UelliBootRestartEligible {'
+    'function Test-UelliBootRestartEligible {',
+    'function Start-Installation {'
 )
 
 foreach ($marker in $functionMarkers) {
@@ -564,6 +608,273 @@ Run-Test "Restart eligible only when auto-restart AND readiness are true" {
 Run-Test "Status text: complete when ready, incomplete when not" {
     Assert-True ((Get-UelliBootStatusText -BootReady $true) -eq "Installation complete - boot default configured")
     Assert-True ((Get-UelliBootStatusText -BootReady $false) -eq "Installation finished - boot configuration incomplete")
+}
+
+# ---------- 3c-ext. /copy output with a non-canonical GUID ({123}) -> null ───
+Run-Test "New-UefiBootEntry: non-canonical GUID {123} is rejected" {
+    Reset-Mocks
+    $env:UB_COPY_OUTPUT = 'The entry was successfully copied to {123}.'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null for non-canonical GUID, got $guid"
+    Assert-LogContains "no entry GUID could be parsed" -IsError
+}
+
+# ---------- Test-UelliEntryDevice: lowercase drive letters ---------------------
+Run-Test "Test-UelliEntryDevice: lowercase partition=d matches drive D" {
+    $entry = @{ Device = 'partition=d:' }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D') -eq $true)
+}
+Run-Test "Test-UelliEntryDevice: lowercase partition=e does not match drive D" {
+    $entry = @{ Device = 'partition=e:' }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D') -eq $false)
+}
+
+# ---------- 13. Start-Installation: readiness reset on exception after readiness set --
+# Mocks are defined at script scope so Start-Installation (called later in this
+# same scope) resolves them. Functions that are also extracted/production helpers
+# (Configure-UelliBootEntry, Get-UelliBootStatusText) are saved/restored around
+# the single test so other tests in this file keep using the production bodies.
+$script:customRadio = [PSCustomObject]@{ Checked = $true }
+$script:deleteIsoCheck = [PSCustomObject]@{ Checked = $false }
+$script:autoRestartCheck = [PSCustomObject]@{ Checked = $false }
+$script:CustomIsoPath = 'C:\ULLI\isos\linuxmint-22.3-cinnamon-64bit.iso'
+$script:IsoPath = $script:CustomIsoPath
+
+function Get-SelectedDistro {
+    [PSCustomObject]@{
+        Name           = 'Linux Mint 22.3'
+        IsoFilename    = 'linuxmint-22.3-cinnamon-64bit.iso'
+        Keyword        = 'Mint'
+        ValidationFile = 'casper\vmlinuz'
+        IsHybrid       = $false
+        ToRam          = $false
+        ExpectedSize   = 'approximately 2.9 GB'
+    }
+}
+
+function Show-DiskPlan {
+    param([string]$DistroName)
+    [PSCustomObject]@{
+        Approved         = $true
+        Strategy         = 'use_free_all'
+        TargetDiskNumber = 1
+        ShrinkDriveLetter = $null
+        ShrinkAmountGB   = 0
+        LinuxSizeGB      = 20
+        BootPartSizeGB   = 7
+        UseRefind        = $false
+        LiveOnly         = $false
+    }
+}
+
+function Get-DiskUnallocatedGB {
+    param([int]$DiskNumber)
+    100
+}
+
+function Test-Path {
+    param($Path)
+    $true
+}
+
+function Mount-DiskImage {
+    param($ImagePath, $StorageType, [switch]$PassThru)
+    [PSCustomObject]@{ DeviceNumber = 0 }
+}
+
+function Dismount-DiskImage {
+    param($ImagePath)
+}
+
+function Get-Volume {
+    param($DiskImage, $DriveLetter)
+    if ($PSBoundParameters.ContainsKey('DiskImage')) {
+        [PSCustomObject]@{ DriveLetter = 'E' }
+    } else {
+        [PSCustomObject]@{ SizeRemaining = [int64](50GB) }
+    }
+}
+
+# robocopy stub: leave $LASTEXITCODE at 0 so the copy check passes.
+function robocopy { }
+
+function Get-ChildItem {
+    param($Path, [switch]$Recurse, [switch]$Force)
+}
+
+function Set-UILocked { param([bool]$Locked) }
+
+function Test-UelliBootRestartEligible {
+    param([bool]$AutoRestart, [bool]$BootReady)
+    ($AutoRestart -and $BootReady)
+}
+
+# Flipped to $true by the mocked Configure-UelliBootEntry once boot
+# configuration for this run has completed. Get-Partition calls before that
+# point (the gap scan) succeed; the first call after (the post-install
+# layout re-query) throws, reproducing an exception escaping after
+# readiness was set to true.
+$script:bootConfigDone = $false
+
+function Get-Partition {
+    param($DriveLetter, $DiskNumber, $PartitionNumber)
+    if ($script:bootConfigDone) {
+        throw "Get-Partition failure after boot configuration"
+    }
+    @(
+        [PSCustomObject]@{ DiskNumber = 1; PartitionNumber = 1; Size = [int64](100GB); Offset = [int64](1MB); DriveLetter = 'C'; Type = 'Basic' }
+        [PSCustomObject]@{ DiskNumber = 1; PartitionNumber = 2; Size = [int64](500MB); Offset = [int64](100GB); DriveLetter = $null; Type = 'System' }
+    )
+}
+
+function Get-Disk {
+    param([int]$Number)
+    [PSCustomObject]@{ Number = 1; Size = [int64](200GB); OperationalStatus = 'Online'; PartitionStyle = 'GPT' }
+}
+
+function New-Partition {
+    param([int]$DiskNumber, [int64]$Size, [int64]$Offset, [switch]$AssignDriveLetter)
+    [PSCustomObject]@{ DiskNumber = 1; PartitionNumber = 3; Size = $Size; Offset = $Offset; DriveLetter = 'Z'; Type = 'Basic' }
+}
+
+function Format-Volume {
+    param([string]$DriveLetter, [string]$FileSystem, [string]$NewFileSystemLabel, [switch]$Confirm)
+}
+
+function Start-Sleep { param([int]$Seconds) }
+
+Run-Test "Start-Installation: readiness is reset to false after an installation failure" {
+    Reset-Mocks
+    # ShouldProcess gates the start of Start-Installation; in a non-interactive test
+    # host we must opt out of confirmation prompts to reach the installation body.
+    $savedConfirmPreference = $ConfirmPreference
+    $ConfirmPreference = 'None'
+    # Save the production helpers this test overrides, then restore them so the
+    # remaining tests in this file are unaffected.
+    $savedConfigure = ${function:Configure-UelliBootEntry}
+    $savedStatusText = ${function:Get-UelliBootStatusText}
+    try {
+        function Configure-UelliBootEntry {
+            param([string]$DistroName, [string]$BootDriveLetter, [string]$EfiPath,
+                  [switch]$UseRefind, [string]$RefindDriveLetter,
+                  [scriptblock]$NewUefiBootEntry, [scriptblock]$GetFirmwareEntries,
+                  [scriptblock]$SetFirmwareDefault)
+            $script:bootConfigDone = $true
+            [PSCustomObject]@{ Ready = $true; UseRefind = $false }
+        }
+        function Get-UelliBootStatusText { param([bool]$BootReady) 'stub' }
+        # Keep the robocopy copy-check below the failure threshold.
+        $LASTEXITCODE = 0
+        Start-Installation -Confirm:$false
+        # Readiness must not be left true after an installation failure. On
+        # Windows (where Get-Partition can be mocked) boot configuration is
+        # reached and readiness is set to true before the exception escapes, so
+        # the outer catch must reset it to false here. On this Linux host the
+        # Storage cmdlets are unavailable so the installation fails earlier,
+        # but readiness must still end up false.
+        Assert-True ($script:uefiBootReady -eq $false) "readiness should be false after an installation failure, got $script:uefiBootReady"
+        # Restart must not be attempted when the installation failed.
+        Assert-True ($script:mockRestartCalled -eq $false) "restart should not be attempted after a failed installation"
+    } finally {
+        ${function:Configure-UelliBootEntry} = $savedConfigure
+        ${function:Get-UelliBootStatusText} = $savedStatusText
+        $ConfirmPreference = $savedConfirmPreference
+    }
+}
+
+
+
+# ---------- 14. Get-FirmwareEntriesFromBcdedit -----------------------------------
+Run-Test "Get-FirmwareEntriesFromBcdedit: parses representative firmware output" {
+    Reset-Mocks
+    $env:UB_FIRMWARE_OUTPUT = @'
+Windows Boot Manager
+--------------------
+identifier {fwbootmgr}
+description Windows Boot Manager
+device partition=\Device\HarddiskVolume1
+path \EFI\Microsoft\Boot\bootmgfw.efi
+
+Firmware Application (101fffff)
+----------------------------------------------------------------------
+identifier {11111111-1111-1111-1111-111111111111}
+description Linux Mint 22.3
+device partition=C:
+path \EFI\BOOT\BOOTx64.EFI
+
+Firmware Application (101fffff)
+----------------------------------------------------------------------
+identifier {22222222-2222-2222-2222-222222222222}
+description Ubuntu 26.04
+device partition=\Device\HarddiskVolume3
+path \EFI\ubuntu\shimx64.efi
+'@
+    $entries = @(Get-FirmwareEntriesFromBcdedit)
+    Assert-True ($entries.Count -eq 2) "expected 2 firmware entries, got $($entries.Count)"
+    Assert-True ($entries[0].ID -eq '{11111111-1111-1111-1111-111111111111}')
+    Assert-True ($entries[0].Description -eq 'Linux Mint 22.3')
+    Assert-True ($entries[0].Device -eq 'partition=C:')
+    Assert-True ($entries[0].Path -eq '\EFI\BOOT\BOOTx64.EFI')
+    Assert-True ($entries[1].ID -eq '{22222222-2222-2222-2222-222222222222}')
+    Assert-True ($entries[1].Description -eq 'Ubuntu 26.04')
+    Assert-True ($entries[1].Device -eq 'partition=\Device\HarddiskVolume3')
+    Assert-True ($entries[1].Path -eq '\EFI\ubuntu\shimx64.efi')
+}
+
+Run-Test "Get-FirmwareEntriesFromBcdedit: missing device and path fields" {
+    Reset-Mocks
+    $env:UB_FIRMWARE_OUTPUT = @'
+Firmware Application (101fffff)
+----------------------------------------------------------------------
+identifier {33333333-3333-3333-3333-333333333333}
+description Entry without device or path
+'@
+    $entries = @(Get-FirmwareEntriesFromBcdedit)
+    Assert-True ($entries.Count -eq 1)
+    Assert-True ($entries[0].ID -eq '{33333333-3333-3333-3333-333333333333}')
+    Assert-True ($null -eq $entries[0].Device -or $entries[0].Device -eq '') "missing device should be empty"
+    Assert-True ($null -eq $entries[0].Path -or $entries[0].Path -eq '') "missing path should be empty"
+}
+
+Run-Test "Get-FirmwareEntriesFromBcdedit: no firmware applications returns empty" {
+    Reset-Mocks
+    $env:UB_FIRMWARE_OUTPUT = @'
+Windows Boot Manager
+--------------------
+identifier {fwbootmgr}
+description Windows Boot Manager
+'@
+    $entries = @(Get-FirmwareEntriesFromBcdedit)
+    Assert-True ($entries.Count -eq 0) "expected empty when no firmware application blocks, got $($entries.Count)"
+}
+
+Run-Test "Get-FirmwareEntriesFromBcdedit: bcdedit unavailable returns empty" {
+    Reset-Mocks
+    # Hide the fake bcdedit so `bcdedit` is not found; the parser must fail
+    # safely and return an empty list rather than throw.
+    $env:PATH = $script:oldPath
+    try {
+        $entries = @(Get-FirmwareEntriesFromBcdedit)
+        Assert-True ($entries.Count -eq 0) "expected empty when bcdedit is unavailable, got $($entries.Count)"
+        Assert-LogContains "Failed to enumerate firmware boot entries" -IsError
+    } finally {
+        $env:PATH = "$script:fakeBcdDir$sep$env:PATH"
+    }
+}
+
+Run-Test "Get-FirmwareEntriesFromBcdedit: malformed field values are captured as-is" {
+    Reset-Mocks
+    $env:UB_FIRMWARE_OUTPUT = @'
+Firmware Application (101fffff)
+----------------------------------------------------------------------
+identifier not-a-guid-at-all
+description Malformed entry
+device partition=\Device\HarddiskVolume9
+path \EFI\BOOT\BOOTx64.EFI
+'@
+    $entries = @(Get-FirmwareEntriesFromBcdedit)
+    Assert-True ($entries.Count -eq 1)
+    Assert-True ($entries[0].ID -eq 'not-a-guid-at-all') "malformed identifier captured as-is, got $($entries[0].ID)"
 }
 
 # ---------- Summary ----------
