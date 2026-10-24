@@ -2701,6 +2701,12 @@ function Start-Installation {
     $script:IsRunning = $true
     Set-UILocked $true
 
+    # Reset UEFI boot readiness at the start of every installation so a previous
+    # run's result can never leak into the current run. The flag is only set to
+    # true after the required boot configuration for THIS installation is
+    # verified as successfully established.
+    $script:uefiBootReady = $false
+
     try {
         # Determine ISO path
         if ($customRadio.Checked) {
@@ -3832,129 +3838,133 @@ exit
             }
         }
 
-        if ($autoRestartCheck.Checked) {
-            Write-LogMessage "Configuring UEFI boot priority..."
-            Set-Status "Configuring UEFI boot priority..."
+        # Configure UEFI boot entry. This runs independently of the
+        # auto-restart checkbox: boot configuration must always be attempted so
+        # readiness reflects the actual outcome, not the restart setting.
+        Write-LogMessage "Configuring UEFI boot priority..."
+        Set-Status "Configuring UEFI boot priority..."
 
-            try {
-                $script:uefiBootReady = $false
-                if ($useRefind -and $script:RefindPlusDriveLetter) {
-                    # RefindPlus boot entry - point to the RefindPlus partition
-                    Write-LogMessage "Creating UEFI boot entry for RefindPlus..."
-                    $refindDrive = "$($script:RefindPlusDriveLetter):"
-                    $bootCreated = New-UefiBootEntry -DistroName "RefindPlus - ULLI" `
-                        -DevicePartition $refindDrive -EfiPath "\EFI\refindplus\x64_RefindPlus_REL.efi"
+        try {
+            $script:uefiBootReady = $false
 
-                    if ($bootCreated) {
-                        Write-LogMessage "RefindPlus UEFI boot entry created. Windows Boot Manager remains the default."
-                        $script:uefiBootReady = $true
-                    } else {
-                        Write-LogMessage "Could not create RefindPlus boot entry automatically" -IsError
-                        Write-LogMessage "You will need to select 'RefindPlus - ULLI' manually in UEFI/BIOS boot menu" -IsError
-                        # Keep the installation valid by reverting to the direct-boot assumption.
-                        $useRefind = $false
-                    }
+            if ($useRefind -and $script:RefindPlusDriveLetter) {
+                # RefindPlus boot entry - point to the RefindPlus partition
+                Write-LogMessage "Creating UEFI boot entry for RefindPlus..."
+                $refindDrive = "$($script:RefindPlusDriveLetter):"
+                $bootCreated = New-UefiBootEntry -DistroName "RefindPlus - ULLI" `
+                    -DevicePartition $refindDrive -EfiPath "\EFI\refindplus\x64_RefindPlus_REL.efi"
+
+                if ($bootCreated) {
+                    Write-LogMessage "RefindPlus UEFI boot entry created. Windows Boot Manager remains the default."
+                    $script:uefiBootReady = $true
                 } else {
-                    # Standard boot entry (no RefindPlus)
-                    $bcdeditOutput = bcdedit /enum firmware 2>&1
-                    $lines = $bcdeditOutput
+                    Write-LogMessage "Could not create RefindPlus boot entry automatically" -IsError
+                    # Fall back to the standard UEFI entry creation path.
+                    Write-LogMessage "RefindPlus entry creation failed; falling back to standard UEFI boot entry." -IsError
+                    $useRefind = $false
+                }
+            }
 
-                    $bootEntries = @()
-                    $currentEntry = $null
+            if (-not $useRefind) {
+                # Standard boot entry (no RefindPlus, or RefindPlus fell back)
+                $bcdeditOutput = bcdedit /enum firmware 2>&1
+                $lines = $bcdeditOutput
 
-                    foreach ($line in $lines) {
-                        if ($line -match '^Firmware Application \(') {
-                            if ($currentEntry) {
-                                $bootEntries += $currentEntry
-                            }
-                            $currentEntry = @{}
+                $bootEntries = @()
+                $currentEntry = $null
+
+                foreach ($line in $lines) {
+                    if ($line -match '^Firmware Application \(') {
+                        if ($currentEntry) {
+                            $bootEntries += $currentEntry
                         }
-                        elseif ($line -match '^identifier\s+(.+)$') {
-                            if ($currentEntry) {
-                                $currentEntry.ID = $matches[1].Trim()
-                            }
-                        }
-                        elseif ($line -match '^description\s+(.+)$') {
-                            if ($currentEntry) {
-                                $currentEntry.Description = $matches[1].Trim()
-                            }
+                        $currentEntry = @{}
+                    }
+                    elseif ($line -match '^identifier\s+(.+)$') {
+                        if ($currentEntry) {
+                            $currentEntry.ID = $matches[1].Trim()
                         }
                     }
-                    if ($currentEntry) {
-                        $bootEntries += $currentEntry
-                    }
-
-                    Write-LogMessage "Found $($bootEntries.Count) firmware boot entries:"
-                    foreach ($entry in $bootEntries) {
-                        Write-LogMessage "  $($entry.Description) [$($entry.ID)]"
-                    }
-
-                    $distroKeyword = $distro.Keyword
-
-                    $targetEntry = $null
-
-                    $targetEntry = $bootEntries | Where-Object { $_.Description -like "*$distroKeyword*" } | Select-Object -First 1
-                    if ($targetEntry) {
-                        Write-LogMessage "Found existing boot entry for '$distroKeyword'"
-                    }
-
-                    if (-not $targetEntry) {
-                        $targetEntry = $bootEntries | Where-Object { $_.Description -like '*UEFI OS*' } | Select-Object -First 1
-                        if ($targetEntry) {
-                            Write-LogMessage "Found generic 'UEFI OS' boot entry"
-                        }
-                    }
-
-                    if ($targetEntry) {
-                        Write-LogMessage "Setting boot priority to: $($targetEntry.Description) [$($targetEntry.ID)]"
-
-                        $process = Start-Process -FilePath "bcdedit.exe" `
-                            -ArgumentList "/set", "{fwbootmgr}", "default", $targetEntry.ID `
-                            -Wait -PassThru -NoNewWindow
-
-                        if ($process.ExitCode -eq 0) {
-                            Write-LogMessage "UEFI boot priority set successfully!"
-                            $script:uefiBootReady = $true
-                        } else {
-                            Write-LogMessage "bcdedit /set default returned exit code $($process.ExitCode)" -IsError
-                        }
-                    } else {
-                        Write-LogMessage "No existing boot entry found for $distroName"
-                        Write-LogMessage "Creating new UEFI firmware boot entry..."
-                        $bootCreated = $false
-
-                        if ($script:WipeBootInstalled) {
-                            Write-LogMessage "Creating firmware boot entry (Windows ESP)..."
-                            $wipeEfiPath = "$($script:WipeEspDistroDir)\$($script:WipeEfiName)"
-                            $bootCreated = New-UefiBootEntry -DistroName $distroName `
-                                -DevicePartition $script:WipeWinEspDrive -EfiPath $wipeEfiPath
-
-                            # Clean up ESP drive letter if we assigned it
-                            if ($script:WipeEspRemoveLetter -and $script:WipeEspLetter) {
-                                $script:WipeEspPartition | Remove-PartitionAccessPath -AccessPath "$($script:WipeEspLetter):\" -ErrorAction SilentlyContinue
-                            }
-                        } else {
-                            $bootDeviceDrive = $script:NewDrive
-                            Write-LogMessage "Boot entry will point to partition: $bootDeviceDrive"
-                            Write-LogMessage "Attempting bcdedit /copy method..."
-                            $bootCreated = New-UefiBootEntry -DistroName $distroName `
-                                -DevicePartition $bootDeviceDrive -EfiPath "\EFI\BOOT\BOOTx64.EFI"
-                        }
-
-                        if ($bootCreated) {
-                            $script:uefiBootReady = $true
-                        } else {
-                            Write-LogMessage "Could not create UEFI boot entry automatically" -IsError
-                            Write-LogMessage "You will need to set boot priority manually in UEFI/BIOS settings" -IsError
-                            Write-LogMessage "Or use the one-time boot menu (usually F12) to select the $distroName partition" -IsError
+                    elseif ($line -match '^description\s+(.+)$') {
+                        if ($currentEntry) {
+                            $currentEntry.Description = $matches[1].Trim()
                         }
                     }
                 }
+                if ($currentEntry) {
+                    $bootEntries += $currentEntry
+                }
+
+                Write-LogMessage "Found $($bootEntries.Count) firmware boot entries:"
+                foreach ($entry in $bootEntries) {
+                    Write-LogMessage "  $($entry.Description) [$($entry.ID)]"
+                }
+
+                $distroKeyword = $distro.Keyword
+
+                $targetEntry = $null
+
+                $targetEntry = $bootEntries | Where-Object { $_.Description -like "*$distroKeyword*" } | Select-Object -First 1
+                if ($targetEntry) {
+                    Write-LogMessage "Found existing boot entry for '$distroKeyword'"
+                }
+
+                if (-not $targetEntry) {
+                    $targetEntry = $bootEntries | Where-Object { $_.Description -like '*UEFI OS*' } | Select-Object -First 1
+                    if ($targetEntry) {
+                        Write-LogMessage "Found generic 'UEFI OS' boot entry"
+                    }
+                }
+
+                if ($targetEntry) {
+                    Write-LogMessage "Setting boot priority to: $($targetEntry.Description) [$($targetEntry.ID)]"
+
+                    $process = Start-Process -FilePath "bcdedit.exe" `
+                        -ArgumentList "/set", "{fwbootmgr}", "default", $targetEntry.ID `
+                        -Wait -PassThru -NoNewWindow
+
+                    if ($process.ExitCode -eq 0) {
+                        Write-LogMessage "UEFI boot priority set successfully!"
+                        $script:uefiBootReady = $true
+                    } else {
+                        Write-LogMessage "bcdedit /set default returned exit code $($process.ExitCode)" -IsError
+                    }
+                } else {
+                    Write-LogMessage "No existing boot entry found for $distroName"
+                    Write-LogMessage "Creating new UEFI firmware boot entry..."
+                    $bootCreated = $false
+
+                    if ($script:WipeBootInstalled) {
+                        Write-LogMessage "Creating firmware boot entry (Windows ESP)..."
+                        $wipeEfiPath = "$($script:WipeEspDistroDir)\$($script:WipeEfiName)"
+                        $bootCreated = New-UefiBootEntry -DistroName $distroName `
+                            -DevicePartition $script:WipeWinEspDrive -EfiPath $wipeEfiPath
+
+                        # Clean up ESP drive letter if we assigned it
+                        if ($script:WipeEspRemoveLetter -and $script:WipeEspLetter) {
+                            $script:WipeEspPartition | Remove-PartitionAccessPath -AccessPath "$($script:WipeEspLetter):\" -ErrorAction SilentlyContinue
+                        }
+                    } else {
+                        $bootDeviceDrive = $script:NewDrive
+                        Write-LogMessage "Boot entry will point to partition: $bootDeviceDrive"
+                        Write-LogMessage "Attempting bcdedit /copy method..."
+                        $bootCreated = New-UefiBootEntry -DistroName $distroName `
+                            -DevicePartition $bootDeviceDrive -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+                    }
+
+                    if ($bootCreated) {
+                        $script:uefiBootReady = $true
+                    } else {
+                        Write-LogMessage "Could not create UEFI boot entry automatically" -IsError
+                        Write-LogMessage "You will need to set boot priority manually in UEFI/BIOS settings" -IsError
+                        Write-LogMessage "Or use the one-time boot menu (usually F12) to select the $distroName partition" -IsError
+                    }
+                }
             }
-            catch {
-                Write-LogMessage "Error configuring UEFI boot: $_" -IsError
-                Write-LogMessage "You may need to set boot priority manually in UEFI/BIOS settings" -IsError
-            }
+        }
+        catch {
+            Write-LogMessage "Error configuring UEFI boot: $_" -IsError
+            Write-LogMessage "You may need to set boot priority manually in UEFI/BIOS settings" -IsError
         }
 
         # Success
@@ -3999,10 +4009,14 @@ exit
             Write-LogMessage ""
         }
 
-        if ($autoRestartCheck.Checked) {
-            Write-LogMessage "*** AUTOMATIC RESTART ENABLED ***"
+        if ($script:uefiBootReady) {
+            Write-LogMessage "*** BOOT CONFIGURATION COMPLETE ***"
             Write-LogMessage "UEFI boot priority has been configured."
-            Write-LogMessage "The system will restart in 30 seconds!"
+            if ($autoRestartCheck.Checked) {
+                Write-LogMessage "The system will restart automatically."
+            } else {
+                Write-LogMessage "Restart your computer to boot into the installed system."
+            }
             if ($useRefind -and $script:RefindPlusDriveLetter) {
                 Write-LogMessage "After restart, RefindPlus should appear automatically and show `"$distroName`"."
             } else {
@@ -4010,13 +4024,19 @@ exit
             }
             Write-LogMessage ""
         } else {
+            Write-LogMessage "*** BOOT CONFIGURATION NOT COMPLETE ***" -IsError
+            Write-LogMessage "Files were copied to $script:NewDrive, but the UEFI boot entry was not created automatically." -IsError
+            Write-LogMessage "The installation is NOT yet bootable." -IsError
+            Write-LogMessage "You will need to set boot priority manually in UEFI/BIOS settings" -IsError
+            Write-LogMessage "Or use the one-time boot menu (usually F12) to select the $distroName partition" -IsError
+            Write-LogMessage ""
             if ($useRefind -and $script:RefindPlusDriveLetter) {
                 Write-LogMessage "To boot ${distroName}:"
                 Write-LogMessage "1. Restart your computer"
-                Write-LogMessage "2. RefindPlus should appear automatically and show `"$distroName`""
-                Write-LogMessage "3. If RefindPlus doesn't appear, enter UEFI/BIOS (F2/F10/F12/DEL)"
-                Write-LogMessage "   and select `"RefindPlus - ULLI`" from the boot menu"
-                Write-LogMessage "4. Disable Secure Boot if needed"
+                Write-LogMessage "2. Enter UEFI/BIOS (F2/F10/F12/DEL)"
+                Write-LogMessage "3. Select 'RefindPlus - ULLI' from the boot menu"
+                Write-LogMessage "4. If RefindPlus does not appear, select the $distroName partition directly"
+                Write-LogMessage "5. Disable Secure Boot if needed"
             } else {
                 Write-LogMessage "To boot $distroName, use the UEFI boot menu:"
                 Write-LogMessage "1. Restart your computer"
@@ -4040,8 +4060,9 @@ exit
             }
         }
 
-        # Auto-restart if enabled
-        if ($autoRestartCheck.Checked -and -not ($useRefind -and $script:RefindPlusDriveLetter)) {
+        # Auto-restart only when enabled AND the current installation's required
+        # boot configuration succeeded. Never restart into an unverified boot path.
+        if ($autoRestartCheck.Checked -and $script:uefiBootReady) {
             Write-LogMessage ""
             Write-LogMessage "Preparing for automatic restart..."
 
@@ -4054,7 +4075,12 @@ exit
             $countdownForm.MinimizeBox = $false
 
             $countdownLabel = New-Object System.Windows.Forms.Label
-            $countdownLabel.Text = "System will restart in 30 seconds...`n`nUEFI boot priority has been configured.`nThe system will boot directly into $distroName."
+            $restartMsg = if ($useRefind -and $script:RefindPlusDriveLetter) {
+                "UEFI boot priority has been configured.`nRefindPlus should appear automatically and show `"$distroName`"."
+            } else {
+                "UEFI boot priority has been configured.`nThe system will boot directly into $distroName."
+            }
+            $countdownLabel.Text = "System will restart in 30 seconds...`n`n$restartMsg"
             $countdownLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
             $countdownLabel.Location = New-Object System.Drawing.Point(20, 20)
             $countdownLabel.Size = New-Object System.Drawing.Size(380, 90)
@@ -4080,7 +4106,7 @@ exit
 
             $timer.Add_Tick({
                 $script:CountdownSeconds--
-                $countdownLabel.Text = "System will restart in $script:CountdownSeconds seconds...`n`nUEFI boot priority has been configured.`nThe system will boot directly into $distroName."
+                $countdownLabel.Text = "System will restart in $script:CountdownSeconds seconds...`n`n$restartMsg"
 
                 if ($script:CountdownSeconds -le 0) {
                     $timer.Stop()
@@ -4101,8 +4127,10 @@ exit
                 Write-LogMessage "You can restart manually when ready"
             }
         } else {
-            if ($useRefind -and $script:RefindPlusDriveLetter) {
-                Write-LogMessage "Automatic restart skipped: firmware default/boot order was not changed."
+            if ($autoRestartCheck.Checked -and -not $script:uefiBootReady) {
+                Write-LogMessage "Automatic restart skipped: UEFI boot configuration was not successful." -IsError
+                Write-LogMessage "Restart manually and configure boot priority in UEFI/BIOS settings when ready." -IsError
+            } elseif ($useRefind -and $script:RefindPlusDriveLetter) {
                 Write-LogMessage "Restart manually and select 'RefindPlus - ULLI' from the firmware boot menu."
             }
         }
