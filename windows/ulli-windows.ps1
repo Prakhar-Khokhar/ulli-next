@@ -730,8 +730,13 @@ function Shrink-UllPartition {
     $resizeSucceeded = $false
 
     # Attempt 1: Storage API.
+    # Resize-Partition lives in the built-in Storage module (Windows PowerShell 5.1).
+    # There is no 'Microsoft.PowerShell.Storage' module; qualifying with that name
+    # fails with 'The module ... could not be loaded'. Call it unqualified so the
+    # Storage module auto-loads, consistent with Get-Partition/Get-PartitionSupportedSize
+    # used earlier in this function. Keep DiskPart as a fallback.
     try {
-        Microsoft.PowerShell.Storage\Resize-Partition -DriveLetter $DriveLetter -Size $newSize -ErrorAction Stop
+        Resize-Partition -DriveLetter $DriveLetter -Size $newSize -ErrorAction Stop
         $resizeSucceeded = $true
         Write-LogMessage "${DriveLetter}: partition shrunk successfully!"
     } catch {
@@ -785,6 +790,7 @@ exit
         try {
             if ($partitionNumber) {
                 $verifyPartition = Get-Partition -DiskNumber $TargetDiskNumber -PartitionNumber $partitionNumber -ErrorAction Stop
+                if (-not $verifyPartition) { throw "partition not found" }
             } else {
                 $verifyPartition = Get-Partition -DiskNumber $TargetDiskNumber -ErrorAction Stop |
                     Where-Object { $_.DriveLetter -eq $DriveLetter } | Select-Object -First 1
@@ -800,12 +806,20 @@ exit
         }
         $actualSize = $verifyPartition.Size
         $actualReduction = $currentSize - $actualSize
-        # Alignment tolerance: diskpart shrinks in whole MB and NTFS/filesystem
-        # alignment may leave a few MB unshrunk; 10 MB covers truncation and
-        # cluster alignment without masking a genuinely failed shrink.
+        $discrepancyBytes = $actualReduction - $shrinkBytes
+        # Symmetric tolerance: diskpart shrinks in whole MiB and NTFS/filesystem
+        # alignment may leave a few MiB unshrunk; 10 MiB covers truncation and
+        # cluster alignment without masking a genuinely incorrect shrink.
+        # Reject the result when the actual reduction differs from the requested
+        # reduction by more than the tolerance in EITHER direction.
         $toleranceBytes = [int64](10MB)
-        if ($actualReduction -lt ($shrinkBytes - $toleranceBytes)) {
-            Write-LogMessage "Post-shrink verification failed: requested reduction $([math]::Round($shrinkBytes / 1GB, 2)) GB but actual reduction was $([math]::Round($actualReduction / 1GB, 2)) GB (tolerance $([math]::Round($toleranceBytes / 1GB, 4)) GB); partition now $([math]::Round($actualSize / 1GB, 2)) GB." -IsError
+        $lowerBound = $shrinkBytes - $toleranceBytes
+        $upperBound = $shrinkBytes + $toleranceBytes
+
+        Write-LogMessage "Post-shrink verification: Disk $TargetDiskNumber Partition $partitionNumber (${DriveLetter}:) - requested reduction $([math]::Round($shrinkBytes / 1MB, 0)) MiB, actual reduction $([math]::Round($actualReduction / 1MB, 0)) MiB, signed discrepancy $([math]::Round($discrepancyBytes / 1MB, 2)) MiB, tolerance $([math]::Round($toleranceBytes / 1MB, 0)) MiB, new size $([math]::Round($actualSize / 1GB, 4)) GB."
+
+        if ($actualReduction -lt $lowerBound -or $actualReduction -gt $upperBound) {
+            Write-LogMessage "Post-shrink verification failed: actual reduction $([math]::Round($actualReduction / 1GB, 4)) GB differs from requested reduction $([math]::Round($shrinkBytes / 1GB, 4)) GB by more than the $([math]::Round($toleranceBytes / 1MB, 0)) MiB tolerance (signed discrepancy $([math]::Round($discrepancyBytes / 1MB, 2)) MiB); partition now $([math]::Round($actualSize / 1GB, 4)) GB on Disk $TargetDiskNumber Partition $partitionNumber." -IsError
             return $false
         }
         Write-LogMessage "Post-shrink verified: ${DriveLetter}: reduced by $([math]::Round($actualReduction / 1GB, 2)) GB (now $([math]::Round($actualSize / 1GB, 2)) GB)."
