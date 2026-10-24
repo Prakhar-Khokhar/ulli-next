@@ -677,19 +677,48 @@ function Format-AfterLayout {
     return $lines
 }
 
-function Resize-Partition {
+function Shrink-UllPartition {
     param(
         [string]$DriveLetter,
-        [double]$ShrinkAmountGB
+        [double]$ShrinkAmountGB,
+        [int]$TargetDiskNumber
     )
     try {
-        $currentSize = (Get-Partition -DriveLetter $DriveLetter).Size
-        $newSize = $currentSize - ($ShrinkAmountGB * 1GB)
+        $partition = Get-Partition -DriveLetter $DriveLetter -ErrorAction Stop
+        # Partition safety: only shrink the partition the approved plan targets
+        # on the intended target disk. Never shrink the Windows system partition
+        # or an unrelated volume merely because a drive letter (e.g. E:) appears
+        # in a log line.
+        if ($partition.DiskNumber -ne $TargetDiskNumber) {
+            Write-LogMessage "Refusing to shrink ${DriveLetter}: (Disk $($partition.DiskNumber)) - not on the approved target Disk $TargetDiskNumber." -IsError
+            return $false
+        }
+        $currentSize = $partition.Size
+        # Query the supported size range before resizing so we never shrink
+        # below the filesystem/Windows minimum.
+        $supported = Get-PartitionSupportedSize -DriveLetter $DriveLetter -ErrorAction Stop
+        $sizeMin = $supported.SizeMin
+        $shrinkBytes = [int64]($ShrinkAmountGB * 1GB)
+        if ($shrinkBytes -le 0) {
+            Write-LogMessage "Refusing to shrink ${DriveLetter}: shrink amount must be greater than zero." -IsError
+            return $false
+        }
+        $newSize = $currentSize - $shrinkBytes
+        if ($newSize -lt $sizeMin) {
+            Write-LogMessage "Refusing to shrink ${DriveLetter}: target size $([math]::Round($newSize / 1GB, 2)) GB is below the supported minimum $([math]::Round($sizeMin / 1GB, 2)) GB." -IsError
+            return $false
+        }
+        if ($newSize -gt $currentSize) {
+            Write-LogMessage "Refusing to shrink ${DriveLetter}: computed size exceeds the current partition size." -IsError
+            return $false
+        }
+        Write-LogMessage "Shrinking ${DriveLetter}: partition from $([math]::Round($currentSize / 1GB, 2)) GB to $([math]::Round($newSize / 1GB, 2)) GB..."
         Microsoft.PowerShell.Storage\Resize-Partition -DriveLetter $DriveLetter -Size $newSize -ErrorAction Stop
         Write-LogMessage "${DriveLetter}: partition shrunk successfully!"
         return $true
     }
     catch {
+        Write-LogMessage "Storage API shrink failed for ${DriveLetter}: $_" -IsError
         Write-LogMessage "Trying diskpart method..."
         $sizeMB = [int]($ShrinkAmountGB * 1024)
         $diskpartScript = @"
@@ -2857,7 +2886,7 @@ exit
             Write-LogMessage "Shrinking ${otherDriveShrinkLetter}: partition by $otherDriveShrinkAmountGB GB..."
             Write-LogMessage "This will create space for Linux: $linuxSizeGB GB and boot partition: $($bootPartSizeGB) GB..."
 
-            if (-not (Resize-Partition -DriveLetter $otherDriveShrinkLetter -ShrinkAmountGB $otherDriveShrinkAmountGB)) {
+            if (-not (Shrink-UllPartition -DriveLetter $otherDriveShrinkLetter -ShrinkAmountGB $otherDriveShrinkAmountGB -TargetDiskNumber $targetDiskNumber)) {
                 return
             }
 
@@ -2905,7 +2934,7 @@ exit
                 }
             }
 
-            if (-not (Resize-Partition -DriveLetter $shrinkDriveLetter -ShrinkAmountGB $shrinkAmountGB)) {
+            if (-not (Shrink-UllPartition -DriveLetter $shrinkDriveLetter -ShrinkAmountGB $shrinkAmountGB -TargetDiskNumber $targetDiskNumber)) {
                 return
             }
 
