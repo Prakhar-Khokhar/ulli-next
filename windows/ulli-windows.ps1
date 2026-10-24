@@ -695,12 +695,24 @@ function Shrink-UllPartition {
         Write-LogMessage "Failed to query partition ${DriveLetter}: $_" -IsError
         return $false
     }
+    if (-not $partition) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: partition query returned no object." -IsError
+        return $false
+    }
     if ($partition.DiskNumber -ne $TargetDiskNumber) {
         Write-LogMessage "Refusing to shrink ${DriveLetter}: (Disk $($partition.DiskNumber)) - not on the approved target Disk $TargetDiskNumber." -IsError
         return $false
     }
-    $currentSize = $partition.Size
     $partitionNumber = $partition.PartitionNumber
+    if ($null -eq $partitionNumber -or $partitionNumber -le 0) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: unable to establish a valid partition number." -IsError
+        return $false
+    }
+    $currentSize = $partition.Size
+    if ($null -eq $currentSize) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: unable to determine the current partition size." -IsError
+        return $false
+    }
     # Query the supported size range before resizing so we never shrink
     # below the filesystem/Windows minimum.
     try {
@@ -709,7 +721,15 @@ function Shrink-UllPartition {
         Write-LogMessage "Failed to query supported size for ${DriveLetter}: $_" -IsError
         return $false
     }
+    if (-not $supported) {
+        Write-LogMessage "Failed to query supported size for ${DriveLetter}: no size range returned." -IsError
+        return $false
+    }
     $sizeMin = $supported.SizeMin
+    if ($null -eq $sizeMin) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: unsupported minimum partition size." -IsError
+        return $false
+    }
     $shrinkBytes = [int64]($ShrinkAmountGB * 1GB)
     if ($shrinkBytes -le 0) {
         Write-LogMessage "Refusing to shrink ${DriveLetter}: shrink amount must be greater than zero." -IsError
@@ -757,9 +777,12 @@ exit
         $diskpartExitCode = $null
         $result = $null
         try {
-            $diskpartScript | Out-File -FilePath $scriptPath -Encoding ASCII
+            $diskpartScript | Out-File -FilePath $scriptPath -Encoding ASCII -ErrorAction Stop
             $result = & diskpart /s $scriptPath 2>&1
             $diskpartExitCode = $LASTEXITCODE
+        } catch {
+            Write-LogMessage "DiskPart fallback failed for ${DriveLetter}: $_" -IsError
+            return $false
         } finally {
             if (Test-Path $scriptPath) {
                 Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
@@ -788,23 +811,36 @@ exit
     # failure here returns failure WITHOUT re-invoking diskpart.
     if ($resizeSucceeded) {
         try {
-            if ($partitionNumber) {
-                $verifyPartition = Get-Partition -DiskNumber $TargetDiskNumber -PartitionNumber $partitionNumber -ErrorAction Stop
-                if (-not $verifyPartition) { throw "partition not found" }
-            } else {
-                $verifyPartition = Get-Partition -DiskNumber $TargetDiskNumber -ErrorAction Stop |
-                    Where-Object { $_.DriveLetter -eq $DriveLetter } | Select-Object -First 1
-                if (-not $verifyPartition) { throw "partition not found" }
+            if ($null -eq $partitionNumber -or $partitionNumber -le 0) {
+                throw "original partition number is not established"
+            }
+            # Re-query by the exact identity captured before resizing. Never fall
+            # back to drive-letter-only matching: a drive letter can be reassigned
+            # to a different volume after a resize, which would shrink the wrong
+            # partition.
+            $verifyPartition = Get-Partition -DiskNumber $TargetDiskNumber -PartitionNumber $partitionNumber -ErrorAction Stop
+            if (-not $verifyPartition) {
+                throw "partition not found on Disk $TargetDiskNumber Partition $partitionNumber"
             }
         } catch {
-            Write-LogMessage "Post-shrink verification failed: could not re-query partition ${DriveLetter} on Disk $TargetDiskNumber (partition $partitionNumber): $_" -IsError
+            Write-LogMessage "Post-shrink verification failed: could not re-query partition ${DriveLetter} on Disk $TargetDiskNumber, Partition $($partitionNumber): $_" -IsError
             return $false
         }
+        # Explicitly verify the returned object is the intended partition on the
+        # approved disk. Querying by identity does not guarantee correctness.
         if ($verifyPartition.DiskNumber -ne $TargetDiskNumber) {
             Write-LogMessage "Post-shrink verification failed: partition no longer resides on the approved target Disk $TargetDiskNumber." -IsError
             return $false
         }
+        if ($verifyPartition.PartitionNumber -ne $partitionNumber) {
+            Write-LogMessage "Post-shrink verification failed: re-queried partition number $($verifyPartition.PartitionNumber) does not match the original Partition $partitionNumber." -IsError
+            return $false
+        }
         $actualSize = $verifyPartition.Size
+        if ($null -eq $actualSize) {
+            Write-LogMessage "Post-shrink verification failed: unable to determine the re-queried partition size." -IsError
+            return $false
+        }
         $actualReduction = $currentSize - $actualSize
         $discrepancyBytes = $actualReduction - $shrinkBytes
         # Symmetric tolerance: diskpart shrinks in whole MiB and NTFS/filesystem
@@ -3801,6 +3837,7 @@ exit
             Set-Status "Configuring UEFI boot priority..."
 
             try {
+                $script:uefiBootReady = $false
                 if ($useRefind -and $script:RefindPlusDriveLetter) {
                     # RefindPlus boot entry - point to the RefindPlus partition
                     Write-LogMessage "Creating UEFI boot entry for RefindPlus..."
@@ -3810,6 +3847,7 @@ exit
 
                     if ($bootCreated) {
                         Write-LogMessage "RefindPlus UEFI boot entry created. Windows Boot Manager remains the default."
+                        $script:uefiBootReady = $true
                     } else {
                         Write-LogMessage "Could not create RefindPlus boot entry automatically" -IsError
                         Write-LogMessage "You will need to select 'RefindPlus - ULLI' manually in UEFI/BIOS boot menu" -IsError
@@ -3876,6 +3914,7 @@ exit
 
                         if ($process.ExitCode -eq 0) {
                             Write-LogMessage "UEFI boot priority set successfully!"
+                            $script:uefiBootReady = $true
                         } else {
                             Write-LogMessage "bcdedit /set default returned exit code $($process.ExitCode)" -IsError
                         }
@@ -3902,7 +3941,9 @@ exit
                                 -DevicePartition $bootDeviceDrive -EfiPath "\EFI\BOOT\BOOTx64.EFI"
                         }
 
-                        if (-not $bootCreated) {
+                        if ($bootCreated) {
+                            $script:uefiBootReady = $true
+                        } else {
                             Write-LogMessage "Could not create UEFI boot entry automatically" -IsError
                             Write-LogMessage "You will need to set boot priority manually in UEFI/BIOS settings" -IsError
                             Write-LogMessage "Or use the one-time boot menu (usually F12) to select the $distroName partition" -IsError
@@ -3918,7 +3959,14 @@ exit
 
         # Success
         Write-LogMessage "====================================="
-        Write-LogMessage "Installation Complete!"
+        if ($script:uefiBootReady) {
+            Write-LogMessage "Installation Complete!"
+        } else {
+            Write-LogMessage "Installation finished, but the UEFI boot entry was not created automatically." -IsError
+            Write-LogMessage "Files were copied to $script:NewDrive, but the installation is NOT yet bootable." -IsError
+            Write-LogMessage "You will need to set boot priority manually in UEFI/BIOS settings" -IsError
+            Write-LogMessage "Or use the one-time boot menu (usually F12) to select the $distroName partition" -IsError
+        }
         Write-LogMessage "====================================="
         Write-LogMessage "$distroName boot partition created at drive $script:NewDrive"
         if ($customRadio.Checked) {

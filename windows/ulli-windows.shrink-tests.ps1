@@ -6,15 +6,25 @@
 #
 # Covers audit cases:
 #   1. Automatic shrink succeeds through the Storage API.
-#   2. Storage API fails and DiskPart succeeds.
+#   2. Storage API fails and DiskPart fallback succeeds.
 #   3. Both resize methods fail.
-#   4. Actual reduction within the 10 MiB tolerance.
-#   5. Actual reduction > 10 MiB below the requested reduction (rejected).
-#   6. Actual reduction > 10 MiB above the requested reduction (rejected).
-#   7. Verification cannot re-find the original partition (rejected).
-#   8. Zero/negative shrink amount rejected (no-shrink path safety).
-#   9. Shrink below the filesystem-supported minimum rejected.
-#  10. Failed verification returns $false without re-invoking DiskPart.
+#   4. Actual reduction within the 10 MiB tolerance accepted.
+#   5. Exact lower tolerance boundary (requested - 10 MiB) accepted.
+#   6. Exact upper tolerance boundary (requested + 10 MiB) accepted.
+#   7. Actual reduction > 10 MiB below requested rejected.
+#   8. Actual reduction > 10 MiB above requested rejected.
+#   9. Verification cannot re-find the original partition rejected (no DiskPart retry).
+#  10. Zero/negative shrink amount rejected (no-shrink path safety).
+#  11. Shrink below the filesystem-supported minimum rejected.
+#  12. DiskPart fallback succeeds but post-shrink verification fails; no second DiskPart attempt.
+#  13. Partition-number mismatch at verification rejected.
+#  14. Unexpected disk identity at initial query rejected.
+#  15. Missing / invalid partition identity rejected; no stale drive-letter fallback.
+#  16. Missing DiskPart command handled safely; temp script cleaned up.
+#  17. Failure to write the temporary script handled safely; temp script cleaned up.
+#  18. Temporary-script cleaned up after DiskPart success.
+#  19. DiskPart exit code zero without the expected success output rejected.
+#  20. Null or invalid partition-size values rejected.
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -43,41 +53,70 @@ $script:fakePartNumber = 1
 $script:fakeDiskNumber = 0
 $script:fakeDriveLetter = 'C'
 $script:sizeMin = [int64](10GB)            # Get-PartitionSupportedSize.SizeMin
+$script:sizeMax = [int64](200GB)
 $script:resizeShouldFail = $false
 $script:resizeResultSize = $null           # if set, Resize-Partition forces the resulting size
 $script:resizeRequestedSize = $null
 $script:getPartitionShouldFail = $false
+$script:getPartitionShouldReturnNull = $false
 $script:getPartitionVerificationShouldReturnNull = $false
+$script:getPartitionVerificationPartitionNumberOverride = $null
+$script:getPartitionVerificationDiskNumberOverride = $null
+$script:getPartitionSupportedSizeNull = $false
 $script:diskpartExitCode = 0
+$script:diskpartOutputSuccess = $true      # whether diskpart output contains "successfully"
+$script:diskpartCommandMissing = $false
 $script:diskpartInvoked = $false
+$script:diskpartCallCount = 0
+$script:lastDiskpartScriptPath = $null
 
 function Get-Partition {
     [CmdletBinding()]
     param([string]$DriveLetter, [int]$DiskNumber, [int]$PartitionNumber)
     if ($script:getPartitionShouldFail) { throw "Get-Partition mock failure" }
-    # Verification re-queries by DiskNumber + PartitionNumber.
-    if ($PSBoundParameters.ContainsKey('PartitionNumber') -and $script:getPartitionVerificationShouldReturnNull) {
-        return $null
-    }
     if ($script:getPartitionShouldReturnNull) { return $null }
-    $p = [PSCustomObject]@{
-        DiskNumber      = $script:fakeDiskNumber
-        PartitionNumber = $script:fakePartNumber
-        Size            = $script:fakePartSize
+    $dl = $script:fakeDriveLetter
+    $dn = $script:fakeDiskNumber
+    $pn = $script:fakePartNumber
+    $sz = $script:fakePartSize
+    # Verification re-queries by DiskNumber + PartitionNumber; apply identity overrides
+    # to simulate the returned object differing from the requested identity.
+    if ($PSBoundParameters.ContainsKey('PartitionNumber')) {
+        if ($script:getPartitionVerificationShouldReturnNull) { return $null }
+        if ($null -ne $script:getPartitionVerificationPartitionNumberOverride) {
+            $pn = $script:getPartitionVerificationPartitionNumberOverride
+        }
+        if ($null -ne $script:getPartitionVerificationDiskNumberOverride) {
+            $dn = $script:getPartitionVerificationDiskNumberOverride
+        }
+        if ($PSBoundParameters.ContainsKey('DriveLetter') -and $DriveLetter -ne $dl) { return $null }
+        return [PSCustomObject]@{
+            DiskNumber      = $dn
+            PartitionNumber = $pn
+            Size            = $sz
+            Offset          = [int64](1MB)
+            DriveLetter     = $dl
+            Type            = 'Basic'
+        }
+    }
+    # Initial lookup by drive letter.
+    if ($PSBoundParameters.ContainsKey('DriveLetter') -and $DriveLetter -ne $dl) { return $null }
+    if ($PSBoundParameters.ContainsKey('DiskNumber') -and $DiskNumber -ne $dn) { return $null }
+    return [PSCustomObject]@{
+        DiskNumber      = $dn
+        PartitionNumber = $pn
+        Size            = $sz
         Offset          = [int64](1MB)
-        DriveLetter     = $script:fakeDriveLetter
+        DriveLetter     = $dl
         Type            = 'Basic'
     }
-    if ($PSBoundParameters.ContainsKey('DriveLetter') -and $DriveLetter -ne $script:fakeDriveLetter) { return $null }
-    if ($PSBoundParameters.ContainsKey('DiskNumber') -and $DiskNumber -ne $script:fakeDiskNumber) { return $null }
-    if ($PSBoundParameters.ContainsKey('PartitionNumber') -and $PartitionNumber -ne $script:fakePartNumber) { return $null }
-    return $p
 }
 
 function Get-PartitionSupportedSize {
     [CmdletBinding()]
     param([string]$DriveLetter)
-    [PSCustomObject]@{ SizeMin = $script:sizeMin; SizeMax = [int64](200GB) }
+    if ($script:getPartitionSupportedSizeNull) { return $null }
+    [PSCustomObject]@{ SizeMin = $script:sizeMin; SizeMax = $script:sizeMax }
 }
 
 function Resize-Partition {
@@ -96,14 +135,24 @@ function diskpart {
     [CmdletBinding()]
     param([string]$s, [string]$ScriptPath)
     $script:diskpartInvoked = $true
+    $script:diskpartCallCount++
+    $script:lastDiskpartScriptPath = $ScriptPath
+    if ($script:diskpartCommandMissing) {
+        throw "The term 'diskpart' is not recognized as the name of a cmdlet"
+    }
     # Simulate diskpart applying the shrink described in the script file.
     $content = Get-Content -Path $ScriptPath -Raw -ErrorAction SilentlyContinue
     if ($content -match 'shrink desired=(\d+)') {
         $sizeMB = [int64]$matches[1]
         $script:fakePartSize = $script:fakePartSize - ($sizeMB * 1MB)
     }
-    if ($script:diskpartExitCode -eq 0) { & /bin/true 2>$null } else { & /bin/false 2>$null }
-    Write-Output "Volume $($script:fakeDriveLetter): successfully shrunk"
+    # Simulate the exit code real diskpart reports via $LASTEXITCODE.
+    $script:LASTEXITCODE = $script:diskpartExitCode
+    if ($script:diskpartOutputSuccess) {
+        Write-Output "Volume $($script:fakeDriveLetter): successfully shrunk"
+    } else {
+        Write-Output "DiskPart encountered an error: the operation failed"
+    }
 }
 
 # ---------- Load the production Shrink-UllPartition from the source file ----------
@@ -137,14 +186,23 @@ function Reset-State {
     $script:fakePartNumber = 1
     $script:fakeDiskNumber = 0
     $script:fakeDriveLetter = 'C'
+    $script:sizeMin = [int64](10GB)
+    $script:sizeMax = [int64](200GB)
     $script:resizeShouldFail = $false
     $script:resizeResultSize = $null
     $script:resizeRequestedSize = $null
     $script:getPartitionShouldFail = $false
     $script:getPartitionShouldReturnNull = $false
     $script:getPartitionVerificationShouldReturnNull = $false
+    $script:getPartitionVerificationPartitionNumberOverride = $null
+    $script:getPartitionVerificationDiskNumberOverride = $null
+    $script:getPartitionSupportedSizeNull = $false
     $script:diskpartExitCode = 0
+    $script:diskpartOutputSuccess = $true
+    $script:diskpartCommandMissing = $false
     $script:diskpartInvoked = $false
+    $script:diskpartCallCount = 0
+    $script:lastDiskpartScriptPath = $null
 }
 
 function Assert-True {
@@ -193,6 +251,7 @@ Run-Test "1. Storage API shrink succeeds (exact reduction, verified)" {
     Assert-True ($script:fakePartSize -eq [int64](92GB)) "actual size $($script:fakePartSize)"
     Assert-True ($script:diskpartInvoked -eq $false) "diskpart should not run when Storage API succeeds"
     Assert-LogContains "Post-shrink verified"
+    Assert-LogContains "Disk 0 Partition 1"
 }
 
 # ── 2. Storage API fails, DiskPart fallback succeeds ─────────────────────────
@@ -202,7 +261,6 @@ Run-Test "2. Storage API fails, DiskPart fallback succeeds" {
     $script:diskpartExitCode = 0
     $r = Invoke-ShrinkTest -ShrinkAmountGB 8
     Assert-True ($r -eq $true) "expected true, got $r"
-    # DiskPart shrink desired = 8 * 1024 = 8192 MiB = 8 GB
     Assert-True ($script:fakePartSize -eq [int64](92GB)) "actual size after diskpart $($script:fakePartSize)"
     Assert-True ($script:diskpartInvoked -eq $true) "diskpart should run when Storage API fails"
     Assert-LogContains "Trying diskpart method"
@@ -222,7 +280,6 @@ Run-Test "3. Both resize methods fail" {
 # ── 4. Actual reduction within the 10 MiB tolerance (undersize by 3 MiB) ─────
 Run-Test "4. Actual reduction within tolerance (undersize by 3 MiB) accepted" {
     Reset-State
-    # Storage reports a resulting size 3 MiB larger than requested (undersize by 3 MiB).
     $script:resizeResultSize = [int64](92GB + 3MB)
     $r = Invoke-ShrinkTest -ShrinkAmountGB 8
     Assert-True ($r -eq $true) "expected true, got $r"
@@ -231,27 +288,44 @@ Run-Test "4. Actual reduction within tolerance (undersize by 3 MiB) accepted" {
     Assert-True ($actualReduction -le ([int64](8GB) + [int64](10MB))) "reduction $actualReduction above upper bound"
 }
 
-# ── 5. Actual reduction > 10 MiB below requested (rejected) ──────────────────
-Run-Test "5. Actual reduction more than 10 MiB below requested rejected" {
+# ── 5. Exact lower boundary: reduction == requested - 10 MiB accepted ────────
+Run-Test "5. Exact lower tolerance boundary (requested - 10 MiB) accepted" {
+    Reset-State
+    $script:resizeResultSize = [int64](92GB + 10MB)   # reduction = 8 GB - 10 MiB
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $true) "expected true at lower boundary, got $r"
+}
+
+# ── 6. Exact upper boundary: reduction == requested + 10 MiB accepted ────────
+Run-Test "6. Exact upper tolerance boundary (requested + 10 MiB) accepted" {
+    Reset-State
+    $script:resizeResultSize = [int64](92GB - 10MB)   # reduction = 8 GB + 10 MiB
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $true) "expected true at upper boundary, got $r"
+}
+
+# ── 7. Actual reduction > 10 MiB below requested rejected ────────────────────
+Run-Test "7. Actual reduction more than 10 MiB below requested rejected" {
     Reset-State
     $script:resizeResultSize = [int64](92GB + 15MB)   # reduction = 8 GB - 15 MiB
     $r = Invoke-ShrinkTest -ShrinkAmountGB 8
     Assert-True ($r -eq $false) "expected false, got $r"
     Assert-LogContains "Post-shrink verification failed" -IsError
+    Assert-LogContains "signed discrepancy" -IsError
 }
 
-# ── 6. Actual reduction > 10 MiB above requested (rejected) ──────────────────
-Run-Test "6. Actual reduction more than 10 MiB above requested rejected" {
+# ── 8. Actual reduction > 10 MiB above requested rejected ────────────────────
+Run-Test "8. Actual reduction more than 10 MiB above requested rejected" {
     Reset-State
     $script:resizeResultSize = [int64](92GB - 15MB)   # reduction = 8 GB + 15 MiB
     $r = Invoke-ShrinkTest -ShrinkAmountGB 8
     Assert-True ($r -eq $false) "expected false, got $r"
     Assert-LogContains "Post-shrink verification failed" -IsError
-    Assert-True ($script:diskpartInvoked -eq $false) "diskpart must not be re-invoked after verification failure"
+    Assert-True ($script:diskpartInvoked -eq $false) "diskpart must not run on the Storage API path"
 }
 
-# ── 7. Verification cannot re-find the original partition (rejected) ─────────
-Run-Test "7. Verification cannot re-find original partition rejected" {
+# ── 9. Verification cannot re-find the original partition rejected ───────────
+Run-Test "9. Verification cannot re-find original partition rejected" {
     Reset-State
     $script:getPartitionVerificationShouldReturnNull = $true
     $r = Invoke-ShrinkTest -ShrinkAmountGB 8
@@ -259,8 +333,8 @@ Run-Test "7. Verification cannot re-find original partition rejected" {
     Assert-LogContains "could not re-query partition" -IsError
 }
 
-# ── 8. Zero/negative shrink amount rejected ──────────────────────────────────
-Run-Test "8. Zero or negative shrink amount rejected" {
+# ── 10. Zero/negative shrink amount rejected ─────────────────────────────────
+Run-Test "10. Zero or negative shrink amount rejected" {
     Reset-State
     $r1 = Invoke-ShrinkTest -ShrinkAmountGB 0
     Assert-True ($r1 -eq $false) "zero shrink should be false, got $r1"
@@ -269,8 +343,8 @@ Run-Test "8. Zero or negative shrink amount rejected" {
     Assert-LogContains "must be greater than zero" -IsError
 }
 
-# ── 9. Shrink below the filesystem-supported minimum rejected ────────────────
-Run-Test "9. Shrink below supported minimum rejected" {
+# ── 11. Shrink below the filesystem-supported minimum rejected ───────────────
+Run-Test "11. Shrink below supported minimum rejected" {
     Reset-State
     # currentSize 100 GB, SizeMin 10 GB; shrink 95 GB -> newSize 5 GB < 10 GB
     $r = Invoke-ShrinkTest -ShrinkAmountGB 95
@@ -278,14 +352,117 @@ Run-Test "9. Shrink below supported minimum rejected" {
     Assert-LogContains "below the supported minimum" -IsError
 }
 
-# ── 10. Failed verification returns false without re-invoking DiskPart ───────
-Run-Test "10. Verification failure returns false without re-invoking DiskPart" {
+# ── 12. DiskPart succeeds but post-shrink verification fails; no retry ───────
+Run-Test "12. DiskPart succeeds but verification fails; no second DiskPart attempt" {
     Reset-State
-    $script:getPartitionVerificationShouldReturnNull = $true
+    $script:resizeShouldFail = $true
     $script:diskpartExitCode = 0
+    $script:getPartitionVerificationShouldReturnNull = $true
     $r = Invoke-ShrinkTest -ShrinkAmountGB 8
     Assert-True ($r -eq $false) "expected false, got $r"
-    Assert-True ($script:diskpartInvoked -eq $false) "diskpart re-invoked after verification failure"
+    Assert-True ($script:diskpartCallCount -eq 1) "diskpart invoked $($script:diskpartCallCount) times, expected 1"
+    Assert-LogContains "could not re-query partition" -IsError
+}
+
+# ── 13. Partition-number mismatch at verification rejected ───────────────────
+Run-Test "13. Verification partition-number mismatch rejected" {
+    Reset-State
+    # Verification returns a partition whose number differs from the original.
+    $script:getPartitionVerificationPartitionNumberOverride = 99
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "does not match the original Partition" -IsError
+}
+
+# ── 14. Unexpected disk identity at initial query rejected ───────────────────
+Run-Test "14. Partition on wrong disk rejected" {
+    Reset-State
+    $script:fakeDiskNumber = 0
+    $r = Invoke-ShrinkTest -TargetDiskNumber 1 -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "not on the approved target Disk" -IsError
+}
+
+# ── 15. Missing / invalid partition identity rejected; no drive-letter fallback ─
+Run-Test "15. Missing partition identity rejected" {
+    Reset-State
+    $script:getPartitionShouldReturnNull = $true
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "returned no object" -IsError
+}
+
+Run-Test "15b. Invalid partition number rejected (no drive-letter-only fallback)" {
+    Reset-State
+    $script:fakePartNumber = 0
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "unable to establish a valid partition number" -IsError
+}
+
+# ── 16. Missing DiskPart command handled safely; temp script cleaned up ──────
+Run-Test "16. Missing DiskPart command handled safely" {
+    Reset-State
+    $script:resizeShouldFail = $true
+    $script:diskpartCommandMissing = $true
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "DiskPart fallback failed" -IsError
+    # Temp script written by Out-File must be removed by the finally block.
+    Assert-True ((Test-Path $script:lastDiskpartScriptPath) -eq $false) "temp script not cleaned up"
+}
+
+# ── 17. Failure to write the temporary script handled safely ─────────────────
+Run-Test "17. Failure to write temporary script handled safely" {
+    Reset-State
+    $script:resizeShouldFail = $true
+    $oldTemp = $env:TEMP
+    try {
+        $env:TEMP = '/proc/1/nope'
+        $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    } finally {
+        $env:TEMP = $oldTemp
+    }
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "DiskPart fallback failed" -IsError
+}
+
+# ── 18. Temporary-script cleaned up after DiskPart success ───────────────────
+Run-Test "18. Temp script cleaned up after DiskPart success" {
+    Reset-State
+    $script:resizeShouldFail = $true
+    $script:diskpartExitCode = 0
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $true) "expected true, got $r"
+    Assert-True ((Test-Path $script:lastDiskpartScriptPath) -eq $false) "temp script not cleaned up after success"
+}
+
+# ── 19. DiskPart exit code zero without expected success output ──────────────
+Run-Test "19. DiskPart exit code zero without success output rejected" {
+    Reset-State
+    $script:resizeShouldFail = $true
+    $script:diskpartExitCode = 0
+    $script:diskpartOutputSuccess = $false
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "Failed to shrink" -IsError
+}
+
+# ── 20. Null / invalid partition-size values rejected ────────────────────────
+Run-Test "20. Null current partition size rejected" {
+    Reset-State
+    $script:fakePartSize = $null
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "unable to determine the current partition size" -IsError
+}
+
+Run-Test "20b. Null supported minimum size rejected" {
+    Reset-State
+    $script:getPartitionSupportedSizeNull = $true
+    $r = Invoke-ShrinkTest -ShrinkAmountGB 8
+    Assert-True ($r -eq $false) "expected false, got $r"
+    Assert-LogContains "no size range returned" -IsError
 }
 
 # ---------- Summary ----------
