@@ -683,42 +683,64 @@ function Shrink-UllPartition {
         [double]$ShrinkAmountGB,
         [int]$TargetDiskNumber
     )
+    # Query and validate the partition BEFORE attempting any resize so the
+    # original size and partition identity are retained for later verification.
+    # Partition safety: only shrink the partition the approved plan targets
+    # on the intended target disk. Never shrink the Windows system partition
+    # or an unrelated volume merely because a drive letter (e.g. E:) appears
+    # in a log line.
     try {
         $partition = Get-Partition -DriveLetter $DriveLetter -ErrorAction Stop
-        # Partition safety: only shrink the partition the approved plan targets
-        # on the intended target disk. Never shrink the Windows system partition
-        # or an unrelated volume merely because a drive letter (e.g. E:) appears
-        # in a log line.
-        if ($partition.DiskNumber -ne $TargetDiskNumber) {
-            Write-LogMessage "Refusing to shrink ${DriveLetter}: (Disk $($partition.DiskNumber)) - not on the approved target Disk $TargetDiskNumber." -IsError
-            return $false
-        }
-        $currentSize = $partition.Size
-        # Query the supported size range before resizing so we never shrink
-        # below the filesystem/Windows minimum.
-        $supported = Get-PartitionSupportedSize -DriveLetter $DriveLetter -ErrorAction Stop
-        $sizeMin = $supported.SizeMin
-        $shrinkBytes = [int64]($ShrinkAmountGB * 1GB)
-        if ($shrinkBytes -le 0) {
-            Write-LogMessage "Refusing to shrink ${DriveLetter}: shrink amount must be greater than zero." -IsError
-            return $false
-        }
-        $newSize = $currentSize - $shrinkBytes
-        if ($newSize -lt $sizeMin) {
-            Write-LogMessage "Refusing to shrink ${DriveLetter}: target size $([math]::Round($newSize / 1GB, 2)) GB is below the supported minimum $([math]::Round($sizeMin / 1GB, 2)) GB." -IsError
-            return $false
-        }
-        if ($newSize -gt $currentSize) {
-            Write-LogMessage "Refusing to shrink ${DriveLetter}: computed size exceeds the current partition size." -IsError
-            return $false
-        }
-        Write-LogMessage "Shrinking ${DriveLetter}: partition from $([math]::Round($currentSize / 1GB, 2)) GB to $([math]::Round($newSize / 1GB, 2)) GB..."
-        Microsoft.PowerShell.Storage\Resize-Partition -DriveLetter $DriveLetter -Size $newSize -ErrorAction Stop
-        Write-LogMessage "${DriveLetter}: partition shrunk successfully!"
-        return $true
+    } catch {
+        Write-LogMessage "Failed to query partition ${DriveLetter}: $_" -IsError
+        return $false
     }
-    catch {
+    if ($partition.DiskNumber -ne $TargetDiskNumber) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: (Disk $($partition.DiskNumber)) - not on the approved target Disk $TargetDiskNumber." -IsError
+        return $false
+    }
+    $currentSize = $partition.Size
+    $partitionNumber = $partition.PartitionNumber
+    # Query the supported size range before resizing so we never shrink
+    # below the filesystem/Windows minimum.
+    try {
+        $supported = Get-PartitionSupportedSize -DriveLetter $DriveLetter -ErrorAction Stop
+    } catch {
+        Write-LogMessage "Failed to query supported size for ${DriveLetter}: $_" -IsError
+        return $false
+    }
+    $sizeMin = $supported.SizeMin
+    $shrinkBytes = [int64]($ShrinkAmountGB * 1GB)
+    if ($shrinkBytes -le 0) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: shrink amount must be greater than zero." -IsError
+        return $false
+    }
+    $newSize = $currentSize - $shrinkBytes
+    if ($newSize -lt $sizeMin) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: target size $([math]::Round($newSize / 1GB, 2)) GB is below the supported minimum $([math]::Round($sizeMin / 1GB, 2)) GB." -IsError
+        return $false
+    }
+    if ($newSize -gt $currentSize) {
+        Write-LogMessage "Refusing to shrink ${DriveLetter}: computed size exceeds the current partition size." -IsError
+        return $false
+    }
+
+    Write-LogMessage "Shrinking ${DriveLetter}: partition from $([math]::Round($currentSize / 1GB, 2)) GB to $([math]::Round($newSize / 1GB, 2)) GB..."
+
+    $resizeSucceeded = $false
+
+    # Attempt 1: Storage API.
+    try {
+        Microsoft.PowerShell.Storage\Resize-Partition -DriveLetter $DriveLetter -Size $newSize -ErrorAction Stop
+        $resizeSucceeded = $true
+        Write-LogMessage "${DriveLetter}: partition shrunk successfully!"
+    } catch {
         Write-LogMessage "Storage API shrink failed for ${DriveLetter}: $_" -IsError
+    }
+
+    # Attempt 2: diskpart fallback, ONLY if the Storage API did not succeed.
+    # A post-resize verification failure later must NOT reach this block.
+    if (-not $resizeSucceeded) {
         Write-LogMessage "Trying diskpart method..."
         $sizeMB = [int]($ShrinkAmountGB * 1024)
         $diskpartScript = @"
@@ -727,25 +749,69 @@ shrink desired=$sizeMB
 exit
 "@
         $scriptPath = Join-Path $env:TEMP "shrink_script.txt"
-        $diskpartScript | Out-File -FilePath $scriptPath -Encoding ASCII
+        $diskpartExitCode = $null
+        $result = $null
+        try {
+            $diskpartScript | Out-File -FilePath $scriptPath -Encoding ASCII
+            $result = & diskpart /s $scriptPath 2>&1
+            $diskpartExitCode = $LASTEXITCODE
+        } finally {
+            if (Test-Path $scriptPath) {
+                Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
+            }
+        }
 
-        $result = diskpart /s $scriptPath
-        Remove-Item $scriptPath -Force
-
-        if ($result -match "successfully") {
-            Write-LogMessage "${DriveLetter}: partition shrunk successfully!"
-            return $true
-        } else {
+        $resultString = if ($null -ne $result) { ($result | ForEach-Object { "$_" }) -join "`n" } else { "" }
+        if ($diskpartExitCode -ne 0 -or $resultString -notmatch "successfully") {
             $hint = if ($DriveLetter -eq 'C') {
                 "You may need to: 1) Run disk cleanup 2) Disable hibernation (powercfg -h off) 3) Reboot"
             } else {
                 "You may need to: 1) Run disk cleanup 2) Defragment the drive 3) Reboot"
             }
             Write-LogMessage "Failed to shrink ${DriveLetter}: partition!" -IsError
+            Write-LogMessage $resultString -IsError
             Write-LogMessage $hint -IsError
             return $false
         }
+        $resizeSucceeded = $true
+        Write-LogMessage "${DriveLetter}: partition shrunk successfully!"
     }
+
+    # Postcondition verification: re-query the SAME validated partition on the
+    # approved target disk and confirm the actual reduction meets the requested
+    # shrink amount. This runs after a reported-successful resize only; a
+    # failure here returns failure WITHOUT re-invoking diskpart.
+    if ($resizeSucceeded) {
+        try {
+            if ($partitionNumber) {
+                $verifyPartition = Get-Partition -DiskNumber $TargetDiskNumber -PartitionNumber $partitionNumber -ErrorAction Stop
+            } else {
+                $verifyPartition = Get-Partition -DiskNumber $TargetDiskNumber -ErrorAction Stop |
+                    Where-Object { $_.DriveLetter -eq $DriveLetter } | Select-Object -First 1
+                if (-not $verifyPartition) { throw "partition not found" }
+            }
+        } catch {
+            Write-LogMessage "Post-shrink verification failed: could not re-query partition ${DriveLetter} on Disk $TargetDiskNumber (partition $partitionNumber): $_" -IsError
+            return $false
+        }
+        if ($verifyPartition.DiskNumber -ne $TargetDiskNumber) {
+            Write-LogMessage "Post-shrink verification failed: partition no longer resides on the approved target Disk $TargetDiskNumber." -IsError
+            return $false
+        }
+        $actualSize = $verifyPartition.Size
+        $actualReduction = $currentSize - $actualSize
+        # Alignment tolerance: diskpart shrinks in whole MB and NTFS/filesystem
+        # alignment may leave a few MB unshrunk; 10 MB covers truncation and
+        # cluster alignment without masking a genuinely failed shrink.
+        $toleranceBytes = [int64](10MB)
+        if ($actualReduction -lt ($shrinkBytes - $toleranceBytes)) {
+            Write-LogMessage "Post-shrink verification failed: requested reduction $([math]::Round($shrinkBytes / 1GB, 2)) GB but actual reduction was $([math]::Round($actualReduction / 1GB, 2)) GB (tolerance $([math]::Round($toleranceBytes / 1GB, 4)) GB); partition now $([math]::Round($actualSize / 1GB, 2)) GB." -IsError
+            return $false
+        }
+        Write-LogMessage "Post-shrink verified: ${DriveLetter}: reduced by $([math]::Round($actualReduction / 1GB, 2)) GB (now $([math]::Round($actualSize / 1GB, 2)) GB)."
+    }
+
+    return $true
 }
 
 function New-UefiBootEntry {
