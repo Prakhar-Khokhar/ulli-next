@@ -1,7 +1,0 @@
-result 11 0.0174696
-catalog 11 0.00403026
-plan 11 0.00737788
-engine 11 3.36741
-allocation 11 0.0033962
-boothandoff 1 16.0844
----
