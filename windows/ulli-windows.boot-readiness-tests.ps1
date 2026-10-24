@@ -1,17 +1,20 @@
 # Mock-based, non-destructive unit tests for UEFI boot-readiness logic in windows/ulli-windows.ps1.
-# Every destructive/firmware command (bcdedit, Restart-Computer, New-UefiBootEntry) is replaced by a
-# test double, so no real disk, firmware entry, or restart is performed. Safe to run on any host.
+# Every destructive/firmware command (bcdedit, Restart-Computer) is replaced by a test double, so no
+# real disk, firmware entry, or restart is performed. Safe to run on any PowerShell host.
 #
 # Usage: pwsh -NoProfile -File windows/ulli-windows.boot-readiness-tests.ps1
 #
-# Covers:
-#   1. Successful boot configuration with auto-restart enabled -> readiness true, restart called.
-#   2. Failed boot configuration with auto-restart enabled -> readiness false, no restart, no success claim.
-#   3. Successful boot configuration with auto-restart disabled -> readiness true, no restart.
-#   4. Successful first run followed by failed second run -> readiness does not leak (reset at start).
-#   5. RefindPlus entry failure followed by successful standard-entry fallback -> readiness true.
-#   6. Both boot-entry strategies fail -> readiness false, manual recovery instructions in log.
-#   7. Status bar / log messages agree with actual boot-readiness state.
+# Tests exercise the PRODUCTION boot-configuration helpers (extracted from ulli-windows.ps1), not a
+# separate simulation of the logic:
+#   1. New-UefiBootEntry: success, /copy failure, unparseable /copy output (orphan uncertainty),
+#      device/path/set failure, firmware-default failure, default verification failure.
+#   2. Test-UelliFirmwareDefault: default matches / does not match.
+#   3. Test-UelliEntryDevice / Select-UelliExistingBootEntry: exact match, ambiguous (multiple),
+#      no match, device mismatch -> never selects a broad substring match.
+#   4. Configure-UelliBootEntry: RefindPlus path, RefindPlus->standard fallback, existing entry,
+#      new entry, total failure; readiness is reset each call (no leak).
+#   5. Restart eligibility: only when auto-restart AND readiness are both true.
+#   6. Conditional status text: complete vs boot-configuration-incomplete.
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -21,11 +24,10 @@ $script:testsPassed = 0
 $script:testsFailed = 0
 $script:failures = New-Object System.Collections.Generic.List[object]
 $script:mockLogEntries = New-Object System.Collections.Generic.List[object]
-
-# ---------- Test doubles ----------
-$script:mockNewUefiBootEntryResult = $true
+$script:mockStatuses = New-Object System.Collections.Generic.List[string]
 $script:mockRestartCalled = $false
 
+# ---------- Test doubles ----------
 function Write-LogMessage {
     [CmdletBinding()]
     param([string]$Message, [switch]$IsError)
@@ -41,6 +43,7 @@ function Get-LogMessage {
 function Set-Status {
     [CmdletBinding()]
     param([string]$Status)
+    $script:mockStatuses.Add($Status)
 }
 
 function Restart-Computer {
@@ -49,89 +52,106 @@ function Restart-Computer {
     $script:mockRestartCalled = $true
 }
 
-# Controllable double for the production New-UefiBootEntry function.
-function New-UefiBootEntry {
-    [CmdletBinding()]
-    param([string]$DistroName, [string]$DevicePartition, [string]$EfiPath)
-    return $script:mockNewUefiBootEntryResult
+# ---------- Fake bcdedit.exe (configurable via environment variables) ----------
+# UB_COPY_EXIT / UB_COPY_OUTPUT / UB_COPY_GUID   -> /copy "{bootmgr}" response
+# UB_SET_EXIT / UB_DEFAULT_SET_EXIT / UB_ORDER_EXIT -> /set /displayorder exit codes
+# UB_ENUM_DEFAULT                                 -> default GUID in /enum {fwbootmgr}
+function New-FakeBcdEdit {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { New-Item -ItemType Directory -Path $Dir | Out-Null }
+    $fakeExe = Join-Path $Dir "bcdedit.exe"
+    Set-Content -Path $fakeExe -Value @'
+#!/bin/bash
+if [ "$1" = "/copy" ]; then
+    printf '%s\n' "${UB_COPY_OUTPUT:-The operation completed successfully.}"
+    printf '%s\n' "${UB_COPY_GUID:-{11111111-1111-1111-1111-111111111111}}"
+    exit "${UB_COPY_EXIT:-0}"
+elif [ "$1" = "/set" ]; then
+    if [ "$2" = "{fwbootmgr}" ] && [ "$3" = "default" ]; then
+        exit "${UB_DEFAULT_SET_EXIT:-0}"
+    fi
+    exit "${UB_SET_EXIT:-0}"
+elif [ "$1" = "/deletevalue" ]; then
+    exit 0
+elif [ "$1" = "/displayorder" ]; then
+    exit "${UB_ORDER_EXIT:-0}"
+elif [ "$1" = "/delete" ]; then
+    exit 0
+elif [ "$1" = "/enum" ] && [ "$2" = "{fwbootmgr}" ]; then
+    printf 'Windows Boot Manager\r\n--------------------\r\nidentifier              {fwbootmgr}\r\ndefault                 %s\r\n' "${UB_ENUM_DEFAULT:-\{11111111-1111-1111-1111-111111111111\}}"
+    exit 0
+fi
+exit 0
+'@ -Encoding UTF8
+    chmod 755 $fakeExe
+    return $fakeExe
 }
 
-# ---------- Boot-readiness decision logic (mirrors Start-Installation's boot-config block) ----------
-function Invoke-BootReadinessScenario {
-    [CmdletBinding()]
-    param(
-        [bool]$AutoRestart,
-        [bool]$UseRefind,
-        [string]$RefindPlusDriveLetter = $null,
-        [bool]$RefindEntrySucceeds = $true,
-        [bool]$StandardEntrySucceeds = $true,
-        [switch]$SkipReadinessReset   # simulates the OLD (buggy) behavior without the reset
-    )
+$script:fakeBcdDir = Join-Path $env:TEMP "ulli_boot_readiness_bcdedit"
+$script:fakeBcdExe = New-FakeBcdEdit -Dir $script:fakeBcdDir
+$script:oldPath = $env:PATH
+$sep = [System.IO.Path]::PathSeparator
+$env:PATH = "$script:fakeBcdDir$sep$env:PATH"
 
-    $script:mockNewUefiBootEntryResult = $true
-    $script:mockRestartCalled = $false
-    $script:mockLogEntries.Clear()
+function Reset-BcdEditEnv {
+    $env:UB_COPY_EXIT = '0'
+    $env:UB_COPY_OUTPUT = 'The operation completed successfully.'
+    $env:UB_COPY_GUID = '{11111111-1111-1111-1111-111111111111}'
+    $env:UB_SET_EXIT = '0'
+    $env:UB_DEFAULT_SET_EXIT = '0'
+    $env:UB_ORDER_EXIT = '0'
+    $env:UB_ENUM_DEFAULT = '{11111111-1111-1111-1111-111111111111}'
+}
 
-    # --- The fix: reset readiness at the start of every installation ---
-    if (-not $SkipReadinessReset) {
-        $script:uefiBootReady = $false
+# ---------- Load the production helpers from the source file ----------
+$sourcePath = Join-Path $PSScriptRoot "ulli-windows.ps1"
+$source = Get-Content -Path $sourcePath -Raw
+
+function Extract-FunctionBody {
+    param([string]$Source, [string]$Marker)
+    $idx = $Source.IndexOf($Marker)
+    if ($idx -lt 0) { throw "Could not find '$Marker' in $sourcePath" }
+    $i = $idx + $Marker.Length
+    $depth = 1
+    $sb = [System.Text.StringBuilder]::new()
+    [void]$sb.Append($marker)
+    $len = $Source.Length
+    while ($i -lt $len) {
+        $c = $Source[$i]
+        [void]$sb.Append($c)
+        if ($c -eq '{') { $depth++ }
+        elseif ($c -eq '}') { $depth-- }
+        $i++
+        if ($depth -eq 0) { break }
     }
+    if ($depth -ne 0) { throw "Brace mismatch extracting '$Marker'" }
+    return $sb.ToString()
+}
 
-    # --- Boot configuration (independent of the auto-restart checkbox) ---
-    if ($UseRefind -and $RefindPlusDriveLetter) {
-        Write-LogMessage "Creating UEFI boot entry for RefindPlus..."
-        $script:mockNewUefiBootEntryResult = $RefindEntrySucceeds
-        $bootCreated = New-UefiBootEntry -DistroName "RefindPlus - ULLI" `
-            -DevicePartition "${RefindPlusDriveLetter}:" -EfiPath "\EFI\refindplus\x64_RefindPlus_REL.efi"
+$functionMarkers = @(
+    'function New-UefiBootEntry {',
+    'function Test-UelliFirmwareDefault {',
+    'function Test-UelliEntryDevice {',
+    'function Select-UelliExistingBootEntry {',
+    'function Get-FirmwareEntriesFromBcdedit {',
+    'function Set-FirmwareDefault {',
+    'function Configure-UelliBootEntry {',
+    'function Get-UelliBootStatusText {',
+    'function Test-UelliBootRestartEligible {'
+)
 
-        if ($bootCreated) {
-            Write-LogMessage "RefindPlus UEFI boot entry created."
-            $script:uefiBootReady = $true
-        } else {
-            Write-LogMessage "Could not create RefindPlus boot entry automatically" -IsError
-            Write-LogMessage "RefindPlus entry creation failed; falling back to standard UEFI boot entry." -IsError
-            $UseRefind = $false
-        }
-    }
-
-    if (-not $UseRefind) {
-        Write-LogMessage "Creating standard UEFI boot entry..."
-        $script:mockNewUefiBootEntryResult = $StandardEntrySucceeds
-        $bootCreated = New-UefiBootEntry -DistroName "TestDistro" `
-            -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
-
-        if ($bootCreated) {
-            Write-LogMessage "UEFI boot priority set successfully!"
-            $script:uefiBootReady = $true
-        } else {
-            Write-LogMessage "Could not create UEFI boot entry automatically" -IsError
-            Write-LogMessage "You will need to set boot priority manually in UEFI/BIOS settings" -IsError
-        }
-    }
-
-    # --- Auto-restart only when enabled AND boot configuration succeeded ---
-    if ($AutoRestart -and $script:uefiBootReady) {
-        Write-LogMessage "Preparing for automatic restart..."
-        Restart-Computer -Force
-    } elseif ($AutoRestart -and -not $script:uefiBootReady) {
-        Write-LogMessage "Automatic restart skipped: UEFI boot configuration was not successful." -IsError
-        Write-LogMessage "Restart manually and configure boot priority in UEFI/BIOS settings when ready." -IsError
-    }
-
-    return [PSCustomObject]@{
-        UefiBootReady   = [bool]$script:uefiBootReady
-        RestartCalled   = $script:mockRestartCalled
-        LogEntries      = $script:mockLogEntries
-        UseRefind       = $UseRefind
-    }
+foreach ($marker in $functionMarkers) {
+    $body = Extract-FunctionBody -Source $source -Marker $marker
+    . ([scriptblock]::Create($body))
 }
 
 # ---------- Test harness ----------
 function Reset-Mocks {
-    $script:mockNewUefiBootEntryResult = $true
-    $script:mockRestartCalled = $false
     $script:mockLogEntries.Clear()
+    $script:mockStatuses.Clear()
+    $script:mockRestartCalled = $false
     $script:uefiBootReady = $false
+    Reset-BcdEditEnv
 }
 
 function Assert-True {
@@ -180,204 +200,266 @@ function Run-Test {
     }
 }
 
-# ── 1. Successful boot configuration with auto-restart enabled ──────────────────────
-Run-Test "1. Successful boot config with auto-restart enabled -> readiness true, restart called" {
+# ---------- 1. New-UefiBootEntry: success (production code with fake bcdedit) ----------
+Run-Test "New-UefiBootEntry: bcdedit success returns the new GUID" {
     Reset-Mocks
-    $result = Invoke-BootReadinessScenario -AutoRestart $true -UseRefind $false -StandardEntrySucceeds $true
-    Assert-True ($result.UefiBootReady -eq $true) "readiness should be true, got $($result.UefiBootReady)"
-    Assert-True ($result.RestartCalled -eq $true) "restart should be called when auto-restart and ready"
-    Assert-LogContains "UEFI boot priority set successfully!"
-    Assert-LogContains "Preparing for automatic restart"
+    $env:UB_COPY_GUID = '{22222222-2222-2222-2222-222222222222}'
+    $env:UB_ENUM_DEFAULT = '{22222222-2222-2222-2222-222222222222}'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($guid -eq '{22222222-2222-2222-2222-222222222222}') "expected GUID, got $guid"
+    Assert-LogContains "set as the firmware default"
 }
 
-# ── 2. Failed boot config with auto-restart enabled: no restart, no success claim ──
-Run-Test "2. Failed boot config with auto-restart enabled -> readiness false, no restart" {
+# ── 2. /copy failure ─────────────────────────────────────────────────────────
+Run-Test "New-UefiBootEntry: bcdedit /copy failure returns null" {
     Reset-Mocks
-    $result = Invoke-BootReadinessScenario -AutoRestart $true -UseRefind $false -StandardEntrySucceeds $false
-    Assert-True ($result.UefiBootReady -eq $false) "readiness should be false, got $($result.UefiBootReady)"
-    Assert-True ($result.RestartCalled -eq $false) "restart must NOT be called when boot config failed"
-    Assert-LogContains "Could not create UEFI boot entry automatically" -IsError
-    Assert-LogNotContains "UEFI boot priority has been configured."
-    Assert-LogContains "Automatic restart skipped" -IsError
+    $env:UB_COPY_EXIT = '1'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null, got $guid"
+    Assert-LogContains "bcdedit /copy failed" -IsError
 }
 
-# ── 3. Successful boot config with auto-restart disabled: config occurs, no restart ─
-Run-Test "3. Successful boot config with auto-restart disabled -> readiness true, no restart" {
+# ── 3. /copy succeeds but output is unparseable (orphan uncertainty) ─────────
+Run-Test "New-UefiBootEntry: unparseable /copy output logs uncertainty, returns null" {
     Reset-Mocks
-    $result = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $false -StandardEntrySucceeds $true
-    Assert-True ($result.UefiBootReady -eq $true) "readiness should be true even without auto-restart"
-    Assert-True ($result.RestartCalled -eq $false) "restart must NOT be called when auto-restart disabled"
-    Assert-LogContains "UEFI boot priority set successfully!"
+    $env:UB_COPY_OUTPUT = 'The operation completed successfully.'
+    $env:UB_COPY_GUID = 'no-guid-here'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null on unparseable output, got $guid"
+    Assert-LogContains "no entry GUID could be parsed" -IsError
+    Assert-LogContains "will not be deleted or modified" -IsError
 }
 
-# ── 4. Successful first run, failed second run: readiness does not leak ─────────────
-Run-Test "4. First run success then second run failure -> readiness does not leak" {
+# ── 4. device/path set failure -> entry cleaned up, null returned ────────────
+Run-Test "New-UefiBootEntry: device set failure cleans up and returns null" {
     Reset-Mocks
-
-    # First run: success
-    $r1 = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $false -StandardEntrySucceeds $true
-    Assert-True ($r1.UefiBootReady -eq $true) "first run readiness should be true"
-
-    # Second run: failure (without reset, readiness would leak from first run)
-    $r2 = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $false -StandardEntrySucceeds $false
-    Assert-True ($r2.UefiBootReady -eq $false) "second run readiness should be false, no leak from first run"
-    Assert-True ($r2.RestartCalled -eq $false) "no restart on second failed run"
+    $env:UB_SET_EXIT = '1'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null, got $guid"
+    Assert-LogContains "Failed to set device" -IsError
 }
 
-# ── 4b. Without the readiness reset, stale success leaks (verifies the reset matters) ─
-Run-Test "4b. Without readiness reset, stale success leaks into next run" {
+# ── 5. firmware default set failure -> entry cleaned up, null returned ───────
+Run-Test "New-UefiBootEntry: firmware default set failure cleans up and returns null" {
     Reset-Mocks
-
-    # First run: success
-    $r1 = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $false -StandardEntrySucceeds $true
-    Assert-True ($r1.UefiBootReady -eq $true)
-
-    # Second run: failure, but SKIP the reset to simulate the OLD buggy behavior
-    $r2 = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $false -StandardEntrySucceeds $false -SkipReadinessReset
-    Assert-True ($r2.UefiBootReady -eq $true) "WITHOUT reset, stale true leaks from first run"
+    $env:UB_DEFAULT_SET_EXIT = '1'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null, got $guid"
+    Assert-LogContains "Failed to set firmware default" -IsError
 }
 
-# ── 5. RefindPlus failure followed by successful standard-entry fallback ────────────
-Run-Test "5. RefindPlus failure then standard fallback success -> readiness true" {
+# ── 6. default verification failure -> entry cleaned up, null returned ───────
+Run-Test "New-UefiBootEntry: firmware default verification failure returns null" {
     Reset-Mocks
-    $result = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $true `
-        -RefindPlusDriveLetter "D" -RefindEntrySucceeds $false -StandardEntrySucceeds $true
-    Assert-True ($result.UefiBootReady -eq $true) "readiness should be true after fallback succeeds"
-    Assert-LogContains "RefindPlus entry creation failed; falling back to standard UEFI boot entry." -IsError
-    Assert-LogContains "UEFI boot priority set successfully!"
-    Assert-True ($result.UseRefind -eq $false) "UseRefind should be cleared after fallback"
+    $env:UB_COPY_GUID = '{33333333-3333-3333-3333-333333333333}'
+    # /enum {fwbootmgr} reports a DIFFERENT default -> verification fails
+    $env:UB_ENUM_DEFAULT = '{44444444-4444-4444-4444-444444444444}'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null when default not verified, got $guid"
+    Assert-LogContains "Firmware default verification failed" -IsError
 }
 
-# ── 6. Both boot-entry strategies fail: readiness false, manual instructions ────────
-Run-Test "6. Both strategies fail -> readiness false, manual recovery instructions" {
+# ---------- 7. Test-UelliFirmwareDefault ─────────────────────────────────────
+Run-Test "Test-UelliFirmwareDefault: matching default returns true" {
     Reset-Mocks
-    $result = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $true `
-        -RefindPlusDriveLetter "D" -RefindEntrySucceeds $false -StandardEntrySucceeds $false
-    Assert-True ($result.UefiBootReady -eq $false) "readiness should be false when both fail"
-    Assert-True ($result.RestartCalled -eq $false) "no restart when both fail"
-    Assert-LogContains "Could not create RefindPlus boot entry automatically" -IsError
-    Assert-LogContains "Could not create UEFI boot entry automatically" -IsError
-    Assert-LogContains "set boot priority manually" -IsError
-    Assert-LogNotContains "UEFI boot priority has been configured."
+    $env:UB_ENUM_DEFAULT = '{55555555-5555-5555-5555-555555555555}'
+    Assert-True ((Test-UelliFirmwareDefault -Guid '{55555555-5555-5555-5555-555555555555}') -eq $true)
+}
+Run-Test "Test-UelliFirmwareDefault: different default returns false" {
+    Reset-Mocks
+    $env:UB_ENUM_DEFAULT = '{66666666-6666-6666-6666-666666666666}'
+    Assert-True ((Test-UelliFirmwareDefault -Guid '{55555555-5555-5555-5555-555555555555}') -eq $false)
 }
 
-# ── 7. Messages agree with actual boot-readiness state ──────────────────────────────
-Run-Test "7. Success messages only when readiness true; failure messages when false" {
-    Reset-Mocks
-
-    # Success case
-    $rs = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $false -StandardEntrySucceeds $true
-    Assert-True ($rs.UefiBootReady -eq $true)
-    $allSuccessLog = ($rs.LogEntries | ForEach-Object { $_.Message }) -join "`n"
-    Assert-True ($allSuccessLog -like "*UEFI boot priority set successfully!*") "success log should confirm boot priority set"
-
-    # Failure case
-    $rf = Invoke-BootReadinessScenario -AutoRestart $false -UseRefind $false -StandardEntrySucceeds $false
-    Assert-True ($rf.UefiBootReady -eq $false)
-    $allFailLog = ($rf.LogEntries | ForEach-Object { $_.Message }) -join "`n"
-    Assert-True (($allFailLog -like "*set boot priority manually*") -or ($allFailLog -like "*NOT yet bootable*")) `
-        "failure log should contain manual recovery instructions"
-    Assert-True ($allFailLog -notlike "*UEFI boot priority has been configured*") `
-        "failure log must not claim boot priority was configured"
+# ---------- 8. Test-UelliEntryDevice ─────────────────────────────────────────
+Run-Test "Test-UelliEntryDevice: partition=D matches drive D" {
+    $entry = @{ Device = 'partition=D:' }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D') -eq $true)
+}
+Run-Test "Test-UelliEntryDevice: partition=E does not match drive D" {
+    $entry = @{ Device = 'partition=E:' }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D') -eq $false)
+}
+Run-Test "Test-UelliEntryDevice: missing device returns false" {
+    $entry = @{ ID = '{abc}' }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D') -eq $false)
 }
 
-# ── 8. Production New-UefiBootEntry with fake bcdedit.exe: success ─────────────────
-Run-Test "8. New-UefiBootEntry production code: bcdedit success returns true" {
-    # Create a fake bcdedit.exe that returns a GUID on /copy and exit 0 on /set
-    $fakeDir = Join-Path $env:TEMP "ulli_boot_tests_bcdedit"
-    if (-not (Test-Path $fakeDir)) { New-Item -ItemType Directory -Path $fakeDir | Out-Null }
-    $fakeExe = Join-Path $fakeDir "bcdedit.exe"
-    Set-Content -Path $fakeExe -Value @'
-#!/bin/bash
-if [[ "$1" == "/copy" ]]; then
-    echo "The operation completed successfully."
-    echo "{12345678-1234-1234-1234-123456789012}"
-    exit 0
-elif [[ "$1" == "/set" ]] || [[ "$1" == "/deletevalue" ]] || [[ "$1" == "/delete" ]]; then
-    exit 0
-fi
-exit 0
-'@ -Encoding UTF8
-    chmod 755 $fakeExe
-    $oldPath = $env:PATH
-    $sep = [System.IO.Path]::PathSeparator
-    $env:PATH = "$fakeDir$sep$oldPath"
-    try {
-        $sourcePath = Join-Path $PSScriptRoot "ulli-windows.ps1"
-        $source = Get-Content -Path $sourcePath -Raw
-        $marker = 'function New-UefiBootEntry {'
-        $idx = $source.IndexOf($marker)
-        if ($idx -lt 0) { throw "Could not find '$marker' in $sourcePath" }
-        $i = $idx + $marker.Length
-        $depth = 1
-        $sb = [System.Text.StringBuilder]::new()
-        [void]$sb.Append($marker)
-        $len = $source.Length
-        while ($i -lt $len) {
-            $c = $source[$i]
-            [void]$sb.Append($c)
-            if ($c -eq '{') { $depth++ }
-            elseif ($c -eq '}') { $depth-- }
-            $i++
-            if ($depth -eq 0) { break }
-        }
-        if ($depth -ne 0) { throw "Brace mismatch extracting New-UefiBootEntry" }
-        $funcBody = $sb.ToString()
-        function Write-LogMessage { param([string]$Message, [switch]$IsError) }
-        . ([scriptblock]::Create($funcBody))
-        $result = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
-        Assert-True ($result -eq $true) "New-UefiBootEntry should return true on bcdedit success, got $result"
-    } finally {
-        $env:PATH = $oldPath
-        if (Test-Path $fakeExe) { Remove-Item $fakeExe -Force }
-        if (Test-Path $fakeDir) { Remove-Item $fakeDir -Force -ErrorAction SilentlyContinue }
+# ---------- 9. Select-UelliExistingBootEntry: no broad substring selection ---
+Run-Test "Select-UelliExistingBootEntry: exact single match with device -> reused" {
+    Reset-Mocks
+    $entries = @(
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' }
+    )
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D'
+    Assert-True ($sel.ID -eq '{a}') "expected {a}, got $($sel.ID)"
+}
+Run-Test "Select-UelliExistingBootEntry: multiple exact matches -> ambiguous, null" {
+    Reset-Mocks
+    $entries = @(
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' },
+        @{ ID = '{b}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' }
+    )
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D'
+    Assert-True ($null -eq $sel) "expected null for ambiguous entries, got $($sel.ID)"
+    Assert-LogContains "refusing to modify any of them" -IsError
+}
+Run-Test "Select-UelliExistingBootEntry: no exact match -> null (no substring fallback)" {
+    Reset-Mocks
+    $entries = @(
+        @{ ID = '{a}'; Description = 'Some Other Distro'; Device = 'partition=D:' }
+    )
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D'
+    Assert-True ($null -eq $sel) "expected null when no exact match, got $($sel.ID)"
+}
+Run-Test "Select-UelliExistingBootEntry: exact match but device mismatch -> null" {
+    Reset-Mocks
+    $entries = @(
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=E:' }
+    )
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D'
+    Assert-True ($null -eq $sel) "expected null for device mismatch, got $($sel.ID)"
+    Assert-LogContains "treating as ambiguous" -IsError
+}
+
+# ---------- 10. Configure-UelliBootEntry (production helper with injectables) --
+$script:mockNewUefiBootEntryGuid = $null
+
+function Mock-NewUefiBootEntry {
+    param([string]$d, [string]$dp, [string]$ep)
+    return $script:mockNewUefiBootEntryGuid
+}
+
+function Mock-GetFirmwareEntries {
+    param()
+    return $script:mockFirmwareEntries
+}
+
+function Mock-SetFirmwareDefault {
+    param([string]$g)
+    return $script:mockSetFirmwareDefaultResult
+}
+
+Run-Test "Configure-UelliBootEntry: RefindPlus success -> readiness true" {
+    Reset-Mocks
+    $script:mockNewUefiBootEntryGuid = '{77777777-7777-7777-7777-777777777777}'
+    $result = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" `
+        -BootDriveLetter 'D' `
+        -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -UseRefind `
+        -RefindDriveLetter 'E' `
+        -NewUefiBootEntry (${function:Mock-NewUefiBootEntry})
+    Assert-True ($result.Ready -eq $true) "readiness should be true, got $($result.Ready)"
+    Assert-True ($result.UseRefind -eq $true) "UseRefind should remain true"
+    Assert-LogContains "RefindPlus UEFI boot entry created and set as the firmware default"
+}
+Run-Test "Configure-UelliBootEntry: RefindPlus failure falls back to standard success" {
+    Reset-Mocks
+    # RefindPlus entry creation fails -> falls back to standard path
+    $script:mockNewUefiBootEntryGuid = $null
+    $script:mockFirmwareEntries = @()
+    # Second New-UefiBootEntry call (standard) succeeds
+    $callCount = 0
+    $script:mockNewUefiBootEntryGuid = $null
+    # Use a counter-based mock: first call (RefindPlus) null, second (standard) GUID
+    $script:refindFallbackCalls = 0
+    function Counter-NewUefiBootEntry {
+        param([string]$d, [string]$dp, [string]$ep)
+        $script:refindFallbackCalls++
+        if ($script:refindFallbackCalls -eq 1) { return $null }
+        return '{88888888-8888-8888-8888-888888888888}'
     }
+    $result = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" `
+        -BootDriveLetter 'D' `
+        -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -UseRefind `
+        -RefindDriveLetter 'E' `
+        -NewUefiBootEntry (${function:Counter-NewUefiBootEntry}) `
+        -GetFirmwareEntries (${function:Mock-GetFirmwareEntries})
+    Assert-True ($result.Ready -eq $true) "readiness should be true after fallback, got $($result.Ready)"
+    Assert-True ($result.UseRefind -eq $false) "UseRefind cleared after RefindPlus failure"
+    Assert-LogContains "falling back to standard UEFI boot entry" -IsError
+    Assert-LogContains "New UEFI boot entry created and set as the firmware default"
+}
+Run-Test "Configure-UelliBootEntry: existing entry selected and default set -> readiness true" {
+    Reset-Mocks
+    $script:mockNewUefiBootEntryGuid = $null
+    $script:mockFirmwareEntries = @(
+        @{ ID = '{x}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' }
+    )
+    $script:mockSetFirmwareDefaultResult = $true
+    $result = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" `
+        -BootDriveLetter 'D' `
+        -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -NewUefiBootEntry (${function:Mock-NewUefiBootEntry}) `
+        -GetFirmwareEntries (${function:Mock-GetFirmwareEntries}) `
+        -SetFirmwareDefault (${function:Mock-SetFirmwareDefault})
+    Assert-True ($result.Ready -eq $true) "readiness should be true for existing entry, got $($result.Ready)"
+    Assert-LogContains "UEFI boot default set to existing entry"
+}
+Run-Test "Configure-UelliBootEntry: ambiguous existing entries -> creates new entry" {
+    Reset-Mocks
+    $script:refindFallbackCalls = 0
+    $script:mockNewUefiBootEntryGuid = '{99999999-9999-9999-9999-999999999999}'
+    $script:mockFirmwareEntries = @(
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' },
+        @{ ID = '{b}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' }
+    )
+    $result = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" `
+        -BootDriveLetter 'D' `
+        -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -NewUefiBootEntry (${function:Mock-NewUefiBootEntry}) `
+        -GetFirmwareEntries (${function:Mock-GetFirmwareEntries})
+    Assert-True ($result.Ready -eq $true) "readiness should be true after creating new entry, got $($result.Ready)"
+    Assert-LogContains "New UEFI boot entry created and set as the firmware default"
+    Assert-LogContains "refusing to modify any of them" -IsError
+}
+Run-Test "Configure-UelliBootEntry: both strategies fail -> readiness false" {
+    Reset-Mocks
+    $script:mockNewUefiBootEntryGuid = $null
+    $script:mockFirmwareEntries = @()
+    $script:mockSetFirmwareDefaultResult = $false
+    $result = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" `
+        -BootDriveLetter 'D' `
+        -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -NewUefiBootEntry (${function:Mock-NewUefiBootEntry}) `
+        -GetFirmwareEntries (${function:Mock-GetFirmwareEntries}) `
+        -SetFirmwareDefault (${function:Mock-SetFirmwareDefault})
+    Assert-True ($result.Ready -eq $false) "readiness should be false when both fail, got $($result.Ready)"
+    Assert-LogContains "Could not create UEFI boot entry automatically" -IsError
+}
+Run-Test "Configure-UelliBootEntry: readiness does not leak between runs" {
+    Reset-Mocks
+    $script:mockNewUefiBootEntryGuid = '{aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}'
+    $r1 = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" -BootDriveLetter 'D' -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -NewUefiBootEntry (${function:Mock-NewUefiBootEntry})
+    Assert-True ($r1.Ready -eq $true) "first run readiness should be true"
+    # Second run: entry creation fails; readiness must reset to false (no leak).
+    $script:mockNewUefiBootEntryGuid = $null
+    $r2 = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" -BootDriveLetter 'D' -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -NewUefiBootEntry (${function:Mock-NewUefiBootEntry})
+    Assert-True ($r2.Ready -eq $false) "second run readiness should be false, no leak from first run"
 }
 
-# ── 9. Production New-UefiBootEntry: bcdedit /copy failure returns false ───────────
-Run-Test "9. New-UefiBootEntry production code: bcdedit /copy failure returns false" {
-    $fakeDir = Join-Path $env:TEMP "ulli_boot_tests_bcdedit_fail"
-    if (-not (Test-Path $fakeDir)) { New-Item -ItemType Directory -Path $fakeDir | Out-Null }
-    $fakeExe = Join-Path $fakeDir "bcdedit.exe"
-    Set-Content -Path $fakeExe -Value @'
-#!/bin/bash
-echo "The operation failed." >&2
-exit 1
-'@ -Encoding UTF8
-    chmod 755 $fakeExe
-    $oldPath = $env:PATH
-    $sep = [System.IO.Path]::PathSeparator
-    $env:PATH = "$fakeDir$sep$oldPath"
-    try {
-        $sourcePath = Join-Path $PSScriptRoot "ulli-windows.ps1"
-        $source = Get-Content -Path $sourcePath -Raw
-        $marker = 'function New-UefiBootEntry {'
-        $idx = $source.IndexOf($marker)
-        if ($idx -lt 0) { throw "Could not find '$marker' in $sourcePath" }
-        $i = $idx + $marker.Length
-        $depth = 1
-        $sb = [System.Text.StringBuilder]::new()
-        [void]$sb.Append($marker)
-        $len = $source.Length
-        while ($i -lt $len) {
-            $c = $source[$i]
-            [void]$sb.Append($c)
-            if ($c -eq '{') { $depth++ }
-            elseif ($c -eq '}') { $depth-- }
-            $i++
-            if ($depth -eq 0) { break }
-        }
-        if ($depth -ne 0) { throw "Brace mismatch extracting New-UefiBootEntry" }
-        $funcBody = $sb.ToString()
-        function Write-LogMessage { param([string]$Message, [switch]$IsError) }
-        . ([scriptblock]::Create($funcBody))
-        $result = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
-        Assert-True ($result -eq $false) "New-UefiBootEntry should return false on bcdedit failure, got $result"
-    } finally {
-        $env:PATH = $oldPath
-        if (Test-Path $fakeExe) { Remove-Item $fakeExe -Force }
-        if (Test-Path $fakeDir) { Remove-Item $fakeDir -Force -ErrorAction SilentlyContinue }
-    }
+# ---------- 11. Restart eligibility ──────────────────────────────────────────
+Run-Test "Restart eligible only when auto-restart AND readiness are true" {
+    Assert-True ((Test-UelliBootRestartEligible -AutoRestart $true -BootReady $true) -eq $true)
+    Assert-True ((Test-UelliBootRestartEligible -AutoRestart $true -BootReady $false) -eq $false)
+    Assert-True ((Test-UelliBootRestartEligible -AutoRestart $false -BootReady $true) -eq $false)
+    Assert-True ((Test-UelliBootRestartEligible -AutoRestart $false -BootReady $false) -eq $false)
+}
+
+# ---------- 12. Conditional status text ──────────────────────────────────────
+Run-Test "Status text: complete when ready, incomplete when not" {
+    Assert-True ((Get-UelliBootStatusText -BootReady $true) -eq "Installation complete!")
+    Assert-True ((Get-UelliBootStatusText -BootReady $false) -eq "Installation finished - boot configuration incomplete")
 }
 
 # ---------- Summary ----------

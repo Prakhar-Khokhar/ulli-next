@@ -866,14 +866,13 @@ exit
 
 function New-UefiBootEntry {
     [CmdletBinding(SupportsShouldProcess = $true)]
-    [OutputType([bool])]
+    [OutputType([string])]
     param(
         [string]$DistroName,
         [string]$DevicePartition,
         [string]$EfiPath
     )
     if (-not $PSCmdlet.ShouldProcess("UEFI boot entry", "create UEFI boot entry")) { return }
-    $bootCreated = $false
     try {
         $copyOutput = & bcdedit.exe /copy "{bootmgr}" /d "`"$DistroName`"" 2>&1
         $copyExitCode = $LASTEXITCODE
@@ -881,50 +880,245 @@ function New-UefiBootEntry {
 
         if ($copyExitCode -ne 0) {
             Write-LogMessage "bcdedit /copy failed with exit code $copyExitCode`: $copyOutputStr" -IsError
-            return $false
+            return $null
         }
 
-        if ($copyOutputStr -match '\{[0-9a-fA-F-]+\}') {
-            $newGuid = $matches[0]
-            Write-LogMessage "Created new entry: $newGuid"
-
-            $inheritedProps = @("default", "displayorder", "toolsdisplayorder", "timeout", "resumeobject", "inherit", "locale")
-            foreach ($prop in $inheritedProps) {
-                Start-Process "bcdedit.exe" -ArgumentList "/deletevalue", $newGuid, $prop -Wait -NoNewWindow -ErrorAction SilentlyContinue 2>$null | Out-Null
-            }
-
-            Write-LogMessage "Setting device=partition=$DevicePartition path=$EfiPath"
-
-            $r1 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "device", "partition=$DevicePartition" -Wait -PassThru -NoNewWindow
-            if ($r1.ExitCode -ne 0) {
-                Write-LogMessage "Failed to set device for $newGuid (exit $($r1.ExitCode))" -IsError
-                Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
-                return $false
-            }
-            $r2 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "path", $EfiPath -Wait -PassThru -NoNewWindow
-            if ($r2.ExitCode -ne 0) {
-                Write-LogMessage "Failed to set path for $newGuid (exit $($r2.ExitCode))" -IsError
-                Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
-                return $false
-            }
-            $rDesc = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "description", "`"$DistroName`"" -Wait -PassThru -NoNewWindow
-            if ($rDesc.ExitCode -ne 0) {
-                Write-LogMessage "Failed to set description for $newGuid (exit $($rDesc.ExitCode))" -IsError
-            }
-
-            $r3 = $null
-            $r4 = $null
-
-            Write-LogMessage "UEFI boot entry created (firmware default/boot order left unchanged)."
-            $bootCreated = $true
-        } else {
-            Write-LogMessage "bcdedit /copy did not return a GUID: $copyOutputStr" -IsError
+        if ($copyOutputStr -notmatch '\{[0-9a-fA-F-]+\}') {
+            # bcdedit /copy may have created an entry, but its identity cannot be
+            # determined from the output. Do not delete anything we cannot identify,
+            # to avoid removing an unrelated firmware entry.
+            Write-LogMessage "bcdedit /copy succeeded but no entry GUID could be parsed: $copyOutputStr" -IsError
+            Write-LogMessage "A firmware entry may have been created but its identity is unknown; it will not be deleted or modified." -IsError
+            return $null
         }
+        $newGuid = $matches[0]
+        Write-LogMessage "Created new entry: $newGuid"
+
+        $inheritedProps = @("default", "displayorder", "toolsdisplayorder", "timeout", "resumeobject", "inherit", "locale")
+        foreach ($prop in $inheritedProps) {
+            Start-Process "bcdedit.exe" -ArgumentList "/deletevalue", $newGuid, $prop -Wait -NoNewWindow -ErrorAction SilentlyContinue 2>$null | Out-Null
+        }
+
+        Write-LogMessage "Setting device=partition=$DevicePartition path=$EfiPath"
+
+        $r1 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "device", "partition=$DevicePartition" -Wait -PassThru -NoNewWindow
+        if ($r1.ExitCode -ne 0) {
+            Write-LogMessage "Failed to set device for $newGuid (exit $($r1.ExitCode))" -IsError
+            Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+            return $null
+        }
+        $r2 = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "path", $EfiPath -Wait -PassThru -NoNewWindow
+        if ($r2.ExitCode -ne 0) {
+            Write-LogMessage "Failed to set path for $newGuid (exit $($r2.ExitCode))" -IsError
+            Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+            return $null
+        }
+        $rDesc = Start-Process "bcdedit.exe" -ArgumentList "/set", $newGuid, "description", "`"$DistroName`"" -Wait -PassThru -NoNewWindow
+        if ($rDesc.ExitCode -ne 0) {
+            Write-LogMessage "Failed to set description for $newGuid (exit $($rDesc.ExitCode))" -IsError
+            Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+            return $null
+        }
+
+        # Making the entry the firmware default is the only step that changes
+        # where the firmware boots on the next restart. Merely creating an entry
+        # does not make the system boot Linux, so readiness requires this to
+        # succeed and to be verified. The firmware is not guaranteed to honor it.
+        $rDefault = Start-Process "bcdedit.exe" -ArgumentList "/set", "{fwbootmgr}", "default", $newGuid -Wait -PassThru -NoNewWindow
+        if ($rDefault.ExitCode -ne 0) {
+            Write-LogMessage "Failed to set firmware default to $newGuid (exit $($rDefault.ExitCode))" -IsError
+            Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+            return $null
+        }
+
+        $rOrder = Start-Process "bcdedit.exe" -ArgumentList "/displayorder", $newGuid, "/addlast" -Wait -PassThru -NoNewWindow
+        if ($rOrder.ExitCode -ne 0) {
+            Write-LogMessage "Warning: failed to add $newGuid to the firmware display order (exit $($rOrder.ExitCode)); it remains the firmware default." -IsError
+        }
+
+        if (-not (Test-UelliFirmwareDefault -Guid $newGuid)) {
+            Write-LogMessage "Firmware default verification failed for $newGuid; the entry exists but may not be the next boot target." -IsError
+            Start-Process "bcdedit.exe" -ArgumentList "/delete", $newGuid -Wait -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+            return $null
+        }
+
+        Write-LogMessage "UEFI boot entry created and set as the firmware default: $newGuid"
+        return $newGuid
     }
     catch {
         Write-LogMessage "Failed to create boot entry: $_" -IsError
+        return $null
     }
-    return $bootCreated
+}
+
+function Test-UelliFirmwareDefault {
+    param([string]$Guid)
+    try {
+        $output = bcdedit.exe /enum "{fwbootmgr}" 2>&1
+    } catch {
+        return $false
+    }
+    $str = ($output -join " ")
+    if ($str -match 'default\s+(\{[0-9a-fA-F-]+\})') {
+        return ($matches[1] -eq $Guid)
+    }
+    return $false
+}
+
+function Test-UelliEntryDevice {
+    param([hashtable]$Entry, [string]$BootDriveLetter)
+    $device = if ($Entry.ContainsKey('Device')) { $Entry.Device } else { $null }
+    if (-not $device) { return $false }
+    return ($device -imatch "(^|[^a-zA-Z])partition=$([regex]::Escape($BootDriveLetter))(:|\s|$)")
+}
+
+function Select-UelliExistingBootEntry {
+    param(
+        [array]$BootEntries,
+        [string]$DistroName,
+        [string]$BootDriveLetter
+    )
+    # Do not select an entry as belonging to this installation on a broad
+    # description substring alone. Only an exact description match that also
+    # references the boot partition created by this run is reused; anything
+    # ambiguous is left untouched and a new entry is created instead.
+    $exactMatches = @($BootEntries | Where-Object { $_.Description -eq $DistroName })
+    if ($exactMatches.Count -eq 1) {
+        $candidate = $exactMatches[0]
+        if (Test-UelliEntryDevice -Entry $candidate -BootDriveLetter $BootDriveLetter) {
+            return $candidate
+        }
+        Write-LogMessage "Existing entry '$($candidate.Description)' does not reference boot partition ${BootDriveLetter}:; treating as ambiguous." -IsError
+        return $null
+    }
+    if ($exactMatches.Count -gt 1) {
+        Write-LogMessage "Multiple existing entries match '$DistroName'; refusing to modify any of them (ambiguous)." -IsError
+        return $null
+    }
+    return $null
+}
+
+function Get-FirmwareEntriesFromBcdedit {
+    [OutputType([array])]
+    param()
+    $entries = @()
+    $current = $null
+    try {
+        $lines = bcdedit /enum firmware 2>&1
+    } catch {
+        Write-LogMessage "Failed to enumerate firmware boot entries: $_" -IsError
+        return $entries
+    }
+    foreach ($line in $lines) {
+        if ($line -match '^Firmware Application \(') {
+            if ($current) { $entries += $current }
+            $current = @{}
+        }
+        elseif ($line -match '^identifier\s+(.+)$') {
+            if ($current) { $current.ID = $matches[1].Trim() }
+        }
+        elseif ($line -match '^description\s+(.+)$') {
+            if ($current) { $current.Description = $matches[1].Trim() }
+        }
+        elseif ($line -match '^device\s+(.+)$') {
+            if ($current) { $current.Device = $matches[1].Trim() }
+        }
+    }
+    if ($current) { $entries += $current }
+    return $entries
+}
+
+function Set-FirmwareDefault {
+    param([string]$Guid)
+    $process = Start-Process -FilePath "bcdedit.exe" -ArgumentList "/set", "{fwbootmgr}", "default", $Guid -Wait -PassThru -NoNewWindow
+    if ($process.ExitCode -ne 0) {
+        Write-LogMessage "bcdedit /set default returned exit code $($process.ExitCode)" -IsError
+        return $false
+    }
+    return (Test-UelliFirmwareDefault -Guid $Guid)
+}
+
+function Configure-UelliBootEntry {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [string]$DistroName,
+        [string]$BootDriveLetter,
+        [string]$EfiPath,
+        [switch]$UseRefind,
+        [string]$RefindDriveLetter,
+        [string]$RefindEfiPath = "\EFI\refindplus\x64_RefindPlus_REL.efi",
+        # Injectable dependencies (defaults use the real Windows commands above).
+        [scriptblock]$NewUefiBootEntry = $null,
+        [scriptblock]$GetFirmwareEntries = $null,
+        [scriptblock]$SetFirmwareDefault = $null
+    )
+    if (-not $PSCmdlet.ShouldProcess("UEFI boot entry", "configure UEFI boot entry")) { return }
+    $script:uefiBootReady = $false
+    $useRefindLocal = [bool]$UseRefind
+
+    if (-not $NewUefiBootEntry) {
+        $NewUefiBootEntry = {
+            param($d, $dp, $ep)
+            New-UefiBootEntry -DistroName $d -DevicePartition $dp -EfiPath $ep
+        }
+    }
+    if (-not $GetFirmwareEntries) {
+        $GetFirmwareEntries = { Get-FirmwareEntriesFromBcdedit }
+    }
+    if (-not $SetFirmwareDefault) {
+        $SetFirmwareDefault = { param($g) Set-FirmwareDefault -Guid $g }
+    }
+
+    if ($UseRefind -and $RefindDriveLetter) {
+        Write-LogMessage "Creating UEFI boot entry for RefindPlus..."
+        $guid = & $NewUefiBootEntry "RefindPlus - ULLI" "${RefindDriveLetter}:" $RefindEfiPath
+        if ($guid) {
+            Write-LogMessage "RefindPlus UEFI boot entry created and set as the firmware default: $guid"
+            $script:uefiBootReady = $true
+        } else {
+            Write-LogMessage "Could not create RefindPlus boot entry automatically; falling back to standard UEFI boot entry." -IsError
+            $useRefindLocal = $false
+        }
+    }
+
+    if (-not $useRefindLocal) {
+        $entries = & $GetFirmwareEntries
+        $target = Select-UelliExistingBootEntry -BootEntries $entries -DistroName $DistroName -BootDriveLetter $BootDriveLetter
+        if ($target) {
+            $ok = & $SetFirmwareDefault $target.ID
+            if ($ok) {
+                Write-LogMessage "UEFI boot default set to existing entry: $($target.Description)"
+                $script:uefiBootReady = $true
+            } else {
+                Write-LogMessage "Failed to set firmware default to existing entry $($target.ID)" -IsError
+            }
+        } else {
+            Write-LogMessage "No reliable existing boot entry for '$DistroName'; creating a new UEFI firmware boot entry..."
+            $guid = & $NewUefiBootEntry $DistroName "${BootDriveLetter}:" $EfiPath
+            if ($guid) {
+                Write-LogMessage "New UEFI boot entry created and set as the firmware default: $guid"
+                $script:uefiBootReady = $true
+            } else {
+                Write-LogMessage "Could not create UEFI boot entry automatically" -IsError
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        Ready    = [bool]$script:uefiBootReady
+        UseRefind = $useRefindLocal
+    }
+}
+
+function Get-UelliBootStatusText {
+    param([bool]$BootReady)
+    if ($BootReady) { return "Installation complete!" }
+    return "Installation finished - boot configuration incomplete"
+}
+
+function Test-UelliBootRestartEligible {
+    param([bool]$AutoRestart, [bool]$BootReady)
+    return ($AutoRestart -and $BootReady)
 }
 
 function Set-UILocked {
@@ -3847,120 +4041,17 @@ exit
         try {
             $script:uefiBootReady = $false
 
-            if ($useRefind -and $script:RefindPlusDriveLetter) {
-                # RefindPlus boot entry - point to the RefindPlus partition
-                Write-LogMessage "Creating UEFI boot entry for RefindPlus..."
-                $refindDrive = "$($script:RefindPlusDriveLetter):"
-                $bootCreated = New-UefiBootEntry -DistroName "RefindPlus - ULLI" `
-                    -DevicePartition $refindDrive -EfiPath "\EFI\refindplus\x64_RefindPlus_REL.efi"
+            $bootDeviceDrive = $script:NewDrive
 
-                if ($bootCreated) {
-                    Write-LogMessage "RefindPlus UEFI boot entry created. Windows Boot Manager remains the default."
-                    $script:uefiBootReady = $true
-                } else {
-                    Write-LogMessage "Could not create RefindPlus boot entry automatically" -IsError
-                    # Fall back to the standard UEFI entry creation path.
-                    Write-LogMessage "RefindPlus entry creation failed; falling back to standard UEFI boot entry." -IsError
-                    $useRefind = $false
-                }
-            }
+            $bootOutcome = Configure-UelliBootEntry `
+                -DistroName $distroName `
+                -BootDriveLetter $bootDeviceDrive.TrimEnd(':') `
+                -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+                -UseRefind:[$useRefind] `
+                -RefindDriveLetter $script:RefindPlusDriveLetter
 
-            if (-not $useRefind) {
-                # Standard boot entry (no RefindPlus, or RefindPlus fell back)
-                $bcdeditOutput = bcdedit /enum firmware 2>&1
-                $lines = $bcdeditOutput
-
-                $bootEntries = @()
-                $currentEntry = $null
-
-                foreach ($line in $lines) {
-                    if ($line -match '^Firmware Application \(') {
-                        if ($currentEntry) {
-                            $bootEntries += $currentEntry
-                        }
-                        $currentEntry = @{}
-                    }
-                    elseif ($line -match '^identifier\s+(.+)$') {
-                        if ($currentEntry) {
-                            $currentEntry.ID = $matches[1].Trim()
-                        }
-                    }
-                    elseif ($line -match '^description\s+(.+)$') {
-                        if ($currentEntry) {
-                            $currentEntry.Description = $matches[1].Trim()
-                        }
-                    }
-                }
-                if ($currentEntry) {
-                    $bootEntries += $currentEntry
-                }
-
-                Write-LogMessage "Found $($bootEntries.Count) firmware boot entries:"
-                foreach ($entry in $bootEntries) {
-                    Write-LogMessage "  $($entry.Description) [$($entry.ID)]"
-                }
-
-                $distroKeyword = $distro.Keyword
-
-                $targetEntry = $null
-
-                $targetEntry = $bootEntries | Where-Object { $_.Description -like "*$distroKeyword*" } | Select-Object -First 1
-                if ($targetEntry) {
-                    Write-LogMessage "Found existing boot entry for '$distroKeyword'"
-                }
-
-                if (-not $targetEntry) {
-                    $targetEntry = $bootEntries | Where-Object { $_.Description -like '*UEFI OS*' } | Select-Object -First 1
-                    if ($targetEntry) {
-                        Write-LogMessage "Found generic 'UEFI OS' boot entry"
-                    }
-                }
-
-                if ($targetEntry) {
-                    Write-LogMessage "Setting boot priority to: $($targetEntry.Description) [$($targetEntry.ID)]"
-
-                    $process = Start-Process -FilePath "bcdedit.exe" `
-                        -ArgumentList "/set", "{fwbootmgr}", "default", $targetEntry.ID `
-                        -Wait -PassThru -NoNewWindow
-
-                    if ($process.ExitCode -eq 0) {
-                        Write-LogMessage "UEFI boot priority set successfully!"
-                        $script:uefiBootReady = $true
-                    } else {
-                        Write-LogMessage "bcdedit /set default returned exit code $($process.ExitCode)" -IsError
-                    }
-                } else {
-                    Write-LogMessage "No existing boot entry found for $distroName"
-                    Write-LogMessage "Creating new UEFI firmware boot entry..."
-                    $bootCreated = $false
-
-                    if ($script:WipeBootInstalled) {
-                        Write-LogMessage "Creating firmware boot entry (Windows ESP)..."
-                        $wipeEfiPath = "$($script:WipeEspDistroDir)\$($script:WipeEfiName)"
-                        $bootCreated = New-UefiBootEntry -DistroName $distroName `
-                            -DevicePartition $script:WipeWinEspDrive -EfiPath $wipeEfiPath
-
-                        # Clean up ESP drive letter if we assigned it
-                        if ($script:WipeEspRemoveLetter -and $script:WipeEspLetter) {
-                            $script:WipeEspPartition | Remove-PartitionAccessPath -AccessPath "$($script:WipeEspLetter):\" -ErrorAction SilentlyContinue
-                        }
-                    } else {
-                        $bootDeviceDrive = $script:NewDrive
-                        Write-LogMessage "Boot entry will point to partition: $bootDeviceDrive"
-                        Write-LogMessage "Attempting bcdedit /copy method..."
-                        $bootCreated = New-UefiBootEntry -DistroName $distroName `
-                            -DevicePartition $bootDeviceDrive -EfiPath "\EFI\BOOT\BOOTx64.EFI"
-                    }
-
-                    if ($bootCreated) {
-                        $script:uefiBootReady = $true
-                    } else {
-                        Write-LogMessage "Could not create UEFI boot entry automatically" -IsError
-                        Write-LogMessage "You will need to set boot priority manually in UEFI/BIOS settings" -IsError
-                        Write-LogMessage "Or use the one-time boot menu (usually F12) to select the $distroName partition" -IsError
-                    }
-                }
-            }
+            $script:uefiBootReady = [bool]$bootOutcome.Ready
+            $useRefind = [bool]$bootOutcome.UseRefind
         }
         catch {
             Write-LogMessage "Error configuring UEFI boot: $_" -IsError
@@ -4005,22 +4096,24 @@ exit
 
         if ($useRefind -and $script:RefindPlusDriveLetter) {
             Write-LogMessage ""
-            Write-LogMessage "RefindPlus boot manager has been installed. Its firmware entry was created without changing the firmware default or boot order."
+            Write-LogMessage "RefindPlus boot manager has been installed and configured as the firmware default."
             Write-LogMessage ""
         }
 
         if ($script:uefiBootReady) {
             Write-LogMessage "*** BOOT CONFIGURATION COMPLETE ***"
-            Write-LogMessage "UEFI boot priority has been configured."
+            Write-LogMessage "The UEFI boot default has been configured to the new boot entry."
+            Write-LogMessage "The firmware should boot this entry on the next restart; this is not guaranteed."
+            Write-LogMessage "If it does not, use the firmware boot menu to select the entry manually."
             if ($autoRestartCheck.Checked) {
                 Write-LogMessage "The system will restart automatically."
             } else {
                 Write-LogMessage "Restart your computer to boot into the installed system."
             }
             if ($useRefind -and $script:RefindPlusDriveLetter) {
-                Write-LogMessage "After restart, RefindPlus should appear automatically and show `"$distroName`"."
+                Write-LogMessage "After restart, RefindPlus should appear as the firmware default and show `"$distroName`"."
             } else {
-                Write-LogMessage "After restart, the system will boot into $distroName"
+                Write-LogMessage "After restart, the system should boot into $distroName; if it does not, use the firmware boot menu."
             }
             Write-LogMessage ""
         } else {
@@ -4047,7 +4140,7 @@ exit
             Write-LogMessage ""
         }
 
-        Set-Status "Installation complete!"
+        Set-Status (Get-UelliBootStatusText -BootReady $script:uefiBootReady)
 
         # Delete ISO if requested
         if ($deleteIsoCheck.Checked -and -not $customRadio.Checked) {
@@ -4062,7 +4155,7 @@ exit
 
         # Auto-restart only when enabled AND the current installation's required
         # boot configuration succeeded. Never restart into an unverified boot path.
-        if ($autoRestartCheck.Checked -and $script:uefiBootReady) {
+        if (Test-UelliBootRestartEligible -AutoRestart $autoRestartCheck.Checked -BootReady $script:uefiBootReady) {
             Write-LogMessage ""
             Write-LogMessage "Preparing for automatic restart..."
 
@@ -4076,9 +4169,9 @@ exit
 
             $countdownLabel = New-Object System.Windows.Forms.Label
             $restartMsg = if ($useRefind -and $script:RefindPlusDriveLetter) {
-                "UEFI boot priority has been configured.`nRefindPlus should appear automatically and show `"$distroName`"."
+                "The firmware boot default has been configured to RefindPlus.`nRefindPlus should appear on restart and show `"$distroName`"; use the firmware boot menu if it does not."
             } else {
-                "UEFI boot priority has been configured.`nThe system will boot directly into $distroName."
+                "The firmware boot default has been configured.`nThe system should boot into $distroName on restart; if it does not, use the firmware boot menu."
             }
             $countdownLabel.Text = "System will restart in 30 seconds...`n`n$restartMsg"
             $countdownLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
