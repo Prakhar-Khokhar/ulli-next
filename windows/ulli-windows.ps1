@@ -891,7 +891,16 @@ function New-UefiBootEntry {
             Write-LogMessage "A firmware entry may have been created but its identity is unknown; it will not be deleted or modified." -IsError
             return $null
         }
-        $newGuid = $matches[0]
+        $guidMatches = [regex]::Matches($copyOutputStr, '\{[0-9a-fA-F-]+\}')
+        if ($guidMatches.Count -ne 1) {
+            # Zero or more than one GUID: missing or ambiguous identity. Do not
+            # guess which identifier belongs to the newly created entry, and never
+            # delete an entry we cannot positively claim as our own.
+            Write-LogMessage "bcdedit /copy output did not contain exactly one entry GUID ($($guidMatches.Count) found): $copyOutputStr" -IsError
+            Write-LogMessage "A firmware entry may have been created but its identity is ambiguous; it will not be deleted or modified." -IsError
+            return $null
+        }
+        $newGuid = $guidMatches[0].Value
         Write-LogMessage "Created new entry: $newGuid"
 
         $inheritedProps = @("default", "displayorder", "toolsdisplayorder", "timeout", "resumeobject", "inherit", "locale")
@@ -966,26 +975,91 @@ function Test-UelliFirmwareDefault {
 }
 
 function Test-UelliEntryDevice {
-    param([hashtable]$Entry, [string]$BootDriveLetter)
+    param(
+        [hashtable]$Entry,
+        [string]$BootDriveLetter,
+        # Optional injectable resolver for native device paths. Defaults to
+        # Get-UelliDriveLetterFromDevicePath; tests supply a mock so no real
+        # system state is required. Fail-closed: an unresolvable device never
+        # matches.
+        [scriptblock]$ResolveDriveLetter = $null
+    )
     $device = if ($Entry.ContainsKey('Device')) { $Entry.Device } else { $null }
     if (-not $device) { return $false }
-    return ($device -imatch "(^|[^a-zA-Z])partition=$([regex]::Escape($BootDriveLetter))(:|\s|$)")
+
+    # Drive-letter form: partition=D:  (reliable, direct match)
+    if ($device -imatch '^partition=([A-Z]):\s*$') {
+        return ($matches[1] -ieq $BootDriveLetter)
+    }
+
+    # Native device path form: partition=\Device\HarddiskVolumeN.
+    # Resolve to a drive letter before comparing; never infer a match from
+    # string similarity, and never match when resolution fails.
+    if ($device -imatch '^partition=(\\Device\\HarddiskVolume\d+)\s*$') {
+        if (-not $ResolveDriveLetter) {
+            $resolved = Get-UelliDriveLetterFromDevicePath -DevicePath $device
+        } else {
+            $resolved = & $ResolveDriveLetter -DevicePath $device
+        }
+        if (-not $resolved) { return $false }
+        return ($resolved -ieq $BootDriveLetter)
+    }
+
+    # Any other device representation is unsupported or ambiguous -> fail closed.
+    return $false
+}
+
+function Get-UelliDriveLetterFromDevicePath {
+    param([string]$DevicePath)
+    # Resolve a native device path such as partition=\Device\HarddiskVolumeN to
+    # a Windows drive letter. Requires the Storage cmdlets and real system state,
+    # so this can only be verified on Windows. On any failure return $null so the
+    # caller treats the device as unresolved (fail-closed: never reuse an entry
+    # whose device cannot be confirmed). Do not guess a drive letter from a
+    # device string that looks similar.
+    if ($DevicePath -notmatch '^partition=(\\Device\\HarddiskVolume\d+)\s*$') {
+        return $null
+    }
+    $volumePath = $matches[1]
+    try {
+        $partition = Get-Partition -Access $volumePath -ErrorAction Stop | Select-Object -First 1
+        if ($partition -and $partition.DriveLetter) {
+            return $partition.DriveLetter
+        }
+    } catch {
+        return $null
+    }
+    return $null
 }
 
 function Select-UelliExistingBootEntry {
     param(
         [array]$BootEntries,
         [string]$DistroName,
-        [string]$BootDriveLetter
+        [string]$BootDriveLetter,
+        # The EFI loader path the installer intends to use. An existing entry is
+        # reused only when its path matches this intended loader path, so the
+        # standard Linux-loader and RefindPlus paths stay distinct.
+        [string]$EfiPath
     )
     # Do not select an entry as belonging to this installation on a broad
     # description substring alone. Only an exact description match that also
-    # references the boot partition created by this run is reused; anything
-    # ambiguous is left untouched and a new entry is created instead.
+    # references the boot partition created by this run and uses the intended
+    # EFI loader path is reused; anything ambiguous is left untouched and a new
+    # entry is created instead.
     $exactMatches = @($BootEntries | Where-Object { $_.Description -eq $DistroName })
     if ($exactMatches.Count -eq 1) {
         $candidate = $exactMatches[0]
         if (Test-UelliEntryDevice -Entry $candidate -BootDriveLetter $BootDriveLetter) {
+            $candidatePath = if ($candidate.ContainsKey('Path')) { $candidate.Path } else { $null }
+            if (-not $candidatePath) {
+                Write-LogMessage "Existing entry '$($candidate.Description)' has no EFI path recorded; treating as ambiguous." -IsError
+                return $null
+            }
+            if ($candidatePath -ine $EfiPath) {
+                Write-LogMessage "Existing entry '$($candidate.Description)' EFI path '$candidatePath' does not match the intended loader path '$EfiPath'; treating as ambiguous." -IsError
+                return $null
+            }
             return $candidate
         }
         Write-LogMessage "Existing entry '$($candidate.Description)' does not reference boot partition ${BootDriveLetter}:; treating as ambiguous." -IsError
@@ -1023,6 +1097,9 @@ function Get-FirmwareEntriesFromBcdedit {
         elseif ($line -match '^device\s+(.+)$') {
             if ($current) { $current.Device = $matches[1].Trim() }
         }
+        elseif ($line -match '^path\s+(.+)$') {
+            if ($current) { $current.Path = $matches[1].Trim() }
+        }
     }
     if ($current) { $entries += $current }
     return $entries
@@ -1030,12 +1107,17 @@ function Get-FirmwareEntriesFromBcdedit {
 
 function Set-FirmwareDefault {
     param([string]$Guid)
-    $process = Start-Process -FilePath "bcdedit.exe" -ArgumentList "/set", "{fwbootmgr}", "default", $Guid -Wait -PassThru -NoNewWindow
-    if ($process.ExitCode -ne 0) {
-        Write-LogMessage "bcdedit /set default returned exit code $($process.ExitCode)" -IsError
+    try {
+        $process = Start-Process -FilePath "bcdedit.exe" -ArgumentList "/set", "{fwbootmgr}", "default", $Guid -Wait -PassThru -NoNewWindow
+        if ($process.ExitCode -ne 0) {
+            Write-LogMessage "bcdedit /set default returned exit code $($process.ExitCode)" -IsError
+            return $false
+        }
+        return (Test-UelliFirmwareDefault -Guid $Guid)
+    } catch {
+        Write-LogMessage "Failed to set firmware default: $_" -IsError
         return $false
     }
-    return (Test-UelliFirmwareDefault -Guid $Guid)
 }
 
 function Configure-UelliBootEntry {
@@ -1083,7 +1165,7 @@ function Configure-UelliBootEntry {
 
     if (-not $useRefindLocal) {
         $entries = & $GetFirmwareEntries
-        $target = Select-UelliExistingBootEntry -BootEntries $entries -DistroName $DistroName -BootDriveLetter $BootDriveLetter
+        $target = Select-UelliExistingBootEntry -BootEntries $entries -DistroName $DistroName -BootDriveLetter $BootDriveLetter -EfiPath $EfiPath
         if ($target) {
             $ok = & $SetFirmwareDefault $target.ID
             if ($ok) {
@@ -1112,7 +1194,7 @@ function Configure-UelliBootEntry {
 
 function Get-UelliBootStatusText {
     param([bool]$BootReady)
-    if ($BootReady) { return "Installation complete!" }
+    if ($BootReady) { return "Installation complete - boot default configured" }
     return "Installation finished - boot configuration incomplete"
 }
 
@@ -4054,6 +4136,7 @@ exit
             $useRefind = [bool]$bootOutcome.UseRefind
         }
         catch {
+            $script:uefiBootReady = $false
             Write-LogMessage "Error configuring UEFI boot: $_" -IsError
             Write-LogMessage "You may need to set boot priority manually in UEFI/BIOS settings" -IsError
         }

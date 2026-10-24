@@ -53,7 +53,10 @@ function Restart-Computer {
 }
 
 # ---------- Fake bcdedit.exe (configurable via environment variables) ----------
-# UB_COPY_EXIT / UB_COPY_OUTPUT / UB_COPY_GUID   -> /copy "{bootmgr}" response
+# UB_COPY_OUTPUT -> full /copy "{bootmgr}" response line (realistic: explanatory
+# text plus the new entry GUID on ONE line, e.g.
+#   "The entry was successfully copied to {11111111-1111-1111-1111-111111111111}.")
+# UB_COPY_EXIT   -> /copy exit code
 # UB_SET_EXIT / UB_DEFAULT_SET_EXIT / UB_ORDER_EXIT -> /set /displayorder exit codes
 # UB_ENUM_DEFAULT                                 -> default GUID in /enum {fwbootmgr}
 function New-FakeBcdEdit {
@@ -63,8 +66,7 @@ function New-FakeBcdEdit {
     Set-Content -Path $fakeExe -Value @'
 #!/bin/bash
 if [ "$1" = "/copy" ]; then
-    printf '%s\n' "${UB_COPY_OUTPUT:-The operation completed successfully.}"
-    printf '%s\n' "${UB_COPY_GUID:-{11111111-1111-1111-1111-111111111111}}"
+    printf '%s\n' "${UB_COPY_OUTPUT:-The entry was successfully copied to {11111111-1111-1111-1111-111111111111}.}"
     exit "${UB_COPY_EXIT:-0}"
 elif [ "$1" = "/set" ]; then
     if [ "$2" = "{fwbootmgr}" ] && [ "$3" = "default" ]; then
@@ -95,8 +97,7 @@ $env:PATH = "$script:fakeBcdDir$sep$env:PATH"
 
 function Reset-BcdEditEnv {
     $env:UB_COPY_EXIT = '0'
-    $env:UB_COPY_OUTPUT = 'The operation completed successfully.'
-    $env:UB_COPY_GUID = '{11111111-1111-1111-1111-111111111111}'
+    $env:UB_COPY_OUTPUT = 'The entry was successfully copied to {11111111-1111-1111-1111-111111111111}.'
     $env:UB_SET_EXIT = '0'
     $env:UB_DEFAULT_SET_EXIT = '0'
     $env:UB_ORDER_EXIT = '0'
@@ -203,7 +204,7 @@ function Run-Test {
 # ---------- 1. New-UefiBootEntry: success (production code with fake bcdedit) ----------
 Run-Test "New-UefiBootEntry: bcdedit success returns the new GUID" {
     Reset-Mocks
-    $env:UB_COPY_GUID = '{22222222-2222-2222-2222-222222222222}'
+    $env:UB_COPY_OUTPUT = 'The entry was successfully copied to {22222222-2222-2222-2222-222222222222}.'
     $env:UB_ENUM_DEFAULT = '{22222222-2222-2222-2222-222222222222}'
     $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
     Assert-True ($guid -eq '{22222222-2222-2222-2222-222222222222}') "expected GUID, got $guid"
@@ -223,14 +224,33 @@ Run-Test "New-UefiBootEntry: bcdedit /copy failure returns null" {
 Run-Test "New-UefiBootEntry: unparseable /copy output logs uncertainty, returns null" {
     Reset-Mocks
     $env:UB_COPY_OUTPUT = 'The operation completed successfully.'
-    $env:UB_COPY_GUID = 'no-guid-here'
     $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
     Assert-True ($null -eq $guid) "expected null on unparseable output, got $guid"
     Assert-LogContains "no entry GUID could be parsed" -IsError
     Assert-LogContains "will not be deleted or modified" -IsError
 }
 
-# ── 4. device/path set failure -> entry cleaned up, null returned ────────────
+# ── 3b. /copy output with TWO GUIDs is ambiguous -> null, never delete ───────
+Run-Test "New-UefiBootEntry: ambiguous /copy output (two GUIDs) returns null" {
+    Reset-Mocks
+    $env:UB_COPY_OUTPUT = 'The entry was successfully copied to {11111111-1111-1111-1111-111111111111} and {22222222-2222-2222-2222-222222222222}.'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null on ambiguous output, got $guid"
+    Assert-LogContains "did not contain exactly one entry GUID" -IsError
+    # No cleanup log for an entry we cannot claim as our own.
+    Assert-LogNotContains "Created new entry"
+}
+
+# ── 3c. /copy output with a malformed identifier -> null ─────────────────────
+Run-Test "New-UefiBootEntry: malformed /copy identifier returns null" {
+    Reset-Mocks
+    $env:UB_COPY_OUTPUT = 'The entry was successfully copied to not-a-guid-at-all.'
+    $guid = New-UefiBootEntry -DistroName "TestDistro" -DevicePartition "C:" -EfiPath "\EFI\BOOT\BOOTx64.EFI"
+    Assert-True ($null -eq $guid) "expected null on malformed output, got $guid"
+    Assert-LogContains "no entry GUID could be parsed" -IsError
+}
+
+# ── 4. device/set/path failure -> entry cleaned up, null returned ────────────
 Run-Test "New-UefiBootEntry: device set failure cleans up and returns null" {
     Reset-Mocks
     $env:UB_SET_EXIT = '1'
@@ -270,6 +290,25 @@ Run-Test "Test-UelliFirmwareDefault: different default returns false" {
     $env:UB_ENUM_DEFAULT = '{66666666-6666-6666-6666-666666666666}'
     Assert-True ((Test-UelliFirmwareDefault -Guid '{55555555-5555-5555-5555-555555555555}') -eq $false)
 }
+Run-Test "Test-UelliFirmwareDefault: malformed default output returns false" {
+    Reset-Mocks
+    $env:UB_ENUM_DEFAULT = 'not-a-guid'
+    Assert-True ((Test-UelliFirmwareDefault -Guid '{55555555-5555-5555-5555-555555555555}') -eq $false)
+}
+Run-Test "Test-UelliFirmwareDefault: empty default output returns false" {
+    Reset-Mocks
+    $env:UB_ENUM_DEFAULT = ''
+    Assert-True ((Test-UelliFirmwareDefault -Guid '{55555555-5555-5555-5555-555555555555}') -eq $false)
+}
+Run-Test "Set-FirmwareDefault: thrown exception (bcdedit unavailable) returns false" {
+    Reset-Mocks
+    # Temporarily remove the fake bcdedit from PATH so Start-Process throws;
+    # Set-FirmwareDefault must catch it and return false (never leave readiness true).
+    $env:PATH = $script:oldPath
+    $result = Set-FirmwareDefault -Guid '{11111111-1111-1111-1111-111111111111}'
+    $env:PATH = "$script:fakeBcdDir$sep$env:PATH"
+    Assert-True ($result -eq $false) "expected false when bcdedit throws, got $result"
+}
 
 # ---------- 8. Test-UelliEntryDevice ─────────────────────────────────────────
 Run-Test "Test-UelliEntryDevice: partition=D matches drive D" {
@@ -284,14 +323,35 @@ Run-Test "Test-UelliEntryDevice: missing device returns false" {
     $entry = @{ ID = '{abc}' }
     Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D') -eq $false)
 }
+Run-Test "Test-UelliEntryDevice: HarddiskVolume resolving to matching drive letter matches" {
+    $entry = @{ ID = '{h}'; Description = 'X'; Device = 'partition=\Device\HarddiskVolume2' }
+    $resolver = { param([string]$DevicePath) 'D' }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D' -ResolveDriveLetter $resolver) -eq $true)
+}
+Run-Test "Test-UelliEntryDevice: HarddiskVolume resolving to a different drive letter does not match" {
+    $entry = @{ ID = '{h}'; Description = 'X'; Device = 'partition=\Device\HarddiskVolume2' }
+    $resolver = { param([string]$DevicePath) 'E' }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D' -ResolveDriveLetter $resolver) -eq $false)
+}
+Run-Test "Test-UelliEntryDevice: HarddiskVolume that cannot be resolved is unmatched (fail closed)" {
+    $entry = @{ ID = '{h}'; Description = 'X'; Device = 'partition=\Device\HarddiskVolume2' }
+    $resolver = { param([string]$DevicePath) $null }
+    Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D' -ResolveDriveLetter $resolver) -eq $false)
+}
+Run-Test "Test-UelliEntryDevice: unsupported device representation is unmatched (fail closed)" {
+    foreach ($device in @('partition=\Device\HarddiskVolume2\extra', 'partition=\Device\HarddiskVolume', 'removable=USB', '')) {
+        $entry = @{ ID = '{x}'; Device = $device }
+        Assert-True ((Test-UelliEntryDevice -Entry $entry -BootDriveLetter 'D') -eq $false) "device '$device' should not match"
+    }
+}
 
 # ---------- 9. Select-UelliExistingBootEntry: no broad substring selection ---
 Run-Test "Select-UelliExistingBootEntry: exact single match with device -> reused" {
     Reset-Mocks
     $entries = @(
-        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' }
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:'; Path = '\EFI\BOOT\BOOTx64.EFI' }
     )
-    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D'
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D' -EfiPath '\EFI\BOOT\BOOTx64.EFI'
     Assert-True ($sel.ID -eq '{a}') "expected {a}, got $($sel.ID)"
 }
 Run-Test "Select-UelliExistingBootEntry: multiple exact matches -> ambiguous, null" {
@@ -317,9 +377,35 @@ Run-Test "Select-UelliExistingBootEntry: exact match but device mismatch -> null
     $entries = @(
         @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=E:' }
     )
-    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D'
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D' -EfiPath '\EFI\BOOT\BOOTx64.EFI'
     Assert-True ($null -eq $sel) "expected null for device mismatch, got $($sel.ID)"
     Assert-LogContains "treating as ambiguous" -IsError
+}
+Run-Test "Select-UelliExistingBootEntry: exact match with matching path -> reused" {
+    Reset-Mocks
+    $entries = @(
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:'; Path = '\EFI\BOOT\BOOTx64.EFI' }
+    )
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D' -EfiPath '\EFI\BOOT\BOOTx64.EFI'
+    Assert-True ($sel.ID -eq '{a}') "expected {a}, got $($sel.ID)"
+}
+Run-Test "Select-UelliExistingBootEntry: exact match with stale/different path -> not reused" {
+    Reset-Mocks
+    $entries = @(
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:'; Path = '\EFI\ubuntu\shimx64.efi' }
+    )
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D' -EfiPath '\EFI\BOOT\BOOTx64.EFI'
+    Assert-True ($null -eq $sel) "expected null for path mismatch, got $($sel.ID)"
+    Assert-LogContains "does not match the intended loader path" -IsError
+}
+Run-Test "Select-UelliExistingBootEntry: exact match with no path recorded -> not reused" {
+    Reset-Mocks
+    $entries = @(
+        @{ ID = '{a}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' }
+    )
+    $sel = Select-UelliExistingBootEntry -BootEntries $entries -DistroName 'Linux Mint 22.3' -BootDriveLetter 'D' -EfiPath '\EFI\BOOT\BOOTx64.EFI'
+    Assert-True ($null -eq $sel) "expected null for missing path, got $($sel.ID)"
+    Assert-LogContains "no EFI path recorded" -IsError
 }
 
 # ---------- 10. Configure-UelliBootEntry (production helper with injectables) --
@@ -387,7 +473,7 @@ Run-Test "Configure-UelliBootEntry: existing entry selected and default set -> r
     Reset-Mocks
     $script:mockNewUefiBootEntryGuid = $null
     $script:mockFirmwareEntries = @(
-        @{ ID = '{x}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:' }
+        @{ ID = '{x}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:'; Path = '\EFI\BOOT\BOOTx64.EFI' }
     )
     $script:mockSetFirmwareDefaultResult = $true
     $result = Configure-UelliBootEntry `
@@ -399,6 +485,24 @@ Run-Test "Configure-UelliBootEntry: existing entry selected and default set -> r
         -SetFirmwareDefault (${function:Mock-SetFirmwareDefault})
     Assert-True ($result.Ready -eq $true) "readiness should be true for existing entry, got $($result.Ready)"
     Assert-LogContains "UEFI boot default set to existing entry"
+}
+Run-Test "Configure-UelliBootEntry: existing entry with stale path creates a new entry instead" {
+    Reset-Mocks
+    $script:mockNewUefiBootEntryGuid = '{99999999-9999-9999-9999-999999999999}'
+    $script:mockFirmwareEntries = @(
+        @{ ID = '{x}'; Description = 'Linux Mint 22.3'; Device = 'partition=D:'; Path = '\EFI\ubuntu\shimx64.efi' }
+    )
+    $script:mockSetFirmwareDefaultResult = $true
+    $result = Configure-UelliBootEntry `
+        -DistroName "Linux Mint 22.3" `
+        -BootDriveLetter 'D' `
+        -EfiPath "\EFI\BOOT\BOOTx64.EFI" `
+        -NewUefiBootEntry (${function:Mock-NewUefiBootEntry}) `
+        -GetFirmwareEntries (${function:Mock-GetFirmwareEntries}) `
+        -SetFirmwareDefault (${function:Mock-SetFirmwareDefault})
+    Assert-True ($result.Ready -eq $true) "readiness should be true after creating new entry, got $($result.Ready)"
+    Assert-LogContains "New UEFI boot entry created and set as the firmware default"
+    Assert-LogContains "does not match the intended loader path" -IsError
 }
 Run-Test "Configure-UelliBootEntry: ambiguous existing entries -> creates new entry" {
     Reset-Mocks
@@ -458,7 +562,7 @@ Run-Test "Restart eligible only when auto-restart AND readiness are true" {
 
 # ---------- 12. Conditional status text ──────────────────────────────────────
 Run-Test "Status text: complete when ready, incomplete when not" {
-    Assert-True ((Get-UelliBootStatusText -BootReady $true) -eq "Installation complete!")
+    Assert-True ((Get-UelliBootStatusText -BootReady $true) -eq "Installation complete - boot default configured")
     Assert-True ((Get-UelliBootStatusText -BootReady $false) -eq "Installation finished - boot configuration incomplete")
 }
 
