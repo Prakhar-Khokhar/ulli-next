@@ -358,6 +358,7 @@ private slots:
         p.allocationMode = ulli::core::AllocationMode::LiveOnly;
         p.shrinkAmountBytes = 7ull * 1024 * 1024 * 1024;  // Matches linuxSizeBytes
         p.shrinkDriveLetter = 'C';
+        p.shrinkPartitionNumber = 3;
         QVERIFY(p.valid());
     }
 
