@@ -222,6 +222,10 @@ core::Partition translatePartition(const QJsonObject& p) {
     out.isBoot = p.value("IsBoot").toBool();
     out.isSystem = p.value("IsSystem").toBool();
     out.isHidden = p.value("IsHidden").toBool();
+    if (const QJsonValue g = p.value("PartitionGuid"); g.isString()) {
+        const QString s = g.toString();
+        if (!s.isEmpty()) out.partitionGuid = s.toStdString();
+    }
     if (const QJsonValue dl = p.value("DriveLetter"); dl.isString()) {
         const QString s = dl.toString();
         if (!s.isEmpty()) out.driveLetter = s.at(0).toLatin1();
@@ -403,6 +407,21 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
                         std::to_string(disk.number) + " partition " +
                         std::to_string(p.number) + " is system or recovery. "
                         "Choose a different target.");
+                }
+                if (plan.shrinkPartitionOffset.has_value() &&
+                    p.offsetBytes != plan.shrinkPartitionOffset.value()) {
+                    return core::makeError(core::Error::Kind::InvalidInput,
+                        "Shrink target partition offset mismatch: disk " +
+                        std::to_string(disk.number) + " partition " +
+                        std::to_string(p.number) + ". The plan must be reviewed again.");
+                }
+                if (plan.shrinkPartitionGuid.has_value() &&
+                    p.partitionGuid.has_value() &&
+                    p.partitionGuid.value() != plan.shrinkPartitionGuid.value()) {
+                    return core::makeError(core::Error::Kind::InvalidInput,
+                        "Shrink target partition GUID mismatch: disk " +
+                        std::to_string(disk.number) + " partition " +
+                        std::to_string(p.number) + ". The plan must be reviewed again.");
                 }
                 break;
             }
@@ -610,14 +629,27 @@ if (-not $partition) {
 # any mutation.
 $actualDriveLetter = if ($partition.DriveLetter) { [string]$partition.DriveLetter } else { '' }
 if ($actualDriveLetter -ne $expectedDriveLetter) {
-    Write-Output ('{{"error":"Drive letter mismatch: expected {0}, found {1} on disk {2} partition {3}", "diskNumber":{2}, "partitionNumber":{3}, "expectedDriveLetter":{0}, "actualDriveLetter":{1}}}' -f $expectedDriveLetter, $actualDriveLetter, $diskNumber, $partitionNumber)
+    $mismatchObj = [pscustomobject]@{
+        error = ("Drive letter mismatch: expected " + $expectedDriveLetter + ", found " + $actualDriveLetter + " on disk " + $diskNumber + " partition " + $partitionNumber)
+        diskNumber = $diskNumber
+        partitionNumber = $partitionNumber
+        expectedDriveLetter = $expectedDriveLetter
+        actualDriveLetter = $actualDriveLetter
+    }
+    Write-Output ($mismatchObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Verify filesystem is NTFS
 $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 if (-not $volume -or $volume.FileSystem -ne 'NTFS') {
-    Write-Output ('{{"error":"Target partition is not NTFS", "diskNumber":{0}, "partitionNumber":{1}, "filesystem":{2}}}' -f $diskNumber, $partitionNumber, (if ($volume) { $volume.FileSystem } else { 'none' }))
+    $ntfsObj = [pscustomobject]@{
+        error = "Target partition is not NTFS"
+        diskNumber = $diskNumber
+        partitionNumber = $partitionNumber
+        filesystem = (if ($volume) { $volume.FileSystem } else { 'none' })
+    }
+    Write-Output ($ntfsObj | ConvertTo-Json -Compress)
     exit 1
 }
 
@@ -625,7 +657,14 @@ if (-not $volume -or $volume.FileSystem -ne 'NTFS') {
 # partition (C:, IsBoot) is intentionally NOT rejected here: it is the
 # normal shrink target for a side-by-side Linux install.
 if ($partition.IsSystem -or $partition.IsHidden) {
-    Write-Output ('{{"error":"Cannot shrink system or recovery partition", "diskNumber":{0}, "partitionNumber":{1}, "isSystem":{2}, "isHidden":{3}}}' -f $diskNumber, $partitionNumber, $partition.IsSystem, $partition.IsHidden)
+    $protectedObj = [pscustomobject]@{
+        error = "Cannot shrink system or recovery partition"
+        diskNumber = $diskNumber
+        partitionNumber = $partitionNumber
+        isSystem = $partition.IsSystem
+        isHidden = $partition.IsHidden
+    }
+    Write-Output ($protectedObj | ConvertTo-Json -Compress)
     exit 1
 }
 
@@ -704,7 +743,11 @@ core::Result<std::uint64_t> DiskOps::shrinkPartition(int diskNumber,
     const qulonglong requestedFinalSize = obj.value("requestedFinalSize").toVariant().toULongLong();
 
     // Step 2: Check BitLocker on the target partition
-    if (isBitLockerLockedOnPartition(resolvedDiskNumber, resolvedPartitionNumber)) {
+    auto bl = isBitLockerLockedOnPartition(resolvedDiskNumber, resolvedPartitionNumber);
+    if (!bl) {
+        return core::makeError<std::uint64_t>(bl.error().kind(), bl.error().message());
+    }
+    if (bl.value()) {
         return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             "Target partition is BitLocker-protected and locked. Unlock it before shrinking.");
     }
@@ -764,7 +807,7 @@ Write-Output ('{{"newSize":{0}, "filesystem":"{1}", "offset":{2}}}' -f $newSize,
     return core::makeOk(static_cast<std::uint64_t>(newSize));
 }
 
-bool DiskOps::isBitLockerLockedOnPartition(int diskNumber, int partitionNumber) {
+core::Result<bool> DiskOps::isBitLockerLockedOnPartition(int diskNumber, int partitionNumber) {
     QString script = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -772,13 +815,17 @@ $ProgressPreference = 'SilentlyContinue'
 $partition = Get-Partition -DiskNumber %1 -PartitionNumber %2 -ErrorAction Stop
 $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 if (-not $volume) {
-    Write-Output 'false'
+    Write-Output '{"status":"unknown","reason":"no volume"}'
+    exit 0
+}
+if (-not $volume.DriveLetter) {
+    Write-Output '{"status":"unknown","reason":"no drive letter"}'
     exit 0
 }
 
 $bl = Get-BitLockerVolume -MountPoint ($volume.DriveLetter + ':') -ErrorAction SilentlyContinue
 if (-not $bl) {
-    Write-Output 'false'
+    Write-Output '{"status":"unlocked"}'
     exit 0
 }
 
@@ -786,13 +833,30 @@ $locked = ($bl.VolumeStatus -eq 'FullyEncrypted' -or
            $bl.VolumeStatus -eq 'EncryptionInProgress' -or
            $bl.LockStatus -eq 'Locked')
 $prot = [bool]$bl.ProtectionStatus
-if ($prot -and $locked) { 'true' } else { 'false' }
+if ($prot -and $locked) {
+    Write-Output '{"status":"locked"}'
+} else {
+    Write-Output '{"status":"unlocked"}'
+}
 )PS1").arg(diskNumber).arg(partitionNumber);
 
     auto r = runPowerShellScript(script);
-    if (!r) return false; // Fail-open but log
-    const QString result = r.value().trimmed();
-    return result.compare("true", Qt::CaseInsensitive) == 0;
+    if (!r) {
+        return core::makeError<bool>(r.error().kind(),
+            "BitLocker query failed: " + r.error().message());
+    }
+    QJsonParseError perr{};
+    const QJsonDocument doc = QJsonDocument::fromJson(r.value().toUtf8(), &perr);
+    if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
+        return core::makeError<bool>(core::Error::Kind::Platform,
+            "BitLocker query returned invalid JSON");
+    }
+    const QString status = doc.object().value("status").toString();
+    if (status == "locked") return core::makeOk<bool>(true);
+    if (status == "unlocked") return core::makeOk<bool>(false);
+    return core::makeError<bool>(core::Error::Kind::Platform,
+        "BitLocker status indeterminate: " +
+        doc.object().value("reason").toString().toStdString());
 }
 
 core::Result<QString> DiskOps::runPowerShellScript(const QString& script) {
@@ -900,15 +964,20 @@ core::Result<void> DiskOps::createLayout(const core::InstallPlan& plan,
     // We need to know which NTFS partition was shrunk - use the shrink drive letter if available
     QString validateScript;
     if (plan.shrinkDriveLetter.has_value()) {
+        if (!plan.shrinkPartitionNumber.has_value()) {
+            return core::makeError(core::Error::Kind::InvalidInput,
+                "createLayout: shrink plan is missing the target partition number.");
+        }
         // Strategy ShrinkAll/UseFreeBoot/OtherDriveShrink: verify the specific NTFS partition
         validateScript = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $diskNumber = %1
-$expectedFreedBytes = %2
-$stagingSizeNeeded = %3
-$shrinkDriveLetter = '%4'
+$partitionNumber = %2
+$expectedFreedBytes = %3
+$stagingSizeNeeded = %4
+$shrinkDriveLetter = '%5'
 
 $disk = Get-Disk -Number $diskNumber -ErrorAction Stop
 if (-not $disk) {
@@ -922,10 +991,22 @@ if ($disk.OperationalStatus -ne 'Online') {
     exit 1
 }
 
-# Find the partition by drive letter
-$targetPartition = Get-Partition -DriveLetter $shrinkDriveLetter -ErrorAction SilentlyContinue
+# Resolve the partition by stable on-disk identity (disk number +
+# partition number), not by drive letter alone.
+$targetPartition = Get-Partition -DiskNumber $diskNumber -PartitionNumber $partitionNumber -ErrorAction SilentlyContinue
 if (-not $targetPartition) {
-    Write-Output ('{{"error":"Target partition for drive letter {0} not found"}}' -f $shrinkDriveLetter)
+    Write-Output ('{{"error":"Target partition not found on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
+    exit 1
+}
+if ($targetPartition.DiskNumber -ne $diskNumber -or $targetPartition.PartitionNumber -ne $partitionNumber) {
+    Write-Output ('{{"error":"Target partition identity mismatch on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
+    exit 1
+}
+
+# Cross-check the drive letter against the plan.
+$actualDriveLetter = if ($targetPartition.DriveLetter) { [string]$targetPartition.DriveLetter } else { '' }
+if ($actualDriveLetter -ne $shrinkDriveLetter) {
+    Write-Output ('{{"error":"Drive letter mismatch on disk {0} partition {1}: expected {2}, found {3}"}}' -f $diskNumber, $partitionNumber, $shrinkDriveLetter, $actualDriveLetter)
     exit 1
 }
 
@@ -936,9 +1017,10 @@ if (-not $volume -or $volume.FileSystem -ne 'NTFS') {
     exit 1
 }
 
-# Verify it's not a system/EFI/recovery partition
-if ($targetPartition.IsSystem -or $targetPartition.IsBoot -or $targetPartition.IsHidden) {
-    Write-Output '{"error":"Cannot use system/boot/recovery partition for staging"}'
+# Protect EFI/system and recovery partitions. The Windows OS partition
+# (C:, IsBoot) is intentionally allowed: it is the shrink target.
+if ($targetPartition.IsSystem -or $targetPartition.IsHidden) {
+    Write-Output '{"error":"Cannot use system or recovery partition for staging"}'
     exit 1
 }
 
@@ -1006,6 +1088,7 @@ if ($gapSize -lt ($expectedFreedBytes - 10485760)) {  # 10 MB tolerance for alig
 
 Write-Output ('{{"diskNumber":{0}, "gapOffset":{1}, "gapSize":{2}, "stagingSizeBytes":{3}, "targetPartitionNumber":{4}, "targetPartitionSize":{5}, "targetPartitionOffset":{6}}}' -f $diskNumber, $gapOffset, $gapSize, $stagingSizeNeeded, $targetPartition.PartitionNumber, $targetPartition.Size, $targetPartition.Offset)
 )PS1").arg(plan.targetDiskNumber)
+            .arg(plan.shrinkPartitionNumber.value())
             .arg(static_cast<qulonglong>(totalFreedBytes))
             .arg(static_cast<qulonglong>(stagingSizeBytes))
             .arg(QString(plan.shrinkDriveLetter.value()));

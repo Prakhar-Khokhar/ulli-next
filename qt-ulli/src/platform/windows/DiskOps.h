@@ -79,7 +79,9 @@ private:
     core::Result<QString> runPowerShellScript(const QString& script);
 
     // Check BitLocker lock state on a given partition via PowerShell.
-    bool isBitLockerLockedOnPartition(int diskNumber, int partitionNumber);
+    // Returns Ok(true) when locked/unsafe, Ok(false) when unlocked, or an
+    // error when the query is indeterminate.
+    core::Result<bool> isBitLockerLockedOnPartition(int diskNumber, int partitionNumber);
 
     // True when this installation attached the ISO image itself. An image
     // that was already attached (or that the user mounted) is left alone

@@ -73,6 +73,7 @@ bool InstallPlan::valid() const {
         // cross-checked against the partition number at execution time.
         if (!shrinkDriveLetter.has_value()) return false;
         if (!shrinkPartitionNumber.has_value()) return false;
+        if (shrinkPartitionNumber.value() <= 0) return false;
         // shrinkAmount must be at least the required minimum for the mode
         const std::uint64_t minShrink = (allocationMode == AllocationMode::LiveOnly) 
             ? kStagingSizeBytes 

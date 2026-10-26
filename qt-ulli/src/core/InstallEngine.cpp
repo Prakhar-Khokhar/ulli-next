@@ -148,6 +148,10 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
         if (cancelFlag_.loadAcquire() != 0) return makeCancelled();
         // Re-validate before destructive operation
         if (auto r = backend_->validatePlanForDisk(plan); !r) return r;
+        if (!plan.shrinkDriveLetter.has_value() || !plan.shrinkPartitionNumber.has_value()) {
+            return makeError(Error::Kind::InvalidInput,
+                "Shrink plan is missing target partition identity (drive letter and partition number).");
+        }
         if (plan.shrinkDriveLetter.has_value()) {
             // The backend figures out the new size from the requested
             // shrink amount stored on the plan. shrinkPartition returns the

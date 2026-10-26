@@ -38,6 +38,7 @@ struct Partition {
     bool isBoot = false;
     bool isSystem = false;
     bool isHidden = false;
+    std::optional<std::string> partitionGuid; // GPT partition GUID when available
 };
 
 // Stable identity of one physical disk.

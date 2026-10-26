@@ -28,6 +28,7 @@ private slots:
     void generatedScriptCrossChecksDriveLetter();
     void generatedScriptRejectsProtectedPartitionsButNotBootPartition();
     void generatedScriptIncludesPartitionIdentityInDiagnostics();
+    void generatedScriptUsesConvertToJsonForErrors();
 };
 
 // PowerShell comparison operators are -le / -lt / -gt / -eq / -ne. The
@@ -113,8 +114,8 @@ void TestShrinkPartition::generatedScriptCrossChecksDriveLetter() {
     QVERIFY(script.contains(QStringLiteral("$expectedDriveLetter = 'C'")));
     QVERIFY(script.contains(QStringLiteral("$actualDriveLetter")));
     QVERIFY(script.contains(QStringLiteral("if ($actualDriveLetter -ne $expectedDriveLetter)")));
-    QVERIFY(script.contains(
-        QStringLiteral("Drive letter mismatch: expected {0}, found {1} on disk {2} partition {3}")));
+    QVERIFY(script.contains(QStringLiteral("Drive letter mismatch: expected")));
+    QVERIFY(script.contains(QStringLiteral("actualDriveLetter")));
 }
 
 // ESP (IsSystem) and recovery/hidden partitions must be rejected, but the
@@ -147,6 +148,12 @@ void TestShrinkPartition::generatedScriptIncludesPartitionIdentityInDiagnostics(
         QStringLiteral("\"driveLetter\":\"{7}\"")));
     QVERIFY(script.contains(
         QStringLiteral("\"isSystem\":{8}, \"isBoot\":{9}, \"isHidden\":{10}")));
+}
+
+
+void TestShrinkPartition::generatedScriptUsesConvertToJsonForErrors() {
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
+    QVERIFY(script.contains(QStringLiteral("ConvertTo-Json -Compress")));
 }
 
 QTEST_MAIN(TestShrinkPartition)

@@ -69,6 +69,7 @@ $out = foreach ($d in $disks) {
             IsBoot            = [bool]$p.IsBoot
             IsSystem          = [bool]$p.IsSystem
             IsHidden          = [bool]$p.IsHidden
+            PartitionGuid     = if ($p.Guid) { [string]$p.Guid } else { $null }
             GptType           = if ($p.GptType) { [string]$p.GptType } else { $null }
             PartitionStyle    = [string]$p.DiskPartitionStyle
             MbrType           = if ($p.MbrType -ne $null) { [int]$p.MbrType } else { $null }
