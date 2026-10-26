@@ -15,6 +15,8 @@
 #include "core/InstallEngine.h"
 #include "core/Result.h"
 
+#include <QString>
+
 #include <atomic>
 #include <filesystem>
 #include <vector>
@@ -38,6 +40,14 @@ public:
         const std::atomic<bool>* cancelFlag = nullptr) override;
     core::Result<std::uint64_t> shrinkPartition(char driveLetter,
                                                 std::uint64_t requestedShrinkBytes) override;
+
+    // Builds the PowerShell probe script that validates a shrink plan and
+    // reports the requested final size. Separated from execution so the
+    // generated script can be inspected (and regression-tested) without
+    // running PowerShell or touching any disk.
+    static QString buildShrinkProbeScript(char driveLetter,
+                                          std::uint64_t requestedShrinkBytes);
+
     core::Result<void> wipeDisk(int diskNumber) override;
 core::Result<void> createLayout(const core::InstallPlan& plan,
                                      std::filesystem::path& bootMount,

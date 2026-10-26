@@ -40,6 +40,7 @@ add_ulli_test(boothandoff)
 if (WIN32)
     add_ulli_test(sha256)
     add_ulli_test(copyfiles)
+    add_ulli_test(shrinkpartition)
 endif()
 
 add_ulli_test(progresslog)

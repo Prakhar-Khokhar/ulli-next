@@ -524,22 +524,14 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
                               : ": " + lastError.toStdString()));
 }
 
-core::Result<std::uint64_t> DiskOps::shrinkPartition(char driveLetter,
-                                                     std::uint64_t requestedShrinkBytes) {
-    // Use Windows native Storage API via PowerShell:
-    // 1. Get-PartitionSupportedSize to determine SizeMin/SizeMax
-    // 2. Calculate requested final size
-    // 3. Verify requested final size >= SizeMin
-    // 4. Resize-Partition to the requested final size
-    // 5. Post-resize verification
-
-    if (requestedShrinkBytes == 0) {
-        return core::makeError<std::uint64_t>(core::Error::Kind::InvalidInput,
-            "shrinkPartition: requestedShrinkBytes is zero");
-    }
-
-    // Step 1: Find the partition by drive letter and verify it's NTFS
-    QString script = QString(R"PS1(
+// Builds the PowerShell probe script that validates a shrink plan and
+// reports the requested final size. All size arithmetic is in bytes; the
+// nonpositive-final-size guard uses PowerShell -le (never C-style <=,
+// which PowerShell reserves for redirection) and runs before any resize,
+// so an invalid plan fails safely before the destructive Resize-Partition.
+QString DiskOps::buildShrinkProbeScript(char driveLetter,
+                                        std::uint64_t requestedShrinkBytes) {
+    return QString(R"PS1(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -567,7 +559,7 @@ $currentSize = $partition.Size
 $requestedShrink = %2
 $requestedFinalSize = $currentSize - $requestedShrink
 
-if ($requestedFinalSize <= 0) {
+if ($requestedFinalSize -le 0) {
     Write-Output '{"error":"Requested final size would be zero or negative"}'
     exit 1
 }
@@ -589,6 +581,28 @@ if ($requestedFinalSize -gt $sizeMax) {
 # Output current state for verification
 Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "sizeMin":{3}, "sizeMax":{4}, "requestedFinalSize":{5}, "requestedShrink":{6}}}' -f $partition.DiskNumber, $partition.PartitionNumber, $currentSize, $sizeMin, $sizeMax, $requestedFinalSize, $requestedShrink)
 )PS1").arg(QString(driveLetter)).arg(static_cast<qulonglong>(requestedShrinkBytes));
+}
+
+core::Result<std::uint64_t> DiskOps::shrinkPartition(char driveLetter,
+                                                     std::uint64_t requestedShrinkBytes) {
+    // Use Windows native Storage API via PowerShell:
+    // 1. Get-PartitionSupportedSize to determine SizeMin/SizeMax
+    // 2. Calculate requested final size
+    // 3. Verify requested final size >= SizeMin
+    // 4. Resize-Partition to the requested final size
+    // 5. Post-resize verification
+
+    if (requestedShrinkBytes == 0) {
+        return core::makeError<std::uint64_t>(core::Error::Kind::InvalidInput,
+            "shrinkPartition: requestedShrinkBytes is zero");
+    }
+
+    // Step 1: Find the partition by drive letter and verify it's NTFS.
+    // The probe script is built by buildShrinkProbeScript() so it can be
+    // inspected (and regression-tested) without running PowerShell or
+    // touching any disk. The nonpositive-final-size guard here uses
+    // PowerShell -le (not C-style <=) and runs before any resize.
+    const QString script = buildShrinkProbeScript(driveLetter, requestedShrinkBytes);
 
     auto r = runPowerShellScript(script);
     if (!r) return core::makeError<std::uint64_t>(r.error().kind(), r.error().message());
