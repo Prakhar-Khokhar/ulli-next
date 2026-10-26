@@ -583,7 +583,8 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
 // The partition is resolved by disk number + partition number (stable
 // on-disk identity), not by drive letter alone; the drive letter is then
 // cross-checked to detect any mismatch between plan and execution.
-QString DiskOps::buildShrinkProbeScript(char driveLetter,
+QString DiskOps::buildShrinkProbeScript(int diskNumber,
+                                        char driveLetter,
                                         int partitionNumber,
                                         std::uint64_t requestedShrinkBytes) {
     return QString(R"PS1(
@@ -595,9 +596,9 @@ $partitionNumber = %2
 $expectedDriveLetter = '%3'
 
 # Resolve the partition by stable on-disk identity (disk number +
-// partition number), not by drive letter. Drive letters can change
-// between plan approval and execution and must never be the sole
-// means of identifying the target.
+# partition number), not by drive letter. Drive letters can change
+# between plan approval and execution and must never be the sole
+# means of identifying the target.
 $partition = Get-Partition -DiskNumber $diskNumber -PartitionNumber $partitionNumber -ErrorAction Stop
 if (-not $partition) {
     Write-Output '{"error":"Target partition not found on disk"}'
@@ -605,8 +606,8 @@ if (-not $partition) {
 }
 
 # Cross-check the drive letter against the one recorded in the plan. A
-// mismatch means the plan is stale or the target changed: abort before
-// any mutation.
+# mismatch means the plan is stale or the target changed: abort before
+# any mutation.
 $actualDriveLetter = if ($partition.DriveLetter) { [string]$partition.DriveLetter } else { '' }
 if ($actualDriveLetter -ne $expectedDriveLetter) {
     Write-Output ('{{"error":"Drive letter mismatch: expected {0}, found {1} on disk {2} partition {3}", "diskNumber":{2}, "partitionNumber":{3}, "expectedDriveLetter":{0}, "actualDriveLetter":{1}}}' -f $expectedDriveLetter, $actualDriveLetter, $diskNumber, $partitionNumber)
@@ -621,8 +622,8 @@ if (-not $volume -or $volume.FileSystem -ne 'NTFS') {
 }
 
 # Reject EFI system (ESP) and recovery/hidden partitions. The Windows OS
-// partition (C:, IsBoot) is intentionally NOT rejected here: it is the
-// normal shrink target for a side-by-side Linux install.
+# partition (C:, IsBoot) is intentionally NOT rejected here: it is the
+# normal shrink target for a side-by-side Linux install.
 if ($partition.IsSystem -or $partition.IsHidden) {
     Write-Output ('{{"error":"Cannot shrink system or recovery partition", "diskNumber":{0}, "partitionNumber":{1}, "isSystem":{2}, "isHidden":{3}}}' -f $diskNumber, $partitionNumber, $partition.IsSystem, $partition.IsHidden)
     exit 1
@@ -695,15 +696,15 @@ core::Result<std::uint64_t> DiskOps::shrinkPartition(int diskNumber,
     }
 
     // Extract partition info for verification
-    const int diskNumber = obj.value("diskNumber").toInt();
-    const int partitionNumber = obj.value("partitionNumber").toInt();
+    const int resolvedDiskNumber = obj.value("diskNumber").toInt();
+    const int resolvedPartitionNumber = obj.value("partitionNumber").toInt();
     const qulonglong currentSize = obj.value("currentSize").toVariant().toULongLong();
     const qulonglong sizeMin = obj.value("sizeMin").toVariant().toULongLong();
     const qulonglong sizeMax = obj.value("sizeMax").toVariant().toULongLong();
     const qulonglong requestedFinalSize = obj.value("requestedFinalSize").toVariant().toULongLong();
 
     // Step 2: Check BitLocker on the target partition
-    if (isBitLockerLockedOnPartition(diskNumber, partitionNumber)) {
+    if (isBitLockerLockedOnPartition(resolvedDiskNumber, resolvedPartitionNumber)) {
         return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             "Target partition is BitLocker-protected and locked. Unlock it before shrinking.");
     }
@@ -715,7 +716,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 Resize-Partition -DiskNumber %1 -PartitionNumber %2 -Size %3 -ErrorAction Stop
 Write-Output '{"success":true}'
-)PS1").arg(diskNumber).arg(partitionNumber).arg(static_cast<qulonglong>(requestedFinalSize));
+)PS1").arg(resolvedDiskNumber).arg(resolvedPartitionNumber).arg(static_cast<qulonglong>(requestedFinalSize));
 
     auto resizeResult = runPowerShellScript(resizeScript);
     if (!resizeResult) return core::makeError<std::uint64_t>(resizeResult.error().kind(), resizeResult.error().message());
@@ -731,7 +732,7 @@ $newSize = $partition.Size
 $fs = if ($volume) { $volume.FileSystem } else { '' }
 
 Write-Output ('{{"newSize":{0}, "filesystem":"{1}", "offset":{2}}}' -f $newSize, $fs, $partition.Offset)
-)PS1").arg(diskNumber).arg(partitionNumber);
+)PS1").arg(resolvedDiskNumber).arg(resolvedPartitionNumber);
 
     auto verifyResult = runPowerShellScript(verifyScript);
     if (!verifyResult) return core::makeError<std::uint64_t>(verifyResult.error().kind(), verifyResult.error().message());
