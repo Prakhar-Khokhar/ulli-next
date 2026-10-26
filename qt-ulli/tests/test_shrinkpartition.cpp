@@ -31,7 +31,7 @@ private slots:
 // in a comparison. C-style <= / >= / == / != and && / || are invalid.
 void TestShrinkPartition::generatedScriptUsesValidPowerShellOperators() {
     constexpr std::uint64_t kShrink = 10ull * 1024 * 1024 * 1024; // 10 GiB
-    const QString script = DiskOps::buildShrinkProbeScript('C', kShrink);
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript('C', kShrink);
 
     QVERIFY(!script.contains(QStringLiteral("<=")));
     QVERIFY(!script.contains(QStringLiteral(">=")));
@@ -55,7 +55,7 @@ void TestShrinkPartition::generatedScriptUsesValidPowerShellOperators() {
 // Resize-Partition call, so an invalid plan fails safely without touching
 // the disk.
 void TestShrinkPartition::generatedScriptRejectsNonpositiveFinalSizeBeforeResize() {
-    const QString script = DiskOps::buildShrinkProbeScript('C', 10ull * 1024 * 1024 * 1024);
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript('C', 10ull * 1024 * 1024 * 1024);
 
     QVERIFY(script.contains(QStringLiteral("if ($requestedFinalSize -le 0)")));
     QVERIFY(script.contains(QStringLiteral("exit 1")));
@@ -69,7 +69,7 @@ void TestShrinkPartition::generatedScriptRejectsNonpositiveFinalSizeBeforeResize
 // value the caller supplied.
 void TestShrinkPartition::generatedScriptEmbedsRequestedShrinkBytes() {
     constexpr std::uint64_t kShrink = 17ull * 1024 * 1024 * 1024; // 17 GiB
-    const QString script = DiskOps::buildShrinkProbeScript('D', kShrink);
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript('D', kShrink);
 
     QVERIFY(script.contains(QStringLiteral("$driveLetter = 'D'")));
     QVERIFY(script.contains(QStringLiteral("$requestedShrink = ") + QString::number(kShrink)));
@@ -80,7 +80,8 @@ void TestShrinkPartition::generatedScriptEmbedsRequestedShrinkBytes() {
 // requestedShrinkBytes == 0 is rejected in C++ before any PowerShell is
 // run, so no destructive operation is attempted.
 void TestShrinkPartition::zeroShrinkBytesIsRejectedBeforePowerShell() {
-    const auto result = DiskOps().shrinkPartition('C', 0);
+    ulli::platform::windows::DiskOps diskOps;
+    const auto result = diskOps.shrinkPartition('C', 0);
     QVERIFY(!result);
     QVERIFY(result.error().message().contains("zero"));
 }
