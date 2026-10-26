@@ -83,7 +83,7 @@ void TestShrinkPartition::zeroShrinkBytesIsRejectedBeforePowerShell() {
     ulli::platform::windows::DiskOps diskOps;
     const auto result = diskOps.shrinkPartition('C', 0);
     QVERIFY(!result);
-    QVERIFY(result.error().message().contains("zero"));
+    QVERIFY(result.error().message().find("zero") != std::string::npos);
 }
 
 QTEST_MAIN(TestShrinkPartition)
