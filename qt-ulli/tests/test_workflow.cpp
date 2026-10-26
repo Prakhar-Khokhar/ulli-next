@@ -245,7 +245,7 @@ public:
         return ulli::core::makeOk(out);
     }
 
-    ulli::core::Result<std::uint64_t> shrinkPartition(char, std::uint64_t) override {
+    ulli::core::Result<std::uint64_t> shrinkPartition(int, char, int, std::uint64_t) override {
         return ulli::core::makeOk<std::uint64_t>(0);
     }
     ulli::core::Result<void> wipeDisk(int) override {

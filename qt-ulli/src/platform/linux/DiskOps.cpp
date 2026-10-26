@@ -35,7 +35,7 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
         "downloadIso: not implemented for Linux yet");
 }
 
-core::Result<std::uint64_t> DiskOps::shrinkPartition(char, std::uint64_t) {
+core::Result<std::uint64_t> DiskOps::shrinkPartition(int, char, int, std::uint64_t) {
     return core::makeError<std::uint64_t>(core::Error::Kind::Internal,
         "shrinkPartition: not implemented (Phase 2)");
 }

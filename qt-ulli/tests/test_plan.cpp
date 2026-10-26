@@ -65,6 +65,7 @@ private slots:
         p.strategy = ulli::core::Strategy::ShrinkAll;
         p.allocationMode = ulli::core::AllocationMode::FullInstall;
         p.shrinkDriveLetter = 'C';  // shrink strategy requires a target partition
+        p.shrinkPartitionNumber = 3; // stable on-disk partition identity
         // No shrinkAmountBytes set - should be invalid
         QVERIFY(!p.valid());
         
@@ -106,6 +107,26 @@ private slots:
         p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
         p.strategy = ulli::core::Strategy::UseFreeAll;
         QVERIFY(!p.valid());
+    }
+
+    // Regression: shrink strategy requires both drive letter and partition
+    // number; having only one is an inconsistent plan that must fail closed.
+    void shrinkRequiresPartitionNumber() {
+        ulli::core::InstallPlan p;
+        p.distroKey = "mint";
+        p.isoPath = "/tmp/x.iso";
+        p.targetDiskNumber = 1;
+        p.linuxSizeBytes = 30ull * 1024 * 1024 * 1024;
+        p.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
+        p.strategy = ulli::core::Strategy::ShrinkAll;
+        p.allocationMode = ulli::core::AllocationMode::FullInstall;
+        p.shrinkAmountBytes = p.linuxSizeBytes;
+        p.shrinkDriveLetter = 'C';
+        // Missing shrinkPartitionNumber: invalid
+        QVERIFY(!p.valid());
+
+        p.shrinkPartitionNumber = 3;
+        QVERIFY(p.valid());
     }
 };
 

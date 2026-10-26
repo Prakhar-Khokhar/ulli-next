@@ -340,6 +340,9 @@ void PlanDialog::updateStrategyAvailability(const core::Disk& disk) {
     shrinkPartitionLabel_->setVisible(shrinkSelected);
     shrinkPartitionCombo_->setVisible(shrinkSelected);
     shrinkPartitionCombo_->setEnabled(shrinkSelected);
+    if (!shrinkSelected) {
+        shrinkPartitionCombo_->hidePopup();
+    }
 
     updatePlanPreview();
 }
@@ -353,6 +356,7 @@ void PlanDialog::updateShrinkPartitionCombo(const core::Disk& disk) {
     }
 
     QSignalBlocker blocker(shrinkPartitionCombo_);
+    shrinkPartitionCombo_->hidePopup();
     shrinkPartitionCombo_->clear();
     for (const auto& p : disk.partitions) {
         if (p.driveLetter.has_value() && (p.fs == core::FileSystem::Ntfs || p.kind == core::PartitionKind::WindowsNtfs)) {
@@ -643,9 +647,23 @@ core::InstallPlan PlanDialog::buildPlan(const std::string& distroKey,
         // shrinkAmountBytes is the TOTAL amount to remove from NTFS
         // This equals linuxSizeBytes (user-requested total)
         p.shrinkAmountBytes = p.linuxSizeBytes;
-        // Get selected shrink partition drive letter
+        // Get selected shrink partition drive letter and partition number.
+        // Both are recorded so the backend can resolve the exact partition
+        // by stable on-disk identity (disk number + partition number) and
+        // cross-check the drive letter as defense in depth.
         if (shrinkPartitionCombo_->currentIndex() >= 0) {
-            p.shrinkDriveLetter = shrinkPartitionCombo_->currentData().value<char>();
+            const char drive = shrinkPartitionCombo_->currentData().value<char>();
+            p.shrinkDriveLetter = drive;
+            const int idx = diskCombo_->currentIndex();
+            if (idx >= 0 && static_cast<std::size_t>(idx) < disks_.size()) {
+                const auto& disk = disks_[static_cast<std::size_t>(idx)];
+                for (const auto& part : disk.partitions) {
+                    if (part.driveLetter.has_value() && part.driveLetter.value() == drive) {
+                        p.shrinkPartitionNumber = part.number;
+                        break;
+                    }
+                }
+            }
         }
     }
     return p;

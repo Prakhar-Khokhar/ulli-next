@@ -61,6 +61,7 @@ struct InstallPlan {
     // Target disk
     int targetDiskNumber = kUnsetDiskNumber;  // kUnsetDiskNumber == "not chosen yet"
     std::optional<char> shrinkDriveLetter; // only set for OtherDriveShrink
+    std::optional<int> shrinkPartitionNumber; // stable partition identity, set for ShrinkAll/UseFreeBoot/OtherDriveShrink
     std::uint64_t shrinkAmountBytes = 0;  // for ShrinkAll / UseFreeBoot / OtherDriveShrink
 
     // Identity of the target disk at the time the plan was approved.

@@ -71,7 +71,7 @@ public:
         return makeOk(out);
     }
 
-    Result<std::uint64_t> shrinkPartition(char, std::uint64_t) override {
+    Result<std::uint64_t> shrinkPartition(int, char, int, std::uint64_t) override {
         auto r = checkExpectation("resize");
         if (!r) return makeError<std::uint64_t>(r.error().kind(), r.error().message());
         return makeOk<std::uint64_t>(100ull * 1024 * 1024 * 1024);

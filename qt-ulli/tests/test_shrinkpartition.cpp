@@ -6,9 +6,9 @@
 //
 // The generated script is inspected without running PowerShell and without
 // touching any disk, so these tests exercise the script text (operator
-// validity, boundary guards) directly. They are only built on Windows,
-// where DiskOps::shrinkPartition() is compiled and PowerShell 5.1 is the
-// target host.
+// validity, boundary guards, partition identity resolution) directly. They
+// are only built on Windows, where DiskOps::shrinkPartition() is compiled
+// and PowerShell 5.1 is the target host.
 
 #include "platform/windows/DiskOps.h"
 
@@ -24,6 +24,10 @@ private slots:
     void generatedScriptRejectsNonpositiveFinalSizeBeforeResize();
     void generatedScriptEmbedsRequestedShrinkBytes();
     void zeroShrinkBytesIsRejectedBeforePowerShell();
+    void generatedScriptResolvesByDiskAndPartitionNumber();
+    void generatedScriptCrossChecksDriveLetter();
+    void generatedScriptRejectsProtectedPartitionsButNotBootPartition();
+    void generatedScriptIncludesPartitionIdentityInDiagnostics();
 };
 
 // PowerShell comparison operators are -le / -lt / -gt / -eq / -ne. The
@@ -31,7 +35,7 @@ private slots:
 // in a comparison. C-style <= / >= / == / != and && / || are invalid.
 void TestShrinkPartition::generatedScriptUsesValidPowerShellOperators() {
     constexpr std::uint64_t kShrink = 10ull * 1024 * 1024 * 1024; // 10 GiB
-    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript('C', kShrink);
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, kShrink);
 
     QVERIFY(!script.contains(QStringLiteral("<=")));
     QVERIFY(!script.contains(QStringLiteral(">=")));
@@ -55,7 +59,7 @@ void TestShrinkPartition::generatedScriptUsesValidPowerShellOperators() {
 // Resize-Partition call, so an invalid plan fails safely without touching
 // the disk.
 void TestShrinkPartition::generatedScriptRejectsNonpositiveFinalSizeBeforeResize() {
-    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript('C', 10ull * 1024 * 1024 * 1024);
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
 
     QVERIFY(script.contains(QStringLiteral("if ($requestedFinalSize -le 0)")));
     QVERIFY(script.contains(QStringLiteral("exit 1")));
@@ -69,9 +73,9 @@ void TestShrinkPartition::generatedScriptRejectsNonpositiveFinalSizeBeforeResize
 // value the caller supplied.
 void TestShrinkPartition::generatedScriptEmbedsRequestedShrinkBytes() {
     constexpr std::uint64_t kShrink = 17ull * 1024 * 1024 * 1024; // 17 GiB
-    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript('D', kShrink);
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'D', 3, kShrink);
 
-    QVERIFY(script.contains(QStringLiteral("$driveLetter = 'D'")));
+    QVERIFY(script.contains(QStringLiteral("$expectedDriveLetter = 'D'")));
     QVERIFY(script.contains(QStringLiteral("$requestedShrink = ") + QString::number(kShrink)));
     QVERIFY(script.contains(
         QStringLiteral("$requestedFinalSize = $currentSize - $requestedShrink")));
@@ -81,9 +85,68 @@ void TestShrinkPartition::generatedScriptEmbedsRequestedShrinkBytes() {
 // run, so no destructive operation is attempted.
 void TestShrinkPartition::zeroShrinkBytesIsRejectedBeforePowerShell() {
     ulli::platform::windows::DiskOps diskOps;
-    const auto result = diskOps.shrinkPartition('C', 0);
+    const auto result = diskOps.shrinkPartition(0, 'C', 3, 0);
     QVERIFY(!result);
     QVERIFY(result.error().message().find("zero") != std::string::npos);
+}
+
+// The partition must be resolved by stable on-disk identity (disk number +
+// partition number), not by drive letter alone. Drive letters can change
+// between plan approval and execution.
+void TestShrinkPartition::generatedScriptResolvesByDiskAndPartitionNumber() {
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
+
+    // Resolve by disk number + partition number, not by drive letter.
+    QVERIFY(script.contains(QStringLiteral("$diskNumber = 0")));
+    QVERIFY(script.contains(QStringLiteral("$partitionNumber = 3")));
+    QVERIFY(script.contains(
+        QStringLiteral("Get-Partition -DiskNumber $diskNumber -PartitionNumber $partitionNumber")));
+    QVERIFY(!script.contains(QStringLiteral("Get-Partition -DriveLetter")));
+}
+
+// The drive letter recorded in the plan must be cross-checked against the
+// actual drive letter of the resolved partition. A mismatch means the plan
+// is stale and must fail closed before any mutation.
+void TestShrinkPartition::generatedScriptCrossChecksDriveLetter() {
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
+
+    QVERIFY(script.contains(QStringLiteral("$expectedDriveLetter = 'C'")));
+    QVERIFY(script.contains(QStringLiteral("$actualDriveLetter")));
+    QVERIFY(script.contains(QStringLiteral("if ($actualDriveLetter -ne $expectedDriveLetter)")));
+    QVERIFY(script.contains(
+        QStringLiteral("Drive letter mismatch: expected {0}, found {1} on disk {2} partition {3}")));
+}
+
+// ESP (IsSystem) and recovery/hidden partitions must be rejected, but the
+// Windows OS partition (C:, IsBoot) is the normal shrink target and must
+// NOT be rejected.
+void TestShrinkPartition::generatedScriptRejectsProtectedPartitionsButNotBootPartition() {
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
+
+    // Reject IsSystem (ESP) and IsHidden (recovery).
+    QVERIFY(script.contains(
+        QStringLiteral("if ($partition.IsSystem -or $partition.IsHidden)")));
+    QVERIFY(script.contains(
+        QStringLiteral("Cannot shrink system or recovery partition")));
+
+    // Do NOT reject IsBoot — C: is the OS partition and is shrinkable.
+    QVERIFY(!script.contains(
+        QStringLiteral("if ($partition.IsSystem -or $partition.IsBoot -or $partition.IsHidden)")));
+    QVERIFY(!script.contains(
+        QStringLiteral("Cannot shrink system/boot/recovery partition")));
+}
+
+// Diagnostic output must include partition identity fields for correlation
+// between plan and execution.
+void TestShrinkPartition::generatedScriptIncludesPartitionIdentityInDiagnostics() {
+    const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
+
+    QVERIFY(script.contains(
+        QStringLiteral("\"diskNumber\":{0}, \"partitionNumber\":{1}")));
+    QVERIFY(script.contains(
+        QStringLiteral("\"driveLetter\":\"{7}\"")));
+    QVERIFY(script.contains(
+        QStringLiteral("\"isSystem\":{8}, \"isBoot\":{9}, \"isHidden\":{10}")));
 }
 
 QTEST_MAIN(TestShrinkPartition)

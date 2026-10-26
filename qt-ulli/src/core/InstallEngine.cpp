@@ -154,7 +154,9 @@ Result<void> InstallEngine::runStages(InstallPlan& plan) {
             // actual post-resize partition size; we record the requested
             // shrink amount as the expected freed space, which createLayout
             // validates against the real on-disk gap before mutating.
-            auto r = backend_->shrinkPartition(plan.shrinkDriveLetter.value(),
+            auto r = backend_->shrinkPartition(plan.targetDiskNumber,
+                                              plan.shrinkDriveLetter.value(),
+                                              plan.shrinkPartitionNumber.value(),
                                               plan.shrinkAmountBytes);
             if (!r) {
                 return makeError(r.error().kind(), r.error().message());

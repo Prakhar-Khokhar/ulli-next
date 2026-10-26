@@ -68,8 +68,11 @@ bool InstallPlan::valid() const {
         strategy == Strategy::UseFreeBoot || 
         strategy == Strategy::OtherDriveShrink) {
         if (shrinkAmountBytes == 0) return false;
-        // A shrink strategy must name the target partition to shrink.
+        // A shrink strategy must name the target partition by both drive
+        // letter and stable on-disk partition number. The drive letter is
+        // cross-checked against the partition number at execution time.
         if (!shrinkDriveLetter.has_value()) return false;
+        if (!shrinkPartitionNumber.has_value()) return false;
         // shrinkAmount must be at least the required minimum for the mode
         const std::uint64_t minShrink = (allocationMode == AllocationMode::LiveOnly) 
             ? kStagingSizeBytes 

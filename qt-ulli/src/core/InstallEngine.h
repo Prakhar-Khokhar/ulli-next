@@ -103,8 +103,13 @@ public:
         const std::atomic<bool>* cancelFlag = nullptr) = 0;
 
     // Resize a partition (shrink only). Returns the new size.
-    virtual Result<std::uint64_t> shrinkPartition(char driveLetter,
-                                                 std::uint64_t newSizeBytes) = 0;
+    // diskNumber + partitionNumber form the stable on-disk identity used to
+    // resolve the exact target before any mutation; driveLetter is
+    // cross-checked against it as a defense-in-depth measure.
+    virtual Result<std::uint64_t> shrinkPartition(int diskNumber,
+                                                  char driveLetter,
+                                                  int partitionNumber,
+                                                  std::uint64_t requestedShrinkBytes) = 0;
 
     // Wipe a disk (Clear-Disk / mklabel). For WipeDisk strategy.
     virtual Result<void> wipeDisk(int diskNumber) = 0;

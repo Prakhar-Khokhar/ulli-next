@@ -27,7 +27,9 @@ public:
         const std::filesystem::path& destPath,
         std::function<void(int percent, const QString& status)> progressCallback,
         const std::atomic<bool>* cancelFlag = nullptr) override;
-    core::Result<std::uint64_t> shrinkPartition(char driveLetter,
+    core::Result<std::uint64_t> shrinkPartition(int diskNumber,
+                                                char driveLetter,
+                                                int partitionNumber,
                                                 std::uint64_t newSizeBytes) override;
     core::Result<void> wipeDisk(int diskNumber) override;
 core::Result<void> createLayout(const core::InstallPlan& plan,

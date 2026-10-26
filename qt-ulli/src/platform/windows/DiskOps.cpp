@@ -365,6 +365,57 @@ core::Result<void> DiskOps::validatePlanForDisk(const core::InstallPlan& plan) {
             std::to_string(plan.targetDiskSizeBytes) + " bytes, found " +
             std::to_string(disk.sizeBytes) + " bytes). The plan must be reviewed again.");
     }
+
+    // Validate the shrink target partition identity when the plan targets a
+    // specific partition (ShrinkAll / UseFreeBoot / OtherDriveShrink). The
+    // partition must still exist on the live disk with the expected drive
+    // letter, and it must not be a protected system/recovery partition.
+    if (plan.strategy == core::Strategy::ShrinkAll ||
+        plan.strategy == core::Strategy::UseFreeBoot ||
+        plan.strategy == core::Strategy::OtherDriveShrink) {
+        if (!plan.shrinkPartitionNumber.has_value()) {
+            return core::makeError(core::Error::Kind::InvalidInput,
+                "Shrink plan is missing the target partition number. "
+                "The plan must be reviewed again.");
+        }
+        if (!plan.shrinkDriveLetter.has_value()) {
+            return core::makeError(core::Error::Kind::InvalidInput,
+                "Shrink plan is missing the target drive letter. "
+                "The plan must be reviewed again.");
+        }
+        bool found = false;
+        for (const auto& p : disk.partitions) {
+            if (p.number == plan.shrinkPartitionNumber.value()) {
+                found = true;
+                if (!p.driveLetter.has_value() ||
+                    p.driveLetter.value() != plan.shrinkDriveLetter.value()) {
+                    return core::makeError(core::Error::Kind::InvalidInput,
+                        "Partition identity mismatch: disk " +
+                        std::to_string(disk.number) + " partition " +
+                        std::to_string(p.number) + " expected drive letter '" +
+                        std::string(1, plan.shrinkDriveLetter.value()) +
+                        "' but the live partition has no matching drive letter. "
+                        "The plan must be reviewed again.");
+                }
+                if (p.isSystem || p.isHidden) {
+                    return core::makeError(core::Error::Kind::InvalidInput,
+                        "Refusing to shrink protected partition: disk " +
+                        std::to_string(disk.number) + " partition " +
+                        std::to_string(p.number) + " is system or recovery. "
+                        "Choose a different target.");
+                }
+                break;
+            }
+        }
+        if (!found) {
+            return core::makeError(core::Error::Kind::InvalidInput,
+                "Shrink target partition not found: disk " +
+                std::to_string(disk.number) + " partition " +
+                std::to_string(plan.shrinkPartitionNumber.value()) +
+                " no longer exists. The plan must be reviewed again.");
+        }
+    }
+
     return core::makeOk();
 }
 
@@ -529,38 +580,60 @@ core::Result<core::IsoDownload> DiskOps::downloadIso(
 // nonpositive-final-size guard uses PowerShell -le (never C-style <=,
 // which PowerShell reserves for redirection) and runs before any resize,
 // so an invalid plan fails safely before the destructive Resize-Partition.
+// The partition is resolved by disk number + partition number (stable
+// on-disk identity), not by drive letter alone; the drive letter is then
+// cross-checked to detect any mismatch between plan and execution.
 QString DiskOps::buildShrinkProbeScript(char driveLetter,
+                                        int partitionNumber,
                                         std::uint64_t requestedShrinkBytes) {
     return QString(R"PS1(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$driveLetter = '%1'
-$partition = Get-Partition -DriveLetter $driveLetter -ErrorAction Stop
+$diskNumber = %1
+$partitionNumber = %2
+$expectedDriveLetter = '%3'
+
+# Resolve the partition by stable on-disk identity (disk number +
+// partition number), not by drive letter. Drive letters can change
+// between plan approval and execution and must never be the sole
+// means of identifying the target.
+$partition = Get-Partition -DiskNumber $diskNumber -PartitionNumber $partitionNumber -ErrorAction Stop
 if (-not $partition) {
-    Write-Output '{"error":"Partition not found for drive letter"}'
+    Write-Output '{"error":"Target partition not found on disk"}'
+    exit 1
+}
+
+# Cross-check the drive letter against the one recorded in the plan. A
+// mismatch means the plan is stale or the target changed: abort before
+// any mutation.
+$actualDriveLetter = if ($partition.DriveLetter) { [string]$partition.DriveLetter } else { '' }
+if ($actualDriveLetter -ne $expectedDriveLetter) {
+    Write-Output ('{{"error":"Drive letter mismatch: expected {0}, found {1} on disk {2} partition {3}", "diskNumber":{2}, "partitionNumber":{3}, "expectedDriveLetter":{0}, "actualDriveLetter":{1}}}' -f $expectedDriveLetter, $actualDriveLetter, $diskNumber, $partitionNumber)
     exit 1
 }
 
 # Verify filesystem is NTFS
 $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 if (-not $volume -or $volume.FileSystem -ne 'NTFS') {
-    Write-Output '{"error":"Target partition is not NTFS"}'
+    Write-Output ('{{"error":"Target partition is not NTFS", "diskNumber":{0}, "partitionNumber":{1}, "filesystem":{2}}}' -f $diskNumber, $partitionNumber, (if ($volume) { $volume.FileSystem } else { 'none' }))
     exit 1
 }
 
-# Verify it's not a system/EFI/recovery partition
-if ($partition.IsSystem -or $partition.IsBoot -or $partition.IsHidden) {
-    Write-Output '{"error":"Cannot shrink system/boot/recovery partition"}'
+# Reject EFI system (ESP) and recovery/hidden partitions. The Windows OS
+// partition (C:, IsBoot) is intentionally NOT rejected here: it is the
+// normal shrink target for a side-by-side Linux install.
+if ($partition.IsSystem -or $partition.IsHidden) {
+    Write-Output ('{{"error":"Cannot shrink system or recovery partition", "diskNumber":{0}, "partitionNumber":{1}, "isSystem":{2}, "isHidden":{3}}}' -f $diskNumber, $partitionNumber, $partition.IsSystem, $partition.IsHidden)
     exit 1
 }
 
 $currentSize = $partition.Size
-$requestedShrink = %2
+$requestedShrink = %4
 $requestedFinalSize = $currentSize - $requestedShrink
 
 if ($requestedFinalSize -le 0) {
-    Write-Output '{"error":"Requested final size would be zero or negative"}'
+    Write-Output ('{{"error":"Requested final size would be zero or negative", "diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "requestedShrink":{3}}}' -f $diskNumber, $partitionNumber, $currentSize, $requestedShrink)
     exit 1
 }
 
@@ -570,20 +643,22 @@ $sizeMin = $supported.SizeMin
 $sizeMax = $supported.SizeMax
 
 if ($requestedFinalSize -lt $sizeMin) {
-    Write-Output ('{{"error":"Requested final size {0} is below minimum supported size {1}", "sizeMin":{1}, "sizeMax":{2}, "currentSize":{3}}}' -f $requestedFinalSize, $sizeMin, $sizeMax, $currentSize)
+    Write-Output ('{{"error":"Requested final size {0} is below minimum supported size {1}", "sizeMin":{1}, "sizeMax":{2}, "currentSize":{3}, "diskNumber":{4}, "partitionNumber":{5}}}' -f $requestedFinalSize, $sizeMin, $sizeMax, $currentSize, $diskNumber, $partitionNumber)
     exit 1
 }
 if ($requestedFinalSize -gt $sizeMax) {
-    Write-Output ('{{"error":"Requested final size {0} exceeds maximum supported size {1}", "sizeMin":{1}, "sizeMax":{2}, "currentSize":{3}}}' -f $requestedFinalSize, $sizeMin, $sizeMax, $currentSize)
+    Write-Output ('{{"error":"Requested final size {0} exceeds maximum supported size {1}", "sizeMin":{1}, "sizeMax":{2}, "currentSize":{3}, "diskNumber":{4}, "partitionNumber":{5}}}' -f $requestedFinalSize, $sizeMin, $sizeMax, $currentSize, $diskNumber, $partitionNumber)
     exit 1
 }
 
-# Output current state for verification
-Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "sizeMin":{3}, "sizeMax":{4}, "requestedFinalSize":{5}, "requestedShrink":{6}}}' -f $partition.DiskNumber, $partition.PartitionNumber, $currentSize, $sizeMin, $sizeMax, $requestedFinalSize, $requestedShrink)
-)PS1").arg(QString(driveLetter)).arg(static_cast<qulonglong>(requestedShrinkBytes));
+# Output current state for verification and diagnostic logging
+Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "sizeMin":{3}, "sizeMax":{4}, "requestedFinalSize":{5}, "requestedShrink":{6}, "driveLetter":"{7}", "isSystem":{8}, "isBoot":{9}, "isHidden":{10}}}' -f $partition.DiskNumber, $partition.PartitionNumber, $currentSize, $sizeMin, $sizeMax, $requestedFinalSize, $requestedShrink, $actualDriveLetter, $partition.IsSystem, $partition.IsBoot, $partition.IsHidden)
+)PS1").arg(diskNumber).arg(partitionNumber).arg(QString(driveLetter)).arg(static_cast<qulonglong>(requestedShrinkBytes));
 }
 
-core::Result<std::uint64_t> DiskOps::shrinkPartition(char driveLetter,
+core::Result<std::uint64_t> DiskOps::shrinkPartition(int diskNumber,
+                                                     char driveLetter,
+                                                     int partitionNumber,
                                                      std::uint64_t requestedShrinkBytes) {
     // Use Windows native Storage API via PowerShell:
     // 1. Get-PartitionSupportedSize to determine SizeMin/SizeMax
@@ -597,12 +672,12 @@ core::Result<std::uint64_t> DiskOps::shrinkPartition(char driveLetter,
             "shrinkPartition: requestedShrinkBytes is zero");
     }
 
-    // Step 1: Find the partition by drive letter and verify it's NTFS.
-    // The probe script is built by buildShrinkProbeScript() so it can be
-    // inspected (and regression-tested) without running PowerShell or
-    // touching any disk. The nonpositive-final-size guard here uses
-    // PowerShell -le (not C-style <=) and runs before any resize.
-    const QString script = buildShrinkProbeScript(driveLetter, requestedShrinkBytes);
+    // Step 1: Find the partition by stable on-disk identity (disk number +
+    // partition number) and verify it's NTFS. The probe script is built by
+    // buildShrinkProbeScript() so it can be inspected (and regression-tested)
+    // without running PowerShell or touching any disk. The nonpositive-final-size
+    // guard here uses PowerShell -le (not C-style <=) and runs before any resize.
+    const QString script = buildShrinkProbeScript(diskNumber, driveLetter, partitionNumber, requestedShrinkBytes);
 
     auto r = runPowerShellScript(script);
     if (!r) return core::makeError<std::uint64_t>(r.error().kind(), r.error().message());
