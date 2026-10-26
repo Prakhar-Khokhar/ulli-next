@@ -453,6 +453,7 @@ private slots:
         plan.bootSizeBytes = 7ull * 1024 * 1024 * 1024;
         plan.strategy = Strategy::ShrinkAll;
         plan.shrinkDriveLetter = 'C';
+        plan.shrinkPartitionNumber = 3;
         plan.shrinkAmountBytes = plan.linuxSizeBytes;  // Must equal linuxSizeBytes for ShrinkAll
         plan.allocationMode = AllocationMode::FullInstall;
 

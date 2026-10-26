@@ -145,9 +145,14 @@ private slots:
         // strategy must name the target partition to shrink.
         QVERIFY(!p.valid());
 
-        // With a drive letter and matching shrink amount - valid.
+        // With a drive letter and partition number and matching shrink amount - valid.
         p.shrinkDriveLetter = 'C';
+        p.shrinkPartitionNumber = 3;
         QVERIFY(p.valid());
+
+        // Without a partition number, still invalid.
+        p.shrinkPartitionNumber.reset();
+        QVERIFY(!p.valid());
     }
 
     void shrinkAllShrinkAmountMustEqualLinuxSize() {
