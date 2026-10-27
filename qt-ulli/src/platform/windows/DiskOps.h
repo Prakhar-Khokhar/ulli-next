@@ -16,6 +16,7 @@
 #include "core/Result.h"
 
 #include <QString>
+#include <QJsonObject>
 
 #include <atomic>
 #include <filesystem>
@@ -42,6 +43,11 @@ public:
                                                 char driveLetter,
                                                 int partitionNumber,
                                                 std::uint64_t requestedShrinkBytes) override;
+
+    // Parse a single JSON object from PowerShell stdout. Returns an error
+    // with a bounded, escaped representation of the raw output on failure.
+    static core::Result<QJsonObject> parsePowerShellJsonOutput(const QString& output,
+                                                              const QString& stageId);
 
     // Builds the PowerShell probe script that validates a shrink plan and
     // reports the requested final size. Separated from execution so the

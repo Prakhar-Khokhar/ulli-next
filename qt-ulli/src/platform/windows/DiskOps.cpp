@@ -692,8 +692,47 @@ if ($requestedFinalSize -gt $sizeMax) {
 }
 
 # Output current state for verification and diagnostic logging
-Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "sizeMin":{3}, "sizeMax":{4}, "requestedFinalSize":{5}, "requestedShrink":{6}, "driveLetter":"{7}", "isSystem":{8}, "isBoot":{9}, "isHidden":{10}}}' -f $partition.DiskNumber, $partition.PartitionNumber, $currentSize, $sizeMin, $sizeMax, $requestedFinalSize, $requestedShrink, $actualDriveLetter, $partition.IsSystem, $partition.IsBoot, $partition.IsHidden)
+$probeResult = [pscustomobject]@{
+    diskNumber = $partition.DiskNumber
+    partitionNumber = $partition.PartitionNumber
+    currentSize = $currentSize
+    sizeMin = $sizeMin
+    sizeMax = $sizeMax
+    requestedFinalSize = $requestedFinalSize
+    requestedShrink = $requestedShrink
+    driveLetter = $actualDriveLetter
+    isSystem = $partition.IsSystem
+    isBoot = $partition.IsBoot
+    isHidden = $partition.IsHidden
+}
+Write-Output ($probeResult | ConvertTo-Json -Compress)
 )PS1").arg(diskNumber).arg(partitionNumber).arg(QString(driveLetter)).arg(static_cast<qulonglong>(requestedShrinkBytes));
+}
+
+core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& output, const QString& stageId) {
+    const QString trimmed = output.trimmed();
+    if (trimmed.isEmpty()) {
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform,
+            stageId + ": PowerShell produced empty output");
+    }
+    QJsonParseError perr{};
+    const QJsonDocument doc = QJsonDocument::fromJson(trimmed.toUtf8(), &perr);
+    if (perr.error != QJsonParseError::NoError) {
+        QString snippet = trimmed;
+        if (snippet.size() > 500) snippet = snippet.left(500) + "...";
+        snippet.replace('\n', " ").replace('\r', " ");
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform,
+            stageId + ": PowerShell output was not valid JSON: " +
+            perr.errorString().toStdString() + " (raw: " + snippet.toStdString() + ")");
+    }
+    if (!doc.isObject()) {
+        QString snippet = trimmed;
+        if (snippet.size() > 500) snippet = snippet.left(500) + "...";
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform,
+            stageId + ": PowerShell output was not a JSON object (raw: " +
+            snippet.toStdString() + ")");
+    }
+    return core::makeOk<QJsonObject>(doc.object());
 }
 
 core::Result<std::uint64_t> DiskOps::shrinkPartition(int diskNumber,
@@ -722,13 +761,11 @@ core::Result<std::uint64_t> DiskOps::shrinkPartition(int diskNumber,
     auto r = runPowerShellScript(script);
     if (!r) return core::makeError<std::uint64_t>(r.error().kind(), r.error().message());
 
-    QJsonParseError perr{};
-    QJsonDocument doc = QJsonDocument::fromJson(r.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
-            "PowerShell output was not valid JSON: " + perr.errorString().toStdString());
+    auto parsed = parsePowerShellJsonOutput(r.value(), "shrinkPartition probe");
+    if (!parsed) {
+        return core::makeError<std::uint64_t>(parsed.error().kind(), parsed.error().message());
     }
-    QJsonObject obj = doc.object();
+    QJsonObject obj = parsed.value();
     if (obj.contains("error")) {
         return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             obj.value("error").toString().toStdString());
@@ -780,12 +817,11 @@ Write-Output ('{{"newSize":{0}, "filesystem":"{1}", "offset":{2}}}' -f $newSize,
     auto verifyResult = runPowerShellScript(verifyScript);
     if (!verifyResult) return core::makeError<std::uint64_t>(verifyResult.error().kind(), verifyResult.error().message());
 
-    QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
-            "Post-resize verification output was not valid JSON");
+    auto verifyParsed = parsePowerShellJsonOutput(verifyResult.value(), "shrinkPartition post-resize verification");
+    if (!verifyParsed) {
+        return core::makeError<std::uint64_t>(verifyParsed.error().kind(), verifyParsed.error().message());
     }
-    QJsonObject verifyObj = verifyDoc.object();
+    QJsonObject verifyObj = verifyParsed.value();
     const qulonglong newSize = verifyObj.value("newSize").toVariant().toULongLong();
     const QString fs = verifyObj.value("filesystem").toString();
     const qulonglong offset = verifyObj.value("offset").toVariant().toULongLong();
