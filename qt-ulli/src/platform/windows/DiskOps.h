@@ -17,6 +17,8 @@
 
 #include <QString>
 
+#include <QJsonObject>
+
 #include <atomic>
 #include <filesystem>
 #include <vector>
@@ -42,6 +44,13 @@ public:
                                                 char driveLetter,
                                                 int partitionNumber,
                                                 std::uint64_t requestedShrinkBytes) override;
+
+    // Parse a single JSON object from PowerShell stdout. Public so it can be
+    // unit-tested with synthetic process output. Never treats malformed
+    // output as success.
+    static core::Result<QJsonObject> parsePowerShellJsonOutput(const QString& output,
+                                                               const QString& stageId,
+                                                               const QString& stderrOutput = QString());
 
     // Builds the PowerShell probe script that validates a shrink plan and
     // reports the requested final size. Separated from execution so the
@@ -77,6 +86,10 @@ core::Result<void> copyFiles(const std::filesystem::path& src,
 private:
     // Run a PowerShell script from a temp file, return trimmed stdout.
     core::Result<QString> runPowerShellScript(const QString& script);
+
+    // Stderr captured from the most recent runPowerShellScript call.
+    // Used for diagnostics when JSON parsing fails.
+    QString lastStderr_;
 
     // Check BitLocker lock state on a given partition via PowerShell.
     // Returns Ok(true) when locked/unsafe, Ok(false) when unlocked, or an

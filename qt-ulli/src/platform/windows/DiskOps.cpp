@@ -673,7 +673,14 @@ $requestedShrink = %4
 $requestedFinalSize = $currentSize - $requestedShrink
 
 if ($requestedFinalSize -le 0) {
-    Write-Output ('{{"error":"Requested final size would be zero or negative", "diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "requestedShrink":{3}}}' -f $diskNumber, $partitionNumber, $currentSize, $requestedShrink)
+    $nonpositiveObj = [pscustomobject]@{
+        error = "Requested final size would be zero or negative"
+        diskNumber = $diskNumber
+        partitionNumber = $partitionNumber
+        currentSize = $currentSize
+        requestedShrink = $requestedShrink
+    }
+    Write-Output ($nonpositiveObj | ConvertTo-Json -Compress)
     exit 1
 }
 
@@ -683,17 +690,71 @@ $sizeMin = $supported.SizeMin
 $sizeMax = $supported.SizeMax
 
 if ($requestedFinalSize -lt $sizeMin) {
-    Write-Output ('{{"error":"Requested final size {0} is below minimum supported size {1}", "sizeMin":{1}, "sizeMax":{2}, "currentSize":{3}, "diskNumber":{4}, "partitionNumber":{5}}}' -f $requestedFinalSize, $sizeMin, $sizeMax, $currentSize, $diskNumber, $partitionNumber)
+    $belowMinObj = [pscustomobject]@{
+        error = ("Requested final size " + $requestedFinalSize + " is below minimum supported size " + $sizeMin)
+        sizeMin = $sizeMin
+        sizeMax = $sizeMax
+        currentSize = $currentSize
+        diskNumber = $diskNumber
+        partitionNumber = $partitionNumber
+    }
+    Write-Output ($belowMinObj | ConvertTo-Json -Compress)
     exit 1
 }
 if ($requestedFinalSize -gt $sizeMax) {
-    Write-Output ('{{"error":"Requested final size {0} exceeds maximum supported size {1}", "sizeMin":{1}, "sizeMax":{2}, "currentSize":{3}, "diskNumber":{4}, "partitionNumber":{5}}}' -f $requestedFinalSize, $sizeMin, $sizeMax, $currentSize, $diskNumber, $partitionNumber)
+    $aboveMaxObj = [pscustomobject]@{
+        error = ("Requested final size " + $requestedFinalSize + " exceeds maximum supported size " + $sizeMax)
+        sizeMin = $sizeMin
+        sizeMax = $sizeMax
+        currentSize = $currentSize
+        diskNumber = $diskNumber
+        partitionNumber = $partitionNumber
+    }
+    Write-Output ($aboveMaxObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Output current state for verification and diagnostic logging
 Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "sizeMin":{3}, "sizeMax":{4}, "requestedFinalSize":{5}, "requestedShrink":{6}, "driveLetter":"{7}", "isSystem":{8}, "isBoot":{9}, "isHidden":{10}}}' -f $partition.DiskNumber, $partition.PartitionNumber, $currentSize, $sizeMin, $sizeMax, $requestedFinalSize, $requestedShrink, $actualDriveLetter, $partition.IsSystem, $partition.IsBoot, $partition.IsHidden)
 )PS1").arg(diskNumber).arg(partitionNumber).arg(QString(driveLetter)).arg(static_cast<qulonglong>(requestedShrinkBytes));
+}
+
+core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& output, const QString& stageId, const QString& stderrOutput) {
+    const QString trimmed = output.trimmed();
+    if (trimmed.isEmpty()) {
+        QString msg = stageId.toStdString() + ": PowerShell produced empty output";
+        if (!stderrOutput.trimmed().isEmpty()) {
+            QString errSnippet = stderrOutput.trimmed();
+            if (errSnippet.size() > 300) errSnippet = errSnippet.left(300) + "...";
+            errSnippet.replace('\n', " ").replace('\r', " ");
+            msg += " (stderr: " + errSnippet.toStdString() + ")";
+        }
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg);
+    }
+    QJsonParseError perr{};
+    const QJsonDocument doc = QJsonDocument::fromJson(trimmed.toUtf8(), &perr);
+    if (perr.error != QJsonParseError::NoError) {
+        QString snippet = trimmed;
+        if (snippet.size() > 500) snippet = snippet.left(500) + "...";
+        snippet.replace('\n', " ").replace('\r', " ");
+        QString msg = stageId.toStdString() + ": PowerShell output was not valid JSON: " +
+            perr.errorString().toStdString() + " (raw stdout: " + snippet.toStdString() + ")";
+        if (!stderrOutput.trimmed().isEmpty()) {
+            QString errSnippet = stderrOutput.trimmed();
+            if (errSnippet.size() > 300) errSnippet = errSnippet.left(300) + "...";
+            errSnippet.replace('\n', " ").replace('\r', " ");
+            msg += " (stderr: " + errSnippet.toStdString() + ")";
+        }
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg);
+    }
+    if (!doc.isObject()) {
+        QString snippet = trimmed;
+        if (snippet.size() > 500) snippet = snippet.left(500) + "...";
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform,
+            stageId.toStdString() + ": PowerShell output was not a JSON object (raw: " +
+            snippet.toStdString() + ")");
+    }
+    return core::makeOk<QJsonObject>(doc.object());
 }
 
 core::Result<std::uint64_t> DiskOps::shrinkPartition(int diskNumber,
@@ -722,13 +783,11 @@ core::Result<std::uint64_t> DiskOps::shrinkPartition(int diskNumber,
     auto r = runPowerShellScript(script);
     if (!r) return core::makeError<std::uint64_t>(r.error().kind(), r.error().message());
 
-    QJsonParseError perr{};
-    QJsonDocument doc = QJsonDocument::fromJson(r.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
-            "PowerShell output was not valid JSON: " + perr.errorString().toStdString());
+    auto parsed = parsePowerShellJsonOutput(r.value(), "shrinkPartition probe", lastStderr_);
+    if (!parsed) {
+        return core::makeError<std::uint64_t>(parsed.error().kind(), parsed.error().message());
     }
-    QJsonObject obj = doc.object();
+    QJsonObject obj = parsed.value();
     if (obj.contains("error")) {
         return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
             obj.value("error").toString().toStdString());
@@ -774,18 +833,22 @@ $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 $newSize = $partition.Size
 $fs = if ($volume) { $volume.FileSystem } else { '' }
 
-Write-Output ('{{"newSize":{0}, "filesystem":"{1}", "offset":{2}}}' -f $newSize, $fs, $partition.Offset)
+$verifyResult = [pscustomobject]@{
+    newSize = $newSize
+    filesystem = $fs
+    offset = $partition.Offset
+}
+Write-Output ($verifyResult | ConvertTo-Json -Compress)
 )PS1").arg(resolvedDiskNumber).arg(resolvedPartitionNumber);
 
     auto verifyResult = runPowerShellScript(verifyScript);
     if (!verifyResult) return core::makeError<std::uint64_t>(verifyResult.error().kind(), verifyResult.error().message());
 
-    QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        return core::makeError<std::uint64_t>(core::Error::Kind::Platform,
-            "Post-resize verification output was not valid JSON");
+    auto verifyParsed = parsePowerShellJsonOutput(verifyResult.value(), "shrinkPartition post-resize verification", lastStderr_);
+    if (!verifyParsed) {
+        return core::makeError<std::uint64_t>(verifyParsed.error().kind(), verifyParsed.error().message());
     }
-    QJsonObject verifyObj = verifyDoc.object();
+    QJsonObject verifyObj = verifyParsed.value();
     const qulonglong newSize = verifyObj.value("newSize").toVariant().toULongLong();
     const QString fs = verifyObj.value("filesystem").toString();
     const qulonglong offset = verifyObj.value("offset").toVariant().toULongLong();
@@ -845,18 +908,17 @@ if ($prot -and $locked) {
         return core::makeError<bool>(r.error().kind(),
             "BitLocker query failed: " + r.error().message());
     }
-    QJsonParseError perr{};
-    const QJsonDocument doc = QJsonDocument::fromJson(r.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
-        return core::makeError<bool>(core::Error::Kind::Platform,
-            "BitLocker query returned invalid JSON");
+    auto parsed = parsePowerShellJsonOutput(r.value(), "isBitLockerLockedOnPartition", lastStderr_);
+    if (!parsed) {
+        return core::makeError<bool>(parsed.error().kind(), parsed.error().message());
     }
-    const QString status = doc.object().value("status").toString();
+    QJsonObject doc = parsed.value();
+    const QString status = doc.value("status").toString();
     if (status == "locked") return core::makeOk<bool>(true);
     if (status == "unlocked") return core::makeOk<bool>(false);
     return core::makeError<bool>(core::Error::Kind::Platform,
         "BitLocker status indeterminate: " +
-        doc.object().value("reason").toString().toStdString());
+        doc.value("reason").toString().toStdString());
 }
 
 core::Result<QString> DiskOps::runPowerShellScript(const QString& script) {
@@ -899,6 +961,7 @@ core::Result<QString> DiskOps::runPowerShellScript(const QString& script) {
             core::joinScriptOutput(err, out));
     }
     const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput()).trimmed();
+    lastStderr_ = QString::fromLocal8Bit(proc.readAllStandardError()).trimmed();
     QFile::remove(scriptPath);
     return core::makeOk(out);
 }

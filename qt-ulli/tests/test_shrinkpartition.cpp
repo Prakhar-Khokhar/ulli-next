@@ -14,6 +14,7 @@
 
 #include <QtTest/QtTest>
 
+#include <QJsonObject>
 #include <QString>
 
 class TestShrinkPartition : public QObject {
@@ -29,6 +30,14 @@ private slots:
     void generatedScriptRejectsProtectedPartitionsButNotBootPartition();
     void generatedScriptIncludesPartitionIdentityInDiagnostics();
     void generatedScriptUsesConvertToJsonForErrors();
+    void parseValidSuccessJson();
+    void parseValidErrorJson();
+    void parseRejectsEmptyOutput();
+    void parseRejectsMalformedJson();
+    void parseRejectsMultipleObjects();
+    void parsePreservesStageIdentifier();
+    void parseIncludesStderrInError();
+    void parseHandlesNumericAndSpecialChars();
 };
 
 // PowerShell comparison operators are -le / -lt / -gt / -eq / -ne. The
@@ -142,12 +151,14 @@ void TestShrinkPartition::generatedScriptRejectsProtectedPartitionsButNotBootPar
 void TestShrinkPartition::generatedScriptIncludesPartitionIdentityInDiagnostics() {
     const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
 
-    QVERIFY(script.contains(
-        QStringLiteral("\"diskNumber\":{0}, \"partitionNumber\":{1}")));
-    QVERIFY(script.contains(
-        QStringLiteral("\"driveLetter\":\"{7}\"")));
-    QVERIFY(script.contains(
-        QStringLiteral("\"isSystem\":{8}, \"isBoot\":{9}, \"isHidden\":{10}")));
+    // The probe result is serialized via ConvertTo-Json, so the property
+    // names must appear in the pscustomobject definition.
+    QVERIFY(script.contains(QStringLiteral("diskNumber = $partition.DiskNumber")));
+    QVERIFY(script.contains(QStringLiteral("partitionNumber = $partition.PartitionNumber")));
+    QVERIFY(script.contains(QStringLiteral("driveLetter = $actualDriveLetter")));
+    QVERIFY(script.contains(QStringLiteral("isSystem = $partition.IsSystem")));
+    QVERIFY(script.contains(QStringLiteral("isBoot = $partition.IsBoot")));
+    QVERIFY(script.contains(QStringLiteral("isHidden = $partition.IsHidden")));
 }
 
 
@@ -155,6 +166,95 @@ void TestShrinkPartition::generatedScriptUsesConvertToJsonForErrors() {
     const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
     QVERIFY(script.contains(QStringLiteral("ConvertTo-Json -Compress")));
 }
+
+
+// ─── parsePowerShellJsonOutput tests ─────────────────────────────────────
+
+void TestShrinkPartition::parseValidSuccessJson() {
+    const QString json = QStringLiteral(
+        "{\"diskNumber\":0,\"partitionNumber\":3,\"currentSize\":53687091200,"
+        "\"sizeMin\":1000000000,\"sizeMax\":50000000000,\"requestedFinalSize\":46687091200,"
+        "\"requestedShrink\":7000000000,\"driveLetter\":\"C\",\"isSystem\":false,"
+        "\"isBoot\":true,\"isHidden\":false}");
+    auto result = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(json, "test stage");
+    QVERIFY(result);
+    QCOMPARE(result.value().value("diskNumber").toInt(), 0);
+    QCOMPARE(result.value().value("partitionNumber").toInt(), 3);
+    QCOMPARE(result.value().value("driveLetter").toString(), QStringLiteral("C"));
+    QVERIFY(!result.value().value("isSystem").toBool());
+    QVERIFY(result.value().value("isBoot").toBool());
+}
+
+void TestShrinkPartition::parseValidErrorJson() {
+    const QString json = QStringLiteral(
+        "{\"error\":\"Cannot shrink system or recovery partition\","
+        "\"diskNumber\":0,\"partitionNumber\":1,\"isSystem\":true,\"isHidden\":true}");
+    auto result = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(json, "test stage");
+    QVERIFY(result);
+    QVERIFY(result.value().contains("error"));
+    QCOMPARE(result.value().value("error").toString(),
+             QStringLiteral("Cannot shrink system or recovery partition"));
+}
+
+void TestShrinkPartition::parseRejectsEmptyOutput() {
+    auto result = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(
+        QString(), "empty test");
+    QVERIFY(!result);
+    QVERIFY(result.error().message().find("empty output") != std::string::npos);
+}
+
+void TestShrinkPartition::parseRejectsMalformedJson() {
+    // "illegal number" style: number with leading zero
+    auto r1 = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(
+        QStringLiteral("{\"value\": 01}"), "malformed test");
+    QVERIFY(!r1);
+
+    // Trailing decimal point
+    auto r2 = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(
+        QStringLiteral("{\"value\": 1.}"), "malformed test");
+    QVERIFY(!r2);
+
+    // Completely invalid
+    auto r3 = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(
+        QStringLiteral("not json at all"), "malformed test");
+    QVERIFY(!r3);
+}
+
+void TestShrinkPartition::parseRejectsMultipleObjects() {
+    // Two JSON objects on separate lines (stdout contamination)
+    const QString multi = QStringLiteral(
+        "{\"diskNumber\":0,\"partitionNumber\":3}\n"
+        "{\"diskNumber\":1,\"partitionNumber\":1}");
+    auto result = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(multi, "multi test");
+    QVERIFY(!result);
+}
+
+void TestShrinkPartition::parsePreservesStageIdentifier() {
+    auto result = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(
+        QStringLiteral("garbage"), "myCustomStage");
+    QVERIFY(!result);
+    QVERIFY(result.error().message().find("myCustomStage") != std::string::npos);
+}
+
+void TestShrinkPartition::parseIncludesStderrInError() {
+    auto result = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(
+        QStringLiteral("not json"), "stage", QStringLiteral("some stderr warning"));
+    QVERIFY(!result);
+    QVERIFY(result.error().message().find("stderr") != std::string::npos);
+    QVERIFY(result.error().message().find("some stderr warning") != std::string::npos);
+}
+
+void TestShrinkPartition::parseHandlesNumericAndSpecialChars() {
+    // Large numbers (partition sizes in bytes)
+    const QString json = QStringLiteral(
+        "{\"currentSize\":53687091200,\"sizeMin\":1048576,\"offset\":1048576,"
+        "\"filesystem\":\"NTFS\",\"driveLetter\":\"C\",\"error\":\"test with \\\"quotes\\\" and \\n newline\"}");
+    auto result = ulli::platform::windows::DiskOps::parsePowerShellJsonOutput(json, "numeric test");
+    QVERIFY(result);
+    QCOMPARE(result.value().value("currentSize").toVariant().toULongLong(), 53687091200ULL);
+    QCOMPARE(result.value().value("filesystem").toString(), QStringLiteral("NTFS"));
+}
+
 
 QTEST_MAIN(TestShrinkPartition)
 #include "test_shrinkpartition.moc"
