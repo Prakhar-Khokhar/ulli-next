@@ -715,19 +715,32 @@ if ($requestedFinalSize -gt $sizeMax) {
 }
 
 # Output current state for verification and diagnostic logging
-Write-Output ('{{"diskNumber":{0}, "partitionNumber":{1}, "currentSize":{2}, "sizeMin":{3}, "sizeMax":{4}, "requestedFinalSize":{5}, "requestedShrink":{6}, "driveLetter":"{7}", "isSystem":{8}, "isBoot":{9}, "isHidden":{10}}}' -f $partition.DiskNumber, $partition.PartitionNumber, $currentSize, $sizeMin, $sizeMax, $requestedFinalSize, $requestedShrink, $actualDriveLetter, $partition.IsSystem, $partition.IsBoot, $partition.IsHidden)
+$probeResult = [pscustomobject]@{
+    diskNumber = $partition.DiskNumber
+    partitionNumber = $partition.PartitionNumber
+    currentSize = $currentSize
+    sizeMin = $sizeMin
+    sizeMax = $sizeMax
+    requestedFinalSize = $requestedFinalSize
+    requestedShrink = $requestedShrink
+    driveLetter = $actualDriveLetter
+    isSystem = $partition.IsSystem
+    isBoot = $partition.IsBoot
+    isHidden = $partition.IsHidden
+}
+Write-Output ($probeResult | ConvertTo-Json -Compress)
 )PS1").arg(diskNumber).arg(partitionNumber).arg(QString(driveLetter)).arg(static_cast<qulonglong>(requestedShrinkBytes));
 }
 
 core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& output, const QString& stageId, const QString& stderrOutput) {
     const QString trimmed = output.trimmed();
     if (trimmed.isEmpty()) {
-        QString msg = stageId.toStdString() + ": PowerShell produced empty output";
+        QString msg = stageId + ": PowerShell produced empty output";
         if (!stderrOutput.trimmed().isEmpty()) {
             QString errSnippet = stderrOutput.trimmed();
             if (errSnippet.size() > 300) errSnippet = errSnippet.left(300) + "...";
             errSnippet.replace('\n', " ").replace('\r', " ");
-            msg += " (stderr: " + errSnippet.toStdString() + ")";
+            msg += " (stderr: " + errSnippet + ")";
         }
         return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg);
     }
@@ -737,13 +750,13 @@ core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& outp
         QString snippet = trimmed;
         if (snippet.size() > 500) snippet = snippet.left(500) + "...";
         snippet.replace('\n', " ").replace('\r', " ");
-        QString msg = stageId.toStdString() + ": PowerShell output was not valid JSON: " +
-            perr.errorString().toStdString() + " (raw stdout: " + snippet.toStdString() + ")";
+        QString msg = stageId + ": PowerShell output was not valid JSON: " +
+            perr.errorString() + " (raw stdout: " + snippet + ")";
         if (!stderrOutput.trimmed().isEmpty()) {
             QString errSnippet = stderrOutput.trimmed();
             if (errSnippet.size() > 300) errSnippet = errSnippet.left(300) + "...";
             errSnippet.replace('\n', " ").replace('\r', " ");
-            msg += " (stderr: " + errSnippet.toStdString() + ")";
+            msg += " (stderr: " + errSnippet + ")";
         }
         return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg);
     }
@@ -751,8 +764,8 @@ core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& outp
         QString snippet = trimmed;
         if (snippet.size() > 500) snippet = snippet.left(500) + "...";
         return core::makeError<QJsonObject>(core::Error::Kind::Platform,
-            stageId.toStdString() + ": PowerShell output was not a JSON object (raw: " +
-            snippet.toStdString() + ")");
+            stageId + ": PowerShell output was not a JSON object (raw: " +
+            snippet + ")");
     }
     return core::makeOk<QJsonObject>(doc.object());
 }
