@@ -38,6 +38,11 @@ private slots:
     void parsePreservesStageIdentifier();
     void parseIncludesStderrInError();
     void parseHandlesNumericAndSpecialChars();
+    void bitlockerConfirmedSafe();
+    void bitlockerConfirmedLocked();
+    void bitlockerIndeterminateUnknownStatus();
+    void bitlockerIndeterminateEmptyReason();
+    void bitlockerIndeterminateLocalizedStatus();
 };
 
 // PowerShell comparison operators are -le / -lt / -gt / -eq / -ne. The
@@ -262,6 +267,62 @@ void TestShrinkPartition::parseHandlesNumericAndSpecialChars() {
     QVERIFY(result.isOk());
     QCOMPARE(result.value().value("currentSize").toVariant().toULongLong(), 53687091200ULL);
     QCOMPARE(result.value().value("filesystem").toString(), QStringLiteral("NTFS"));
+}
+
+
+
+// ─── interpretBitLockerStatus tests ──────────────────────────────────────
+
+void TestShrinkPartition::bitlockerConfirmedSafe() {
+    auto r1 = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("unlocked"), QStringLiteral("bitlocker not locked"));
+    QVERIFY(r1.isOk());
+    QVERIFY(!r1.value());
+
+    auto r2 = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("unlocked"), QString());
+    QVERIFY(r2.isOk());
+    QVERIFY(!r2.value());
+}
+
+void TestShrinkPartition::bitlockerConfirmedLocked() {
+    auto r = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("locked"), QStringLiteral("bitlocker protected and locked"));
+    QVERIFY(r.isOk());
+    QVERIFY(r.value());
+}
+
+void TestShrinkPartition::bitlockerIndeterminateUnknownStatus() {
+    // "indeterminate" status -> error (block)
+    auto r1 = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("indeterminate"), QStringLiteral("manage-bde unavailable"));
+    QVERIFY(r1.isError());
+
+    // "unknown" status -> error (block)
+    auto r2 = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("unknown"), QStringLiteral("no volume"));
+    QVERIFY(r2.isError());
+
+    // Completely unrecognized status -> error (block)
+    auto r3 = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("foobar"), QString());
+    QVERIFY(r3.isError());
+    QVERIFY(r3.error().message().find("foobar") != std::string::npos);
+}
+
+void TestShrinkPartition::bitlockerIndeterminateEmptyReason() {
+    // Missing cmdlet must never become "unlocked"
+    auto r = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("indeterminate"), QStringLiteral("BitLocker PowerShell module and manage-bde are both unavailable"));
+    QVERIFY(r.isError());
+    QVERIFY(r.error().message().find("indeterminate") != std::string::npos);
+}
+
+void TestShrinkPartition::bitlockerIndeterminateLocalizedStatus() {
+    // Localized/unparsed output -> indeterminate -> error
+    auto r = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
+        QStringLiteral("indeterminate"), QStringLiteral("manage-bde output could not be parsed (possibly localized)"));
+    QVERIFY(r.isError());
 }
 
 

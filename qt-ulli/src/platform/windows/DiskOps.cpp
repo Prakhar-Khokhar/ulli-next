@@ -894,6 +894,19 @@ Write-Output ($verifyResult | ConvertTo-Json -Compress)
     return core::makeOk(static_cast<std::uint64_t>(newSize));
 }
 
+core::Result<bool> DiskOps::interpretBitLockerStatus(const QString& status, const QString& reason) {
+    if (status == "locked") return core::makeOk<bool>(true);
+    if (status == "unlocked") return core::makeOk<bool>(false);
+    // indeterminate, unknown, or any unrecognized status -> block
+    QString msg = "BitLocker status indeterminate";
+    if (!reason.isEmpty()) {
+        msg += ": " + reason.toStdString();
+    } else {
+        msg += ": unrecognized status '" + status.toStdString() + "'";
+    }
+    return core::makeError<bool>(core::Error::Kind::Platform, msg);
+}
+
 core::Result<bool> DiskOps::isBitLockerLockedOnPartition(int diskNumber, int partitionNumber) {
     QString script = QString(R"PS1(
 $ErrorActionPreference = 'Stop'
@@ -902,29 +915,116 @@ $ProgressPreference = 'SilentlyContinue'
 $partition = Get-Partition -DiskNumber %1 -PartitionNumber %2 -ErrorAction Stop
 $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 if (-not $volume) {
-    Write-Output '{"status":"unknown","reason":"no volume"}'
+    $r = [pscustomobject]@{ status = "unknown"; reason = "no volume" }
+    Write-Output ($r | ConvertTo-Json -Compress)
     exit 0
 }
 if (-not $volume.DriveLetter) {
-    Write-Output '{"status":"unknown","reason":"no drive letter"}'
+    $r = [pscustomobject]@{ status = "unknown"; reason = "no drive letter" }
+    Write-Output ($r | ConvertTo-Json -Compress)
     exit 0
 }
 
-$bl = Get-BitLockerVolume -MountPoint ($volume.DriveLetter + ':') -ErrorAction SilentlyContinue
-if (-not $bl) {
-    Write-Output '{"status":"unlocked"}'
+$mountPoint = ($volume.DriveLetter + ':')
+
+# Check if Get-BitLockerVolume cmdlet is available
+$blCmd = Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue
+if ($blCmd) {
+    $bl = Get-BitLockerVolume -MountPoint $mountPoint -ErrorAction SilentlyContinue
+    if (-not $bl) {
+        # Cmdlet available but no BitLocker info -> likely unencrypted
+        $r = [pscustomobject]@{ status = "unlocked"; reason = "no bitlocker info" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    $locked = ($bl.VolumeStatus -eq 'FullyEncrypted' -or
+               $bl.VolumeStatus -eq 'EncryptionInProgress' -or
+               $bl.LockStatus -eq 'Locked')
+    $prot = [bool]$bl.ProtectionStatus
+    if ($prot -and $locked) {
+        $r = [pscustomobject]@{ status = "locked"; reason = "bitlocker protected and locked" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+    } else {
+        $r = [pscustomobject]@{ status = "unlocked"; reason = "bitlocker not locked" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+    }
     exit 0
 }
 
-$locked = ($bl.VolumeStatus -eq 'FullyEncrypted' -or
-           $bl.VolumeStatus -eq 'EncryptionInProgress' -or
-           $bl.LockStatus -eq 'Locked')
-$prot = [bool]$bl.ProtectionStatus
-if ($prot -and $locked) {
-    Write-Output '{"status":"locked"}'
-} else {
-    Write-Output '{"status":"unlocked"}'
+# Fallback: manage-bde utility
+$manageBdeCmd = Get-Command manage-bde.exe -ErrorAction SilentlyContinue
+if (-not $manageBdeCmd) {
+    # Neither cmdlet nor manage-bde available -> indeterminate
+    $r = [pscustomobject]@{ status = "indeterminate"; reason = "BitLocker PowerShell module and manage-bde are both unavailable" }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
 }
+
+# Run manage-bde -status
+$mbOutput = & manage-bde.exe -status $mountPoint 2>&1
+$mbExitCode = $LASTEXITCODE
+
+if ($mbExitCode -ne 0) {
+    $r = [pscustomobject]@{ status = "indeterminate"; reason = ("manage-bde exited with code " + $mbExitCode) }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
+}
+
+# Parse manage-bde output
+$lockStatus = ''
+$conversionStatus = ''
+$protectionStatus = ''
+
+foreach ($line in $mbOutput) {
+    $lineStr = $line.ToString().Trim()
+    if ($lineStr -match 'Lock Status:\s*(.+)') {
+        $lockStatus = $matches[1].Trim()
+    }
+    if ($lineStr -match 'Conversion Status:\s*(.+)') {
+        $conversionStatus = $matches[1].Trim()
+    }
+    if ($lineStr -match 'Protection Status:\s*(.+)') {
+        $protectionStatus = $matches[1].Trim()
+    }
+}
+
+# Determine state
+if ($lockStatus -eq 'Locked') {
+    $r = [pscustomobject]@{ status = "locked"; reason = "manage-bde reports locked" }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
+}
+
+# If we couldn't parse the output, indeterminate
+if ([string]::IsNullOrWhiteSpace($lockStatus) -or [string]::IsNullOrWhiteSpace($conversionStatus)) {
+    $r = [pscustomobject]@{ status = "indeterminate"; reason = "manage-bde output could not be parsed (possibly localized)" }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
+}
+
+if ($conversionStatus -eq 'Fully Decrypted' -and $protectionStatus -eq 'Protection Off') {
+    $r = [pscustomobject]@{ status = "unlocked"; reason = "manage-bde reports fully decrypted" }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
+}
+
+if ($conversionStatus -eq 'Fully Encrypted' -and $protectionStatus -eq 'Protection On' -and $lockStatus -eq 'Unlocked') {
+    $r = [pscustomobject]@{ status = "unlocked"; reason = "manage-bde reports encrypted but unlocked" }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
+}
+
+# Encrypted and protected but lock status not determined -> indeterminate
+if ($conversionStatus -eq 'Fully Encrypted' -and $protectionStatus -eq 'Protection On') {
+    $r = [pscustomobject]@{ status = "indeterminate"; reason = "manage-bde lock status not determined" }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
+}
+
+# Default: unlocked
+$r = [pscustomobject]@{ status = "unlocked"; reason = "manage-bde default" }
+Write-Output ($r | ConvertTo-Json -Compress)
+exit 0
 )PS1").arg(diskNumber).arg(partitionNumber);
 
     auto r = runPowerShellScript(script);
@@ -938,11 +1038,8 @@ if ($prot -and $locked) {
     }
     QJsonObject doc = parsed.value();
     const QString status = doc.value("status").toString();
-    if (status == "locked") return core::makeOk<bool>(true);
-    if (status == "unlocked") return core::makeOk<bool>(false);
-    return core::makeError<bool>(core::Error::Kind::Platform,
-        "BitLocker status indeterminate: " +
-        doc.value("reason").toString().toStdString());
+    const QString reason = doc.value("reason").toString();
+    return interpretBitLockerStatus(status, reason);
 }
 
 core::Result<QString> DiskOps::runPowerShellScript(const QString& script) {

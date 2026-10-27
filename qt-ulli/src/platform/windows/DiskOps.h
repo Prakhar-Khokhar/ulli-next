@@ -52,6 +52,13 @@ public:
                                                                const QString& stageId,
                                                                const QString& stderrOutput = QString());
 
+    // Interpret a BitLocker status string returned by PowerShell or a
+    // fallback tool. Returns Ok(true) for locked/unsafe, Ok(false) for
+    // confirmed safe, and an error for indeterminate states.
+    // Public so it can be unit-tested with synthetic results.
+    static core::Result<bool> interpretBitLockerStatus(const QString& status,
+                                                       const QString& reason);
+
     // Builds the PowerShell probe script that validates a shrink plan and
     // reports the requested final size. Separated from execution so the
     // generated script can be inspected (and regression-tested) without
