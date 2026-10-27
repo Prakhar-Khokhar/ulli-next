@@ -1354,12 +1354,12 @@ $driveLetter = if ($volume -and $volume.DriveLetter) { [string]$volume.DriveLett
             "Create partition failed: " + createResult.error().message());
     }
 
-    QJsonDocument createDoc = QJsonDocument::fromJson(createResult.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        return core::makeError(core::Error::Kind::Platform,
-            "Create partition output was not valid JSON: " + perr.errorString().toStdString());
+    auto createParsed = parsePowerShellJsonOutput(createResult.value(), "createLayout create partition", lastStderr_);
+    if (!createParsed) {
+        return core::makeError(createParsed.error().kind(),
+            "Create partition failed: " + createParsed.error().message());
     }
-    QJsonObject createObj = createDoc.object();
+    QJsonObject createObj = createParsed.value();
     if (createObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
             "Create partition failed: " + createObj.value("error").toString().toStdString());
@@ -1474,12 +1474,12 @@ $extentOut = foreach ($p in $allParts) {
             "Post-create verification failed: " + verifyResult.error().message());
     }
 
-    QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        return core::makeError(core::Error::Kind::Platform,
-            "Post-create verification output was not valid JSON: " + perr.errorString().toStdString());
+    auto verifyParsed = parsePowerShellJsonOutput(verifyResult.value(), "createLayout post-create verification", lastStderr_);
+    if (!verifyParsed) {
+        return core::makeError(verifyParsed.error().kind(),
+            "Post-create verification failed: " + verifyParsed.error().message());
     }
-    QJsonObject verifyObj = verifyDoc.object();
+    QJsonObject verifyObj = verifyParsed.value();
     if (verifyObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
             "Post-create verification failed: " + verifyObj.value("error").toString().toStdString());
