@@ -742,7 +742,7 @@ core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& outp
             errSnippet.replace('\n', " ").replace('\r', " ");
             msg += " (stderr: " + errSnippet + ")";
         }
-        return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg);
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg.toStdString());
     }
     QJsonParseError perr{};
     const QJsonDocument doc = QJsonDocument::fromJson(trimmed.toUtf8(), &perr);
@@ -758,14 +758,14 @@ core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& outp
             errSnippet.replace('\n', " ").replace('\r', " ");
             msg += " (stderr: " + errSnippet + ")";
         }
-        return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg);
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform, msg.toStdString());
     }
     if (!doc.isObject()) {
         QString snippet = trimmed;
         if (snippet.size() > 500) snippet = snippet.left(500) + "...";
         return core::makeError<QJsonObject>(core::Error::Kind::Platform,
-            stageId + ": PowerShell output was not a JSON object (raw: " +
-            snippet + ")");
+            (stageId + ": PowerShell output was not a JSON object (raw: " +
+            snippet + ")").toStdString());
     }
     return core::makeOk<QJsonObject>(doc.object());
 }
@@ -1577,6 +1577,7 @@ if ($volume -and $volume.DriveLetter) {
             commandOutput = QString::fromStdString(verifyResult.error().message());
             continue;
         }
+        QJsonParseError perr{};
         QJsonDocument verifyDoc = QJsonDocument::fromJson(verifyResult.value().toUtf8(), &perr);
         if (perr.error != QJsonParseError::NoError) {
             commandOutput = verifyResult.value();
