@@ -734,6 +734,17 @@ Write-Output ($probeResult | ConvertTo-Json -Compress)
 
 core::Result<QJsonObject> DiskOps::parsePowerShellJsonOutput(const QString& output, const QString& stageId, const QString& stderrOutput) {
     const QString trimmed = output.trimmed();
+    // Reject multi-line output: a valid ConvertTo-Json -Compress result is a
+    // single line. Multiple lines indicate multiple objects or stdout
+    // contamination.
+    if (trimmed.contains('\n') || trimmed.contains('\r')) {
+        QString snippet = trimmed;
+        if (snippet.size() > 500) snippet = snippet.left(500) + "...";
+        snippet.replace('\n', " ").replace('\r', " ");
+        return core::makeError<QJsonObject>(core::Error::Kind::Platform,
+            (stageId + ": PowerShell output contained multiple lines (possible stdout contamination): " +
+            snippet).toStdString());
+    }
     if (trimmed.isEmpty()) {
         QString msg = stageId + ": PowerShell produced empty output";
         if (!stderrOutput.trimmed().isEmpty()) {
