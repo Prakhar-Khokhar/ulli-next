@@ -1071,25 +1071,30 @@ if ($disk.OperationalStatus -ne 'Online') {
 # partition number), not by drive letter alone.
 $targetPartition = Get-Partition -DiskNumber $diskNumber -PartitionNumber $partitionNumber -ErrorAction SilentlyContinue
 if (-not $targetPartition) {
-    Write-Output ('{{"error":"Target partition not found on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
+    $errObj = [pscustomobject]@{ error = ("Target partition not found on disk " + $diskNumber + " (partition " + $partitionNumber + ")") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 if ($targetPartition.DiskNumber -ne $diskNumber -or $targetPartition.PartitionNumber -ne $partitionNumber) {
-    Write-Output ('{{"error":"Target partition identity mismatch on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
+    $errObj = [pscustomobject]@{ error = ("Target partition identity mismatch on disk " + $diskNumber + " (partition " + $partitionNumber + ")") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Cross-check the drive letter against the plan.
 $actualDriveLetter = if ($targetPartition.DriveLetter) { [string]$targetPartition.DriveLetter } else { '' }
 if ($actualDriveLetter -ne $shrinkDriveLetter) {
-    Write-Output ('{{"error":"Drive letter mismatch on disk {0} partition {1}: expected {2}, found {3}"}}' -f $diskNumber, $partitionNumber, $shrinkDriveLetter, $actualDriveLetter)
+    $errObj = [pscustomobject]@{ error = ("Drive letter mismatch on disk " + $diskNumber + " partition " + $partitionNumber + ": expected " + $shrinkDriveLetter + ", found " + $actualDriveLetter) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Verify filesystem is NTFS
 $volume = Get-Volume -Partition $targetPartition -ErrorAction SilentlyContinue
 if (-not $volume -or $volume.FileSystem -ne 'NTFS') {
-    Write-Output ('{{"error":"Target partition is not NTFS. Filesystem: {0}"}}' -f (if ($volume) { $volume.FileSystem } else { 'none' }))
+    $fs = if ($volume) { $volume.FileSystem } else { 'none' }
+    $errObj = [pscustomobject]@{ error = ("Target partition is not NTFS. Filesystem: " + $fs) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
@@ -1140,20 +1145,23 @@ if (-not $foundGap) {
 }
 
 if (-not $foundGap) {
-    Write-Output ('{{"error":"No free region found immediately after target partition. Target end: {0}, disk size: {1}"}}' -f $targetEnd, $disk.Size)
+    $errObj = [pscustomobject]@{ error = ("No free region found immediately after target partition. Target end: " + $targetEnd + ", disk size: " + $disk.Size) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Verify the gap is large enough for staging partition
 if ($gapSize -lt $stagingSizeNeeded) {
-    Write-Output ('{{"error":"Free region after target partition ({0} bytes) is smaller than required staging size ({1} bytes)."}}' -f $gapSize, $stagingSizeNeeded)
+    $errObj = [pscustomobject]@{ error = ("Free region after target partition (" + $gapSize + " bytes) is smaller than required staging size (" + $stagingSizeNeeded + " bytes).") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Also verify the total freed space is approximately what we expect
 # (the gap should be at least the expected freed amount, accounting for alignment)
 if ($gapSize -lt ($expectedFreedBytes - 10485760)) {  # 10 MB tolerance for alignment
-    Write-Output ('{{"error":"Free region ({0} bytes) is significantly smaller than expected freed space ({1} bytes)."}}' -f $gapSize, $expectedFreedBytes)
+    $errObj = [pscustomobject]@{ error = ("Free region (" + $gapSize + " bytes) is significantly smaller than expected freed space (" + $expectedFreedBytes + " bytes).") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
@@ -1162,7 +1170,16 @@ if ($gapSize -lt ($expectedFreedBytes - 10485760)) {  # 10 MB tolerance for alig
 # Original size = targetPartition.Size + expectedFreedBytes (approximately)
 # We can't know exact original size, but we can verify the partition is still NTFS and valid
 
-Write-Output ('{{"diskNumber":{0}, "gapOffset":{1}, "gapSize":{2}, "stagingSizeBytes":{3}, "targetPartitionNumber":{4}, "targetPartitionSize":{5}, "targetPartitionOffset":{6}}}' -f $diskNumber, $gapOffset, $gapSize, $stagingSizeNeeded, $targetPartition.PartitionNumber, $targetPartition.Size, $targetPartition.Offset)
+    $validateResult = [pscustomobject]@{
+        diskNumber = $diskNumber
+        gapOffset = $gapOffset
+        gapSize = $gapSize
+        stagingSizeBytes = $stagingSizeNeeded
+        targetPartitionNumber = $targetPartition.PartitionNumber
+        targetPartitionSize = $targetPartition.Size
+        targetPartitionOffset = $targetPartition.Offset
+    }
+    Write-Output ($validateResult | ConvertTo-Json -Compress)
 )PS1").arg(plan.targetDiskNumber)
             .arg(plan.shrinkPartitionNumber.value())
             .arg(static_cast<qulonglong>(totalFreedBytes))
@@ -1236,17 +1253,25 @@ if (-not $foundGap -and $partitionsArray.Count -gt 0) {
 }
 
 if (-not $foundGap) {
-    Write-Output ('{{"error":"No suitable free region found for staging partition. Need at least {0} bytes."}}' -f $stagingSizeNeeded)
+    $errObj = [pscustomobject]@{ error = ("No suitable free region found for staging partition. Need at least " + $stagingSizeNeeded + " bytes.") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Verify the gap is large enough
 if ($gapSize -lt $stagingSizeNeeded) {
-    Write-Output ('{{"error":"Free region ({0} bytes) is smaller than required staging size ({1} bytes)."}}' -f $gapSize, $stagingSizeNeeded)
+    $errObj = [pscustomobject]@{ error = ("Free region (" + $gapSize + " bytes) is smaller than required staging size (" + $stagingSizeNeeded + " bytes).") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
-Write-Output ('{{"diskNumber":{0}, "gapOffset":{1}, "gapSize":{2}, "stagingSizeBytes":{3}}}' -f $diskNumber, $gapOffset, $gapSize, $stagingSizeNeeded)
+    $validateResult2 = [pscustomobject]@{
+        diskNumber = $diskNumber
+        gapOffset = $gapOffset
+        gapSize = $gapSize
+        stagingSizeBytes = $stagingSizeNeeded
+    }
+    Write-Output ($validateResult2 | ConvertTo-Json -Compress)
 )PS1").arg(plan.targetDiskNumber)
             .arg(static_cast<qulonglong>(totalFreedBytes))
             .arg(static_cast<qulonglong>(stagingSizeBytes));
@@ -1258,13 +1283,12 @@ Write-Output ('{{"diskNumber":{0}, "gapOffset":{1}, "gapSize":{2}, "stagingSizeB
             "Pre-create validation failed: " + validateResult.error().message());
     }
 
-    QJsonParseError perr{};
-    QJsonDocument validateDoc = QJsonDocument::fromJson(validateResult.value().toUtf8(), &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        return core::makeError(core::Error::Kind::Platform,
-            "Pre-create validation output was not valid JSON: " + perr.errorString().toStdString());
+    auto validateParsed = parsePowerShellJsonOutput(validateResult.value(), "createLayout validation", lastStderr_);
+    if (!validateParsed) {
+        return core::makeError(validateParsed.error().kind(),
+            "Pre-create validation failed: " + validateParsed.error().message());
     }
-    QJsonObject validateObj = validateDoc.object();
+    QJsonObject validateObj = validateParsed.value();
     if (validateObj.contains("error")) {
         return core::makeError(core::Error::Kind::Platform,
             "Pre-create validation failed: " + validateObj.value("error").toString().toStdString());
@@ -1312,7 +1336,14 @@ $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 $fs = if ($volume) { $volume.FileSystem } else { '' }
 $driveLetter = if ($volume -and $volume.DriveLetter) { [string]$volume.DriveLetter } else { '' }
 
-Write-Output ('{{"partitionNumber":{0}, "offset":{1}, "size":{2}, "filesystem":"{3}", "driveLetter":"{4}"}}' -f $partition.PartitionNumber, $partition.Offset, $partition.Size, $fs, $driveLetter)
+    $partInfo = [pscustomobject]@{
+        partitionNumber = $partition.PartitionNumber
+        offset = $partition.Offset
+        size = $partition.Size
+        filesystem = $fs
+        driveLetter = $driveLetter
+    }
+    Write-Output ($partInfo | ConvertTo-Json -Compress)
 )PS1").arg(diskNumber)
         .arg(static_cast<qulonglong>(gapOffset))
         .arg(static_cast<qulonglong>(stagingSizeBytes));
@@ -1371,20 +1402,24 @@ if (-not $newPartition) {
 # Verify size (allow 1 MB tolerance)
 $sizeDiff = [math]::Abs($newPartition.Size - $expectedSize)
 if ($sizeDiff -gt 1048576) {
-    Write-Output ('{{"error":"Partition size mismatch. Expected {0}, got {1}"}}' -f $expectedSize, $newPartition.Size)
+    $errObj = [pscustomobject]@{ error = ("Partition size mismatch. Expected " + $expectedSize + ", got " + $newPartition.Size) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Verify offset matches expected gap start
 if ($newPartition.Offset -ne $expectedOffset) {
-    Write-Output ('{{"error":"Partition offset mismatch. Expected {0}, got {1}"}}' -f $expectedOffset, $newPartition.Offset)
+    $errObj = [pscustomobject]@{ error = ("Partition offset mismatch. Expected " + $expectedOffset + ", got " + $newPartition.Offset) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Verify filesystem is FAT32
 $volume = Get-Volume -Partition $newPartition -ErrorAction SilentlyContinue
 if (-not $volume -or $volume.FileSystem -ne 'FAT32') {
-    Write-Output ('{{"error":"Filesystem is not FAT32. Got: {0}"}}' -f (if ($volume) { $volume.FileSystem } else { 'none' }))
+    $fs2 = if ($volume) { $volume.FileSystem } else { 'none' }
+    $errObj = [pscustomobject]@{ error = ("Filesystem is not FAT32. Got: " + $fs2) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
@@ -1392,12 +1427,15 @@ if (-not $volume -or $volume.FileSystem -ne 'FAT32') {
 if ($targetPartitionNumber -gt 0) {
     $targetPartition = $partitions | Where-Object { $_.PartitionNumber -eq $targetPartitionNumber }
     if (-not $targetPartition) {
-        Write-Output ('{{"error":"Target NTFS partition {0} disappeared after staging creation!"}}' -f $targetPartitionNumber)
+        $errObj = [pscustomobject]@{ error = ("Target NTFS partition " + $targetPartitionNumber + " disappeared after staging creation!") }
+        Write-Output ($errObj | ConvertTo-Json -Compress)
         exit 1
     }
     $targetVolume = Get-Volume -Partition $targetPartition -ErrorAction SilentlyContinue
     if (-not $targetVolume -or $targetVolume.FileSystem -ne 'NTFS') {
-        Write-Output ('{{"error":"Target NTFS partition {0} filesystem changed! Got: {1}"}}' -f $targetPartitionNumber, (if ($targetVolume) { $targetVolume.FileSystem } else { 'none' }))
+        $tfs = if ($targetVolume) { $targetVolume.FileSystem } else { 'none' }
+        $errObj = [pscustomobject]@{ error = ("Target NTFS partition " + $targetPartitionNumber + " filesystem changed! Got: " + $tfs) }
+        Write-Output ($errObj | ConvertTo-Json -Compress)
         exit 1
     }
     # Verify target partition offset unchanged (Windows doesn't move partitions on shrink)
@@ -1413,7 +1451,16 @@ $extentOut = foreach ($p in $allParts) {
     ('{{"offset":{0}, "size":{1}}}' -f $p.Offset, $p.Size)
 }
 
-Write-Output ('{{"success":true, "partitionNumber":{0}, "size":{1}, "offset":{2}, "filesystem":"{3}", "gptGuid":"{4}", "extents":[{5}]}}' -f $newPartition.PartitionNumber, $newPartition.Size, $newPartition.Offset, $volume.FileSystem, $newPartition.GptType, ($extentOut -join ','))
+    $createResult2 = [pscustomobject]@{
+        success = $true
+        partitionNumber = $newPartition.PartitionNumber
+        size = $newPartition.Size
+        offset = $newPartition.Offset
+        filesystem = $volume.FileSystem
+        gptGuid = $newPartition.GptType
+        extents = @($extentOut)
+    }
+    Write-Output ($createResult2 | ConvertTo-Json -Compress)
 )PS1").arg(diskNumber)
         .arg(partitionNumber)
         .arg(static_cast<qulonglong>(gapOffset))
@@ -1519,7 +1566,8 @@ $ProgressPreference = 'SilentlyContinue'
 $partition = Get-Partition -DiskNumber %1 -PartitionNumber %2 -ErrorAction Stop
 $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 if ($volume -and $volume.DriveLetter) {
-    Write-Output ('{{"driveLetter":"{0}"}}' -f $volume.DriveLetter)
+    $dlObj = [pscustomobject]@{ driveLetter = [string]$volume.DriveLetter }
+    Write-Output ($dlObj | ConvertTo-Json -Compress)
 } else {
     Write-Output '{"driveLetter":""}'
 }
@@ -1598,7 +1646,11 @@ if (-not $volume -or -not $volume.DriveLetter) {
 
 $attached = 'false'
 if ($attachedByUs) { $attached = 'true' }
-Write-Output ('{{"driveLetter":"{0}", "attachedByUs":{1}}}' -f "$($volume.DriveLetter):", $attached)
+    $dlResult = [pscustomobject]@{
+        driveLetter = ("$($volume.DriveLetter):")
+        attachedByUs = $attached
+    }
+    Write-Output ($dlResult | ConvertTo-Json -Compress)
 )PS1").arg(QString::fromStdString(iso.string()).replace("'", "''"));
 
     auto r = runPowerShellScript(script);
@@ -1732,21 +1784,25 @@ $expectedDriveLetter = '%3'
 # Get the exact staging partition on the target disk.
 $partition = Get-Partition -DiskNumber $diskNumber -PartitionNumber $partitionNumber -ErrorAction SilentlyContinue
 if (-not $partition) {
-    Write-Output ('{{"error":"Staging partition not found on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
+    $errObj = [pscustomobject]@{ error = ("Staging partition not found on disk " + $diskNumber + " (partition " + $partitionNumber + ")") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Get the volume associated with that exact partition (never an arbitrary volume).
 $volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
 if (-not $volume) {
-    Write-Output ('{{"error":"No volume associated with staging partition on disk {0} (partition {1})"}}' -f $diskNumber, $partitionNumber)
+    $errObj = [pscustomobject]@{ error = ("No volume associated with staging partition on disk " + $diskNumber + " (partition " + $partitionNumber + ")") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 # Verify filesystem is FAT32
 $fs = $volume.FileSystem
 if (-not $fs -or $fs -ne 'FAT32') {
-    Write-Output ('{{"error":"Staging volume is not FAT32 (got: {0})"}}' -f (if ($volume) { $volume.FileSystem } else { 'none' }))
+    $svfs = if ($volume) { $volume.FileSystem } else { 'none' }
+    $errObj = [pscustomobject]@{ error = ("Staging volume is not FAT32 (got: " + $svfs + ")") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
@@ -1754,19 +1810,27 @@ if (-not $fs -or $fs -ne 'FAT32') {
 # createLayout already verified.
 $driveLetter = if ($volume.DriveLetter) { [string]$volume.DriveLetter } else { '' }
 if (-not $driveLetter) {
-    Write-Output ('{{"error":"Staging volume on disk {0} partition {1} has no drive letter"}}' -f $diskNumber, $partitionNumber)
+    $errObj = [pscustomobject]@{ error = ("Staging volume on disk " + $diskNumber + " partition " + $partitionNumber + " has no drive letter") }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 if ($expectedDriveLetter -and $driveLetter -ne $expectedDriveLetter) {
-    Write-Output ('{{"error":"Staging volume drive letter mismatch. Expected: {0}, found: {1}"}}' -f $expectedDriveLetter, $driveLetter)
+    $errObj = [pscustomobject]@{ error = ("Staging volume drive letter mismatch. Expected: " + $expectedDriveLetter + ", found: " + $driveLetter) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 $freeBytes = $volume.SizeRemaining
 $totalBytes = $volume.Size
 
-Write-Output ('{{"filesystem":"{0}", "freeBytes":{1}, "totalBytes":{2}, "driveLetter":"{3}"}}' -f $fs, $freeBytes, $totalBytes, $driveLetter)
+    $volInfo = [pscustomobject]@{
+        filesystem = $fs
+        freeBytes = $freeBytes
+        totalBytes = $totalBytes
+        driveLetter = $driveLetter
+    }
+    Write-Output ($volInfo | ConvertTo-Json -Compress)
 )PS1").arg(diskNumber).arg(partitionNumber).arg(expectedLetterStr);
 
     auto verifyResult = runPowerShellScript(verifyScript);
@@ -2154,25 +2218,33 @@ if (-not $newPartition) {
 
 $sizeDiff = [math]::Abs($newPartition.Size - $expectedSize)
 if ($sizeDiff -gt 1048576) {
-    Write-Output ('{{"error":"Partition size mismatch during re-verification. Expected {0}, got {1}"}}' -f $expectedSize, $newPartition.Size)
+    $errObj = [pscustomobject]@{ error = ("Partition size mismatch during re-verification. Expected " + $expectedSize + ", got " + $newPartition.Size) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 if ($newPartition.Offset -ne $expectedOffset) {
-    Write-Output ('{{"error":"Partition offset mismatch during re-verification. Expected {0}, got {1}"}}' -f $expectedOffset, $newPartition.Offset)
+    $errObj = [pscustomobject]@{ error = ("Partition offset mismatch during re-verification. Expected " + $expectedOffset + ", got " + $newPartition.Offset) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 $volume = Get-Volume -Partition $newPartition -ErrorAction SilentlyContinue
 if (-not $volume -or $volume.FileSystem -ne 'FAT32') {
-    Write-Output ('{{"error":"Filesystem is not FAT32 during re-verification. Got: {0}"}}' -f (if ($volume) { $volume.FileSystem } else { 'none' }))
+    $rfsv = if ($volume) { $volume.FileSystem } else { 'none' }
+    $errObj = [pscustomobject]@{ error = ("Filesystem is not FAT32 during re-verification. Got: " + $rfsv) }
+    Write-Output ($errObj | ConvertTo-Json -Compress)
     exit 1
 }
 
 $driveLetter = if ($volume -and $volume.DriveLetter) { [string]$volume.DriveLetter } else { '' }
 $gptGuid = if ($newPartition.GptType) { [string]$newPartition.GptType } else { '' }
 
-Write-Output ('{{"driveLetter":"{0}", "gptGuid":"{1}"}}' -f $driveLetter, $gptGuid)
+    $guidResult = [pscustomobject]@{
+        driveLetter = $driveLetter
+        gptGuid = $gptGuid
+    }
+    Write-Output ($guidResult | ConvertTo-Json -Compress)
 )PS1").arg(diskNumber)
         .arg(expectedPartitionNumber)
         .arg(static_cast<qulonglong>(expectedOffset))
