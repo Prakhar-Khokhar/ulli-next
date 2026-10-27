@@ -142,12 +142,12 @@ void TestShrinkPartition::generatedScriptRejectsProtectedPartitionsButNotBootPar
 void TestShrinkPartition::generatedScriptIncludesPartitionIdentityInDiagnostics() {
     const QString script = ulli::platform::windows::DiskOps::buildShrinkProbeScript(0, 'C', 3, 10ull * 1024 * 1024 * 1024);
 
-    QVERIFY(script.contains(QStringLiteral("diskNumber = $partition.DiskNumber")));
-    QVERIFY(script.contains(QStringLiteral("partitionNumber = $partition.PartitionNumber")));
-    QVERIFY(script.contains(QStringLiteral("driveLetter = $actualDriveLetter")));
-    QVERIFY(script.contains(QStringLiteral("isSystem = $partition.IsSystem")));
-    QVERIFY(script.contains(QStringLiteral("isBoot = $partition.IsBoot")));
-    QVERIFY(script.contains(QStringLiteral("isHidden = $partition.IsHidden")));
+    QVERIFY(script.contains(
+        QStringLiteral("\"diskNumber\":{0}, \"partitionNumber\":{1}")));
+    QVERIFY(script.contains(
+        QStringLiteral("\"driveLetter\":\"{7}\"")));
+    QVERIFY(script.contains(
+        QStringLiteral("\"isSystem\":{8}, \"isBoot\":{9}, \"isHidden\":{10}")));
 }
 
 
