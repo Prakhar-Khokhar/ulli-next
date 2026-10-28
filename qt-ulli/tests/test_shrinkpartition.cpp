@@ -43,6 +43,9 @@ private slots:
     void bitlockerIndeterminateUnknownStatus();
     void bitlockerIndeterminateEmptyReason();
     void bitlockerIndeterminateLocalizedStatus();
+    void classifyBitLockerVolumeStateAllCases();
+    void classifyWmiBitLockerStateAllCases();
+    void classifyManageBdeStateAllCases();
 };
 
 // PowerShell comparison operators are -le / -lt / -gt / -eq / -ne. The
@@ -323,6 +326,110 @@ void TestShrinkPartition::bitlockerIndeterminateLocalizedStatus() {
     auto r = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
         QStringLiteral("indeterminate"), QStringLiteral("manage-bde output could not be parsed (possibly localized)"));
     QVERIFY(r.isError());
+}
+
+
+
+// ─── Classifier helper tests ─────────────────────────────────────────────
+
+void TestShrinkPartition::classifyBitLockerVolumeStateAllCases() {
+    // In-progress/paused states -> locked (regardless of protection)
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("EncryptionInProgress"), QStringLiteral("Unlocked"), false) == "locked");
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("DecryptionInProgress"), QStringLiteral("Unlocked"), false) == "locked");
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("EncryptionPaused"), QStringLiteral("Unlocked"), true) == "locked");
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("DecryptionPaused"), QStringLiteral("Unlocked"), true) == "locked");
+
+    // Fully decrypted -> unlocked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("FullyDecrypted"), QString(), false) == "unlocked");
+
+    // Fully encrypted + protected + unlocked -> unlocked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("FullyEncrypted"), QStringLiteral("Unlocked"), true) == "unlocked");
+
+    // Fully encrypted + locked -> locked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("FullyEncrypted"), QStringLiteral("Locked"), true) == "locked");
+
+    // Fully encrypted + unprotected -> indeterminate (conservative)
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("FullyEncrypted"), QStringLiteral("Unlocked"), false) == "indeterminate");
+
+    // Fully encrypted + protected + unknown lock -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("FullyEncrypted"), QStringLiteral("Unknown"), true) == "indeterminate");
+
+    // Unknown volume status -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyBitLockerVolumeState(
+        QStringLiteral("SomethingElse"), QString(), false) == "indeterminate");
+}
+
+void TestShrinkPartition::classifyWmiBitLockerStateAllCases() {
+    // LockStatus 1 = Locked -> locked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(1, 1, 1) == "locked");
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(0, 1, 1) == "locked");
+
+    // ConversionStatus 2-5 = in progress/paused -> locked
+    for (int c = 2; c <= 5; c++) {
+        QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(c, 1, 0) == "locked");
+    }
+
+    // ConversionStatus 0 = FullyDecrypted -> unlocked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(0, 0, 0) == "unlocked");
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(0, 1, 0) == "unlocked");
+
+    // ConversionStatus 1 + Protected + Unlocked -> unlocked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(1, 1, 0) == "unlocked");
+
+    // ConversionStatus 1 + Unprotected -> indeterminate (conservative)
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(1, 0, 0) == "indeterminate");
+
+    // ConversionStatus 1 + Protected + unknown lock -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(1, 1, 2) == "indeterminate");
+
+    // Unknown protection status -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(1, 2, 0) == "indeterminate");
+
+    // Out of range -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(6, 1, 0) == "indeterminate");
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(1, 3, 0) == "indeterminate");
+
+    // Unknown conversion status -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyWmiBitLockerState(99, 1, 0) == "indeterminate");
+}
+
+void TestShrinkPartition::classifyManageBdeStateAllCases() {
+    // Locked -> locked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyManageBdeState(
+        QStringLiteral("Locked"), QStringLiteral("Fully Encrypted"), QStringLiteral("Protection On")) == "locked");
+
+    // Fully decrypted + protection off -> unlocked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyManageBdeState(
+        QStringLiteral("Unlocked"), QStringLiteral("Fully Decrypted"), QStringLiteral("Protection Off")) == "unlocked");
+
+    // Fully encrypted + protection on + unlocked -> unlocked
+    QVERIFY(ulli::platform::windows::DiskOps::classifyManageBdeState(
+        QStringLiteral("Unlocked"), QStringLiteral("Fully Encrypted"), QStringLiteral("Protection On")) == "unlocked");
+
+    // Fully encrypted + protection on + lock not determined -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyManageBdeState(
+        QStringLiteral(""), QStringLiteral("Fully Encrypted"), QStringLiteral("Protection On")) == "indeterminate");
+
+    // In-progress -> indeterminate (conservative)
+    QVERIFY(ulli::platform::windows::DiskOps::classifyManageBdeState(
+        QStringLiteral("Unlocked"), QStringLiteral("Encryption InProgress"), QStringLiteral("Protection On")) == "indeterminate");
+
+    // Missing fields -> indeterminate
+    QVERIFY(ulli::platform::windows::DiskOps::classifyManageBdeState(
+        QString(), QString(), QString()) == "indeterminate");
+
+    // Unknown combination -> indeterminate (no default unlocked)
+    QVERIFY(ulli::platform::windows::DiskOps::classifyManageBdeState(
+        QStringLiteral("Unlocked"), QStringLiteral("Something Unknown"), QStringLiteral("Protection Off")) == "indeterminate");
 }
 
 

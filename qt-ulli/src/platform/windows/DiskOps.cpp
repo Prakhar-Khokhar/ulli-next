@@ -894,6 +894,85 @@ Write-Output ($verifyResult | ConvertTo-Json -Compress)
     return core::makeOk(static_cast<std::uint64_t>(newSize));
 }
 
+QString DiskOps::classifyBitLockerVolumeState(const QString& volumeStatus,
+                                                      const QString& lockStatus,
+                                                      bool protectionStatus) {
+    // In-progress or paused states always block, regardless of protection
+    if (volumeStatus == "EncryptionInProgress" ||
+        volumeStatus == "DecryptionInProgress" ||
+        volumeStatus == "EncryptionPaused" ||
+        volumeStatus == "DecryptionPaused") {
+        return "locked";
+    }
+    if (volumeStatus == "FullyDecrypted") {
+        return "unlocked";
+    }
+    if (volumeStatus == "FullyEncrypted") {
+        if (lockStatus == "Locked") return "locked";
+        // Protected + unlocked -> safe
+        if (protectionStatus && lockStatus == "Unlocked") return "unlocked";
+        // Unprotected encrypted -> indeterminate (conservative)
+        if (!protectionStatus) return "indeterminate";
+        // Protected but lock status unknown -> indeterminate
+        return "indeterminate";
+    }
+    // Unknown or missing volume status -> indeterminate
+    return "indeterminate";
+}
+
+QString DiskOps::classifyWmiBitLockerState(int convStatus, int protStatus,
+                                          int lockStatus) {
+    // LockStatus 1 = Locked -> unsafe
+    if (lockStatus == 1) return "locked";
+    // ConversionStatus 2-5 = in progress or paused -> unsafe
+    if (convStatus >= 2 && convStatus <= 5) return "locked";
+    // ConversionStatus 0 = FullyDecrypted -> safe
+    if (convStatus == 0) return "unlocked";
+    // ConversionStatus 1 = FullyEncrypted
+    if (convStatus == 1) {
+        // Unprotected -> indeterminate (conservative, per audit)
+        if (protStatus == 0) return "indeterminate";
+        // Protected + unlocked -> safe
+        if (protStatus == 1 && lockStatus == 0) return "unlocked";
+        // Protected but lock status unknown -> indeterminate
+        if (protStatus == 1) return "indeterminate";
+        // Unknown protection status -> indeterminate
+        if (protStatus == 2) return "indeterminate";
+    }
+    // Unknown or unrecognized -> indeterminate
+    return "indeterminate";
+}
+
+QString DiskOps::classifyManageBdeState(const QString& lockStatus,
+                                       const QString& conversionStatus,
+                                       const QString& protectionStatus) {
+    // Locked -> unsafe
+    if (lockStatus == "Locked") return "locked";
+    // Fully decrypted + protection off -> safe
+    if (conversionStatus == "Fully Decrypted" && protectionStatus == "Protection Off") {
+        return "unlocked";
+    }
+    // Fully encrypted + protection on + unlocked -> safe
+    if (conversionStatus == "Fully Encrypted" && protectionStatus == "Protection On" &&
+        lockStatus == "Unlocked") {
+        return "unlocked";
+    }
+    // Fully encrypted + protection on + lock not determined -> indeterminate
+    if (conversionStatus == "Fully Encrypted" && protectionStatus == "Protection On") {
+        return "indeterminate";
+    }
+    // In-progress states -> indeterminate (conservative)
+    if (conversionStatus.contains("InProgress") || conversionStatus.contains("Paused")) {
+        return "indeterminate";
+    }
+    // Missing/empty fields -> indeterminate
+    if (lockStatus.isEmpty() || conversionStatus.isEmpty()) {
+        return "indeterminate";
+    }
+    // Unknown combination -> indeterminate (no default unlocked)
+    return "indeterminate";
+}
+
 core::Result<bool> DiskOps::interpretBitLockerStatus(const QString& status, const QString& reason) {
     if (status == "locked") return core::makeOk<bool>(true);
     if (status == "unlocked") return core::makeOk<bool>(false);
@@ -932,22 +1011,46 @@ $blCmd = Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue
 if ($blCmd) {
     $bl = Get-BitLockerVolume -MountPoint $mountPoint -ErrorAction SilentlyContinue
     if (-not $bl) {
-        # Cmdlet available but no BitLocker info -> likely unencrypted
-        $r = [pscustomobject]@{ status = "unlocked"; reason = "no bitlocker info" }
+        # Cmdlet available but no result -> cannot determine state
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "Get-BitLockerVolume returned no result" }
         Write-Output ($r | ConvertTo-Json -Compress)
         exit 0
     }
-    $locked = ($bl.VolumeStatus -eq 'FullyEncrypted' -or
-               $bl.VolumeStatus -eq 'EncryptionInProgress' -or
-               $bl.LockStatus -eq 'Locked')
-    $prot = [bool]$bl.ProtectionStatus
-    if ($prot -and $locked) {
-        $r = [pscustomobject]@{ status = "locked"; reason = "bitlocker protected and locked" }
+    $volStatus = [string]$bl.VolumeStatus
+    $lockSt = [string]$bl.LockStatus
+    $protSt = [bool]$bl.ProtectionStatus
+
+    # In-progress or paused -> unsafe regardless of protection
+    if ($volStatus -eq 'EncryptionInProgress' -or $volStatus -eq 'DecryptionInProgress' -or
+        $volStatus -eq 'EncryptionPaused' -or $volStatus -eq 'DecryptionPaused') {
+        $r = [pscustomobject]@{ status = "locked"; reason = "bitlocker encryption/decryption in progress or paused" }
         Write-Output ($r | ConvertTo-Json -Compress)
-    } else {
-        $r = [pscustomobject]@{ status = "unlocked"; reason = "bitlocker not locked" }
-        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
     }
+    if ($volStatus -eq 'FullyDecrypted') {
+        $r = [pscustomobject]@{ status = "unlocked"; reason = "bitlocker fully decrypted" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    if ($volStatus -eq 'FullyEncrypted') {
+        if ($lockSt -eq 'Locked') {
+            $r = [pscustomobject]@{ status = "locked"; reason = "bitlocker protected and locked" }
+            Write-Output ($r | ConvertTo-Json -Compress)
+            exit 0
+        }
+        if ($protSt -and $lockSt -eq 'Unlocked') {
+            $r = [pscustomobject]@{ status = "unlocked"; reason = "bitlocker not locked" }
+            Write-Output ($r | ConvertTo-Json -Compress)
+            exit 0
+        }
+        # Protected but lock status unknown, or unprotected -> indeterminate
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "bitlocker encrypted but state ambiguous" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Unknown volume status -> indeterminate
+    $r = [pscustomobject]@{ status = "indeterminate"; reason = ("unrecognized VolumeStatus: " + $volStatus) }
+    Write-Output ($r | ConvertTo-Json -Compress)
     exit 0
 }
 
@@ -964,14 +1067,35 @@ try {
 }
 
 if ($wmiAvailable -and $wmiVol) {
+    # Ensure exactly one volume matched
+    if ($wmiVol -is [array]) {
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "WMI returned multiple matching volumes" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
     # Win32_EncryptableVolume properties:
     #   ProtectionStatus: 0=Unprotected, 1=Protected, 2=Unknown
     #   ConversionStatus: 0=FullyDecrypted, 1=FullyEncrypted, 2=EncryptionInProgress,
     #                    3=DecryptionInProgress, 4=EncryptionPaused, 5=DecryptionPaused
     #   LockStatus: 0=Unlocked, 1=Locked
+    # Validate required properties exist
+    if ($null -eq $wmiVol.ProtectionStatus -or $null -eq $wmiVol.ConversionStatus -or $null -eq $wmiVol.LockStatus) {
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "WMI missing required properties" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
     $protStatus = [int]$wmiVol.ProtectionStatus
     $convStatus = [int]$wmiVol.ConversionStatus
     $lockStatus = [int]$wmiVol.LockStatus
+
+    # Validate numeric ranges
+    if ($protStatus -lt 0 -or $protStatus -gt 2 -or
+        $convStatus -lt 0 -or $convStatus -gt 5 -or
+        $lockStatus -lt 0 -or $lockStatus -gt 1) {
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "WMI property values out of range" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
 
     if ($lockStatus -eq 1) {
         $r = [pscustomobject]@{ status = "locked"; reason = "WMI reports volume locked" }
@@ -990,9 +1114,9 @@ if ($wmiAvailable -and $wmiVol) {
         Write-Output ($r | ConvertTo-Json -Compress)
         exit 0
     }
-    # Fully encrypted but unprotected -> safe (not actively protected)
+    # Fully encrypted but unprotected -> indeterminate (conservative)
     if ($convStatus -eq 1 -and $protStatus -eq 0) {
-        $r = [pscustomobject]@{ status = "unlocked"; reason = "WMI reports encrypted but unprotected" }
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "WMI encrypted but not protected" }
         Write-Output ($r | ConvertTo-Json -Compress)
         exit 0
     }
@@ -1090,8 +1214,8 @@ if ($conversionStatus -eq 'Fully Encrypted' -and $protectionStatus -eq 'Protecti
     exit 0
 }
 
-# Default: unlocked
-$r = [pscustomobject]@{ status = "unlocked"; reason = "manage-bde default" }
+# Default: indeterminate (no recognized state combination)
+$r = [pscustomobject]@{ status = "indeterminate"; reason = "manage-bde unrecognized state combination" }
 Write-Output ($r | ConvertTo-Json -Compress)
 exit 0
 )PS1").arg(diskNumber).arg(partitionNumber);

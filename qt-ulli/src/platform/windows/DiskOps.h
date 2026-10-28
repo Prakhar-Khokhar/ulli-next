@@ -59,6 +59,23 @@ public:
     static core::Result<bool> interpretBitLockerStatus(const QString& status,
                                                        const QString& reason);
 
+    // Classify BitLocker volume state from Get-BitLockerVolume properties.
+    // Returns "locked", "unlocked", or "indeterminate".
+    static QString classifyBitLockerVolumeState(const QString& volumeStatus,
+                                                const QString& lockStatus,
+                                                bool protectionStatus);
+
+    // Classify BitLocker state from WMI Win32_EncryptableVolume numeric properties.
+    // Returns "locked", "unlocked", or "indeterminate".
+    static QString classifyWmiBitLockerState(int convStatus, int protStatus,
+                                             int lockStatus);
+
+    // Classify BitLocker state from manage-bde text output fields.
+    // Returns "locked", "unlocked", or "indeterminate".
+    static QString classifyManageBdeState(const QString& lockStatus,
+                                          const QString& conversionStatus,
+                                          const QString& protectionStatus);
+
     // Builds the PowerShell probe script that validates a shrink plan and
     // reports the requested final size. Separated from execution so the
     // generated script can be inspected (and regression-tested) without
