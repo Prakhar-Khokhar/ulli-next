@@ -900,11 +900,11 @@ core::Result<bool> DiskOps::interpretBitLockerStatus(const QString& status, cons
     // indeterminate, unknown, or any unrecognized status -> block
     QString msg = "BitLocker status indeterminate";
     if (!reason.isEmpty()) {
-        msg += ": " + reason.toStdString();
+        msg += ": " + reason;
     } else {
-        msg += ": unrecognized status '" + status.toStdString() + "'";
+        msg += ": unrecognized status '" + status + "'";
     }
-    return core::makeError<bool>(core::Error::Kind::Platform, msg);
+    return core::makeError<bool>(core::Error::Kind::Platform, msg.toStdString());
 }
 
 core::Result<bool> DiskOps::isBitLockerLockedOnPartition(int diskNumber, int partitionNumber) {
