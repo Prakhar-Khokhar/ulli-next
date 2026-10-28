@@ -443,7 +443,12 @@ core::Result<void> DiskOps::preflight(const core::InstallPlan& plan) {
         return core::makeNotElevated();
     }
     if (auto v = validatePlanForDisk(plan); !v) return v;
-    if (BitLocker::isLocked()) {
+    auto bl = BitLocker::isLocked();
+    if (!bl) {
+        return core::makeError(core::Error::Kind::Platform,
+            "BitLocker detection failed: " + bl.error().message());
+    }
+    if (bl.value()) {
         return core::makeError(core::Error::Kind::Platform,
             "BitLocker is enabled on the target volume. Decrypt it before running ULLI.");
     }
@@ -1018,7 +1023,17 @@ if ($blCmd) {
     }
     $volStatus = [string]$bl.VolumeStatus
     $lockSt = [string]$bl.LockStatus
-    $protSt = [bool]$bl.ProtectionStatus
+    # Validate ProtectionStatus explicitly (do not use [bool] coercion which
+    # can accept unexpected nonzero values like 2).
+    $rawProt = $bl.ProtectionStatus
+    $protSt = $null
+    if ($rawProt -eq $true -or $rawProt -eq 'On') {
+        $protSt = $true
+    } elseif ($rawProt -eq $false -or $rawProt -eq 'Off') {
+        $protSt = $false
+    } else {
+        $protSt = $null
+    }
 
     # In-progress or paused -> unsafe regardless of protection
     if ($volStatus -eq 'EncryptionInProgress' -or $volStatus -eq 'DecryptionInProgress' -or
@@ -1038,8 +1053,14 @@ if ($blCmd) {
             Write-Output ($r | ConvertTo-Json -Compress)
             exit 0
         }
-        if ($protSt -and $lockSt -eq 'Unlocked') {
+        if ($protSt -eq $true -and $lockSt -eq 'Unlocked') {
             $r = [pscustomobject]@{ status = "unlocked"; reason = "bitlocker not locked" }
+            Write-Output ($r | ConvertTo-Json -Compress)
+            exit 0
+        }
+        # Unknown or missing protection status -> indeterminate
+        if ($null -eq $protSt) {
+            $r = [pscustomobject]@{ status = "indeterminate"; reason = "invalid ProtectionStatus value" }
             Write-Output ($r | ConvertTo-Json -Compress)
             exit 0
         }
