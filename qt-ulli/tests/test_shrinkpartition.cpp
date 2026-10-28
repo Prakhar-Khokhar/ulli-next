@@ -313,7 +313,7 @@ void TestShrinkPartition::bitlockerIndeterminateUnknownStatus() {
 void TestShrinkPartition::bitlockerIndeterminateEmptyReason() {
     // Missing cmdlet must never become "unlocked"
     auto r = ulli::platform::windows::DiskOps::interpretBitLockerStatus(
-        QStringLiteral("indeterminate"), QStringLiteral("BitLocker PowerShell module and manage-bde are both unavailable"));
+        QStringLiteral("indeterminate"), QStringLiteral("BitLocker PowerShell module, WMI Win32_EncryptableVolume, and manage-bde are all unavailable"));
     QVERIFY(r.isError());
     QVERIFY(r.error().message().find("indeterminate") != std::string::npos);
 }

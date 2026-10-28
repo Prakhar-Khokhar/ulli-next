@@ -951,11 +951,80 @@ if ($blCmd) {
     exit 0
 }
 
-# Fallback: manage-bde utility
+# Fallback 1: WMI Win32_EncryptableVolume (available on BitLocker-capable editions)
+# This is a supported Windows Management Instrumentation provider that does
+# not require the BitLocker PowerShell module or manage-bde.exe.
+$wmiAvailable = $false
+$wmiVol = $null
+try {
+    $wmiVol = Get-CimInstance -Namespace "root/CIMV2/Security/MicrosoftVolumeEncryption" -ClassName Win32_EncryptableVolume -ErrorAction Stop | Where-Object { $_.DriveLetter -eq $mountPoint }
+    $wmiAvailable = $true
+} catch {
+    $wmiAvailable = $false
+}
+
+if ($wmiAvailable -and $wmiVol) {
+    # Win32_EncryptableVolume properties:
+    #   ProtectionStatus: 0=Unprotected, 1=Protected, 2=Unknown
+    #   ConversionStatus: 0=FullyDecrypted, 1=FullyEncrypted, 2=EncryptionInProgress,
+    #                    3=DecryptionInProgress, 4=EncryptionPaused, 5=DecryptionPaused
+    #   LockStatus: 0=Unlocked, 1=Locked
+    $protStatus = [int]$wmiVol.ProtectionStatus
+    $convStatus = [int]$wmiVol.ConversionStatus
+    $lockStatus = [int]$wmiVol.LockStatus
+
+    if ($lockStatus -eq 1) {
+        $r = [pscustomobject]@{ status = "locked"; reason = "WMI reports volume locked" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Encryption or decryption in progress or paused -> unsafe
+    if ($convStatus -ge 2 -and $convStatus -le 5) {
+        $r = [pscustomobject]@{ status = "locked"; reason = "WMI reports encryption/decryption in progress or paused" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Fully decrypted -> safe
+    if ($convStatus -eq 0) {
+        $r = [pscustomobject]@{ status = "unlocked"; reason = "WMI reports fully decrypted" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Fully encrypted but unprotected -> safe (not actively protected)
+    if ($convStatus -eq 1 -and $protStatus -eq 0) {
+        $r = [pscustomobject]@{ status = "unlocked"; reason = "WMI reports encrypted but unprotected" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Fully encrypted and protected and unlocked -> safe
+    if ($convStatus -eq 1 -and $protStatus -eq 1 -and $lockStatus -eq 0) {
+        $r = [pscustomobject]@{ status = "unlocked"; reason = "WMI reports encrypted and unlocked" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Fully encrypted and protected but lock status unknown -> indeterminate
+    if ($convStatus -eq 1 -and $protStatus -eq 1) {
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "WMI encrypted and protected but lock status unknown" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Unknown protection status -> indeterminate
+    if ($protStatus -eq 2) {
+        $r = [pscustomobject]@{ status = "indeterminate"; reason = "WMI protection status unknown" }
+        Write-Output ($r | ConvertTo-Json -Compress)
+        exit 0
+    }
+    # Default for unrecognized combination -> indeterminate (conservative)
+    $r = [pscustomobject]@{ status = "indeterminate"; reason = ("WMI unrecognized state: conv=" + $convStatus + " prot=" + $protStatus + " lock=" + $lockStatus) }
+    Write-Output ($r | ConvertTo-Json -Compress)
+    exit 0
+}
+
+# Fallback 2: manage-bde utility
 $manageBdeCmd = Get-Command manage-bde.exe -ErrorAction SilentlyContinue
 if (-not $manageBdeCmd) {
     # Neither cmdlet nor manage-bde available -> indeterminate
-    $r = [pscustomobject]@{ status = "indeterminate"; reason = "BitLocker PowerShell module and manage-bde are both unavailable" }
+    $r = [pscustomobject]@{ status = "indeterminate"; reason = "BitLocker PowerShell module, WMI Win32_EncryptableVolume, and manage-bde are all unavailable" }
     Write-Output ($r | ConvertTo-Json -Compress)
     exit 0
 }
