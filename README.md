@@ -156,7 +156,7 @@ Support for filesystems such as ext4 and Btrfs, as well as more capable cross-pl
 
 Development follows an iterative process: **problem → hypothesis → implementation → test → diagnosis → modification → retest**. AI coding tools have been used during development, but generated code is not assumed to be correct; changes require review and testing.
 
-For a non-AI version of the original project, see [ULLI-organic](https://github.com/rltvty2/ulli-organic).
+For a non-AI version of the original project by rltvty2, see [ULLI-organic](https://github.com/rltvty2/ulli-organic).
 
 ## Contributing and reporting issues
 
