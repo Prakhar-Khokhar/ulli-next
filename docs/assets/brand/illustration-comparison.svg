@@ -32,9 +32,9 @@
 
   <!-- ULLI-Next Internal Method (Right Panel) -->
   <g transform="translate(415, 20)">
-    <rect x="0" y="0" width="365" height="200" rx="10" fill="#161b22" stroke="#10b981" stroke-width="1.5"/>
-    <rect x="14" y="14" width="125" height="22" rx="4" fill="#042f2e" stroke="#10b981" stroke-width="0.8"/>
-    <text x="22" y="29" font-family="ui-monospace, monospace" font-size="10" font-weight="700" fill="#34d399">ULLI-NEXT PIPELINE</text>
+    <rect x="0" y="0" width="365" height="200" rx="10" fill="#161b22" stroke="#8e5df7" stroke-width="1.5"/>
+    <rect x="14" y="14" width="125" height="22" rx="4" fill="#101a36" stroke="#8e5df7" stroke-width="0.8"/>
+    <text x="22" y="29" font-family="ui-monospace, monospace" font-size="10" font-weight="700" fill="#9c97f8">ULLI-NEXT PIPELINE</text>
     <text x="14" y="58" font-family="system-ui, sans-serif" font-size="15" font-weight="700" fill="#f0f6fc">Internal Storage Staging</text>
 
     <!-- Visual of Internal Drive Layout -->
@@ -44,18 +44,18 @@
       <rect x="4" y="8" width="130" height="32" rx="2" fill="#21262d"/>
       <text x="25" y="28" font-family="ui-monospace, monospace" font-size="10" fill="#c9d1d9">Host Partition</text>
       <!-- Staging Partition -->
-      <rect x="138" y="8" width="95" height="32" rx="2" fill="#10b981"/>
-      <text x="148" y="28" font-family="ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#042f2e">7GB Staging</text>
+      <rect x="138" y="8" width="95" height="32" rx="2" fill="#1266f7"/>
+      <text x="148" y="28" font-family="ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#ffffff">7GB Staging</text>
       <!-- Target Space -->
-      <rect x="237" y="8" width="95" height="32" rx="2" fill="#042f2e" stroke="#10b981" stroke-width="1"/>
-      <text x="247" y="28" font-family="ui-monospace, monospace" font-size="9" fill="#34d399">Unallocated</text>
+      <rect x="237" y="8" width="95" height="32" rx="2" fill="#101a36" stroke="#8e5df7" stroke-width="1"/>
+      <text x="247" y="28" font-family="ui-monospace, monospace" font-size="9" fill="#9c97f8">Unallocated</text>
     </g>
 
     <path d="M14 135H351" stroke="#21262d"/>
     <g transform="translate(14, 145)">
-      <circle cx="6" cy="10" r="3" fill="#10b981"/>
+      <circle cx="6" cy="10" r="3" fill="#9c97f8"/>
       <text x="18" y="14" font-family="system-ui, sans-serif" font-size="12" fill="#f0f6fc">Zero external media; downloads directly to host</text>
-      <circle cx="6" cy="30" r="3" fill="#10b981"/>
+      <circle cx="6" cy="30" r="3" fill="#9c97f8"/>
       <text x="18" y="34" font-family="system-ui, sans-serif" font-size="12" fill="#f0f6fc">Direct UEFI entry: reboot cleanly into live desktop</text>
     </g>
   </g>

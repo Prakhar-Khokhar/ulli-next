@@ -81,7 +81,7 @@ The site is not guaranteed to work unchanged on an arbitrary root-domain or cust
 ## Features & Implementation Details
 
 - **Zero Frameworks / Pure Vanilla**: Built with clean HTML5, CSS3, and vanilla JavaScript without external npm dependencies or trackers.
-- **Storage-Instrument Design**: Styled using a restrained green and slate palette inspired by partition geometry and diagnostic tools.
+- **Storage-Instrument Design**: Styled with a restrained blue-violet brand palette over deep navy and cool neutral surfaces, inspired by the approved ULLI-Next logo and partition-geometry instrumentation.
 - **Dark & Light Themes**: Persistent theme switching with zero flash of unstyled theme (FOUT) on load, respecting OS preferences.
 - **Safe Markup**: Distribution cards are static HTML with no dynamic data binding, avoiding any XSS surface from catalogue data.
 - **Pre-flight & Safety Notices**: Prominently highlights the risks of disk partitioning and boot manipulation, explicitly clarifying that the Qt/C++ rewrite is experimental and not yet ready for production use.

@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" fill="none">
   <defs>
-    <linearGradient id="wfGradGreen" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#10b981"/>
-      <stop offset="100%" stop-color="#34d399"/>
+    <linearGradient id="wfGradBrand" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1266f7"/>
+      <stop offset="100%" stop-color="#8e5df7"/>
     </linearGradient>
     <pattern id="wfHatch" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
       <line x1="0" y1="0" x2="0" y2="8" stroke="#30363d" stroke-width="1.5" />
@@ -12,7 +12,7 @@
   <!-- Step 1: Initial State -->
   <g transform="translate(20, 20)">
     <rect x="0" y="0" width="165" height="190" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
-    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#10b981">01 // TARGET DRIVE</text>
+    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#9c97f8">01 // TARGET DRIVE</text>
     <text x="14" y="44" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#f0f6fc">Host Disk Layout</text>
     <text x="14" y="60" font-family="system-ui, sans-serif" font-size="11" fill="#8b949e">BitLocker &amp; FS checked</text>
 
@@ -29,12 +29,12 @@
   </g>
 
   <!-- Connector Arrow 1 -> 2 -->
-  <path d="M192 115L208 115M204 110L210 115L204 120" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M192 115L208 115M204 110L210 115L204 120" stroke="#1266f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- Step 2: Online Shrink -->
   <g transform="translate(216, 20)">
     <rect x="0" y="0" width="165" height="190" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
-    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#10b981">02 // NON-DESTRUCTIVE</text>
+    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#9c97f8">02 // NON-DESTRUCTIVE</text>
     <text x="14" y="44" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#f0f6fc">Online Volume Shrink</text>
     <text x="14" y="60" font-family="system-ui, sans-serif" font-size="11" fill="#8b949e">Native Storage API</text>
 
@@ -44,20 +44,20 @@
     <rect x="43" y="84" width="62" height="34" rx="2" fill="#30363d"/>
     <text x="50" y="105" font-family="ui-monospace, monospace" font-size="9" font-weight="600" fill="#c9d1d9">Shrunk Host</text>
     <!-- Freed space highlighted -->
-    <rect x="108" y="84" width="39" height="34" rx="2" fill="url(#wfHatch)" stroke="#10b981" stroke-width="1"/>
+    <rect x="108" y="84" width="39" height="34" rx="2" fill="url(#wfHatch)" stroke="#8e5df7" stroke-width="1"/>
 
     <path d="M14 140H151" stroke="#21262d" stroke-dasharray="2 2"/>
-    <text x="14" y="162" font-family="ui-monospace, monospace" font-size="10" fill="#34d399">Mode: Live / Full Install</text>
+    <text x="14" y="162" font-family="ui-monospace, monospace" font-size="10" fill="#63c8f9">Mode: Live / Full Install</text>
     <text x="14" y="178" font-family="ui-monospace, monospace" font-size="10" fill="#8b949e">Safe boundary check</text>
   </g>
 
   <!-- Connector Arrow 2 -> 3 -->
-  <path d="M388 115L404 115M400 110L406 115L400 120" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M388 115L404 115M400 110L406 115L400 120" stroke="#1266f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- Step 3: Staging Partition -->
   <g transform="translate(412, 20)">
     <rect x="0" y="0" width="175" height="190" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
-    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#10b981">03 // STAGING CREATION</text>
+    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#9c97f8">03 // STAGING CREATION</text>
     <text x="14" y="44" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#f0f6fc">7 GB FAT32 Partition</text>
     <text x="14" y="60" font-family="system-ui, sans-serif" font-size="11" fill="#8b949e">Live ISO &amp; kernel payload</text>
 
@@ -66,8 +66,8 @@
     <rect x="18" y="84" width="55" height="34" rx="2" fill="#30363d"/>
     <text x="24" y="105" font-family="ui-monospace, monospace" font-size="9" fill="#8b949e">Host OS</text>
     <!-- Staging partition -->
-    <rect x="76" y="84" width="38" height="34" rx="2" fill="#10b981"/>
-    <text x="81" y="105" font-family="ui-monospace, monospace" font-size="9" font-weight="700" fill="#042f2e">7GB</text>
+    <rect x="76" y="84" width="38" height="34" rx="2" fill="#1266f7"/>
+    <text x="81" y="105" font-family="ui-monospace, monospace" font-size="9" font-weight="700" fill="#ffffff">7GB</text>
     <!-- Unallocated -->
     <rect x="117" y="84" width="40" height="34" rx="2" fill="#21262d" stroke="#38434f"/>
     <text x="122" y="105" font-family="ui-monospace, monospace" font-size="8.5" fill="#8b949e">Unalloc</text>
@@ -78,19 +78,19 @@
   </g>
 
   <!-- Connector Arrow 3 -> 4 -->
-  <path d="M594 115L610 115M606 110L612 115L606 120" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M594 115L610 115M606 110L612 115L606 120" stroke="#1266f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- Step 4: Direct UEFI Boot -->
   <g transform="translate(618, 20)">
-    <rect x="0" y="0" width="162" height="190" rx="8" fill="#161b22" stroke="#10b981" stroke-width="1.5"/>
-    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#10b981">04 // DIRECT REBOOT</text>
+    <rect x="0" y="0" width="162" height="190" rx="8" fill="#161b22" stroke="#8e5df7" stroke-width="1.5"/>
+    <text x="14" y="26" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#9c97f8">04 // DIRECT REBOOT</text>
     <text x="14" y="44" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#f0f6fc">UEFI Boot Entry</text>
     <text x="14" y="60" font-family="system-ui, sans-serif" font-size="11" fill="#8b949e">Direct into Live Linux</text>
 
     <!-- Boot terminal block -->
-    <rect x="14" y="80" width="134" height="42" rx="4" fill="#042f2e" stroke="#10b981"/>
-    <path d="M22 101L28 97L28 105Z" fill="#34d399"/>
-    <text x="34" y="104" font-family="ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#34d399">BOOT: LINUX</text>
+    <rect x="14" y="80" width="134" height="42" rx="4" fill="#101a36" stroke="#8e5df7"/>
+    <path d="M22 101L28 97L28 105Z" fill="#9c97f8"/>
+    <text x="34" y="104" font-family="ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#9c97f8">BOOT: LINUX</text>
 
     <path d="M14 140H148" stroke="#21262d" stroke-dasharray="2 2"/>
     <text x="14" y="162" font-family="ui-monospace, monospace" font-size="10" fill="#8b949e">Grub / BCD registered</text>
