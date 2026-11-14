@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Container background with slight rounding -->
+  <rect width="64" height="64" rx="14" fill="#0d1117"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.25" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- Upward Boot Arrow emerging from storage -->
+  <path d="M32 8L44 22H36V28H28V22H20L32 8Z" fill="#10b981"/>
+  <path d="M32 12L39 20H34V26H30V20H25L32 12Z" fill="#34d399"/>
+
+  <!-- Upper Storage Slab (Staging + Free Space) -->
+  <rect x="10" y="32" width="44" height="10" rx="2" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <!-- Staging partition indicator (green LED accent) -->
+  <rect x="13" y="35" width="14" height="4" rx="1" fill="#10b981"/>
+  <!-- Unallocated partition segment -->
+  <rect x="30" y="35" width="21" height="4" rx="1" fill="#30363d"/>
+
+  <!-- Lower Storage Slab (Host System Drive) -->
+  <rect x="10" y="46" width="44" height="10" rx="2" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <!-- Host partition segments -->
+  <rect x="13" y="49" width="24" height="4" rx="1" fill="#38434f"/>
+  <rect x="40" y="49" width="11" height="4" rx="1" fill="#21262d"/>
+  <!-- Activity LED -->
+  <circle cx="50" cy="37" r="1.25" fill="#34d399"/>
+</svg>

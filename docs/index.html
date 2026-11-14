@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ULLI-Next — USB-less Linux Installer | Storage Instrument</title>
+  <meta name="description" content="Install and boot Linux distributions directly from an internal drive without a USB stick. Pre-flight safety checks, partition geometry planning, and native storage shrinking.">
+
+  <!-- Open Graph / Social Metadata -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://prakhar-khokhar.github.io/ulli-next/">
+  <meta property="og:title" content="ULLI-Next — USB-less Linux Installer">
+  <meta property="og:description" content="Install and boot Linux distributions directly from internal storage without requiring a USB flash drive.">
+  <meta property="og:image" content="https://prakhar-khokhar.github.io/ulli-next/assets/brand/ULLI-Next-Social-Preview.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">
+
+  <!-- Twitter Card Metadata -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ULLI-Next — USB-less Linux Installer">
+  <meta name="twitter:description" content="Install and boot Linux distributions directly from internal storage without requiring a USB flash drive.">
+  <meta name="twitter:image" content="https://prakhar-khokhar.github.io/ulli-next/assets/brand/ULLI-Next-Social-Preview.png">
+  <meta name="twitter:image:width" content="1200">
+  <meta name="twitter:image:height" content="630">
+
+  <link rel="canonical" href="https://prakhar-khokhar.github.io/ulli-next/">
+
+  <!-- Favicon (Relative path for GitHub Pages and Custom Domain compatibility) -->
+  <link rel="icon" type="image/png" href="/ulli-next/assets/brand/ULLI-Next-Logo.png">
+  <link rel="alternate icon" href="/ulli-next/assets/brand/ULLI-Next-Logo.png">
+
+  <!-- Pre-render theme initialization to prevent Flash of Unstyled Theme -->
+  <script>
+    (function() {
+      var theme = 'dark';
+      try {
+        var stored = localStorage.getItem('ulli-theme-preference');
+        if (stored === 'dark' || stored === 'light') {
+          theme = stored;
+        } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+          theme = 'light';
+        }
+      } catch (e) {
+        // Storage unavailable (e.g. private browsing); fall back to system preference.
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <!-- Accessibility: Skip to Main Content -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!-- ─── Site Header ───────────────────────────────────────────────────────── -->
+  <header class="site-header" role="banner">
+    <div class="container nav-wrapper">
+      <a href="./" class="brand-link" aria-label="ULLI-Next Home">
+        <img class="brand-icon" src="/ulli-next/assets/brand/ULLI-Next-Logo.png" alt="ULLI-Next Logo" width="34" height="34">
+        <span class="brand-text">ULLI<span>_NEXT</span></span>
+        <span class="brand-badge">BETA</span>
+      </a>
+
+      <!-- Desktop Navigation -->
+      <nav class="nav-desktop" aria-label="Main Navigation">
+        <a href="#workflow" class="nav-link">How It Works</a>
+        <a href="#distros" class="nav-link">Distributions</a>
+        <a href="#status" class="nav-link">Implementation Status</a>
+        <a href="#safety" class="nav-link">Safety &amp; Pre-flight</a>
+        <a href="#about" class="nav-link">About &amp; License</a>
+      </nav>
+
+      <!-- Action Controls -->
+      <div class="nav-actions">
+        <!-- Theme Toggle Button -->
+        <button id="theme-toggle" class="btn-icon" type="button" aria-label="Toggle dark/light theme" title="Toggle dark/light theme">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+
+        <!-- GitHub External Link -->
+        <a href="https://github.com/prakhar-khokhar/ulli-next" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer" aria-label="GitHub Repository (opens in new tab)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          <span>GitHub</span>
+        </a>
+
+        <!-- Mobile Menu Toggle -->
+        <button id="mobile-menu-toggle" class="btn-icon mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-drawer" aria-label="Toggle navigation menu">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div id="mobile-drawer" class="mobile-menu-drawer" aria-label="Mobile Navigation">
+      <a href="#workflow" class="nav-link">How It Works</a>
+      <a href="#distros" class="nav-link">Distributions</a>
+      <a href="#status" class="nav-link">Implementation Status</a>
+      <a href="#safety" class="nav-link">Safety &amp; Pre-flight</a>
+      <a href="#about" class="nav-link">About &amp; License</a>
+      <a href="https://github.com/prakhar-khokhar/ulli-next" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+    </div>
+  </header>
+
+  <!-- ─── Main Content ──────────────────────────────────────────────────────── -->
+  <main id="main-content">
+
+    <!-- ─── Hero Section ────────────────────────────────────────────────────── -->
+    <section class="hero-section" aria-labelledby="hero-heading">
+      <div class="container hero-grid">
+        <div class="hero-content">
+          <div class="hero-badge-row">
+            <span class="badge-pill accent">STORAGE-INSTRUMENT</span>
+            <span class="badge-pill">UEFI DIRECT BOOT</span>
+            <span class="badge-pill">NO USB FLASH REQUIRED</span>
+          </div>
+
+          <h1 id="hero-heading" class="hero-title">
+            Linux, without the <span class="hero-title-accent">USB stick.</span>
+          </h1>
+
+          <p class="hero-lead">
+            ULLI-Next configures and boots Linux distributions directly from an internal storage drive. By preparing an isolated 7&nbsp;GB staging partition and registering a UEFI boot entry, you can test or install Linux without flashing external media.
+          </p>
+
+          <!-- Crucial Safety Warning Callout -->
+          <div class="hero-alert" role="alert">
+            <div class="hero-alert-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+              <span>Safety &amp; Backup Advisory</span>
+            </div>
+            <p>
+              <strong>Partition and boot-configuration changes carry risk of permanent data loss.</strong> Always back up critical data before use. The modern Qt/C++ rewrite is under active development and <strong>is not ready for real-world production installations</strong>.
+            </p>
+          </div>
+
+          <div class="hero-actions">
+            <a href="#distros" class="btn btn-primary">Explore Distributions</a>
+            <a href="#status" class="btn btn-outline">Implementation Status</a>
+          </div>
+        </div>
+
+        <!-- Technical Instrument Visual -->
+        <div class="hero-instrument" aria-label="Storage geometry instrument preview">
+          <div class="instrument-topbar">
+            <span>STORAGE INSTRUMENT // NVMe0n1</span>
+            <div class="instrument-lights">
+              <span class="dot-led active" title="Storage engine ready"></span>
+              <span class="dot-led active" title="Integrity verified"></span>
+              <span class="dot-led" title="Staging pending"></span>
+            </div>
+          </div>
+
+          <div class="instrument-body">
+            <div class="instrument-disk-view">
+              <div class="disk-title-row">
+                <span>DRIVE GEOMETRY (512 GB NVMe)</span>
+                <span class="mono">GPT / UEFI</span>
+              </div>
+              <div class="disk-partition-bar" role="img" aria-label="Partition visualization: ESP 100MB, Host OS shrunk, Staging 7GB, Target unallocated">
+                <div class="p-slice esp" title="ESP Bootloader">ESP</div>
+                <div class="p-slice host" title="Shrunk Host Partition">Host OS</div>
+                <div class="p-slice staging" title="7 GB FAT32 Staging Partition">7 GB Staging</div>
+                <div class="p-slice unallocated" title="Unallocated Target Space">Target Space</div>
+              </div>
+
+              <div class="disk-legend">
+                <div class="legend-item"><span class="legend-color" style="background:#212836"></span>ESP (EFI)</div>
+                <div class="legend-item"><span class="legend-color" style="background:#2a3547"></span>Host Partition</div>
+                <div class="legend-item"><span class="legend-color" style="background:#10b981"></span>7 GB FAT32 Staging</div>
+                <div class="legend-item"><span class="legend-color" style="background:#16202c; border:1px dashed #34d399"></span>Unallocated Space</div>
+              </div>
+            </div>
+
+            <div class="instrument-specs-grid">
+              <div class="spec-tile">
+                <div class="spec-key">Staging Strategy</div>
+                <div class="spec-val">7 GB FAT32 Live Payload</div>
+              </div>
+              <div class="spec-tile">
+                <div class="spec-key">Boot Interface</div>
+                <div class="spec-val">UEFI NVRAM / GRUB / BCD</div>
+              </div>
+              <div class="spec-tile">
+                <div class="spec-key">Checksum Engine</div>
+                <div class="spec-val">SHA-256 Automated Verification</div>
+              </div>
+              <div class="spec-tile">
+                <div class="spec-key">License &amp; Source</div>
+                <div class="spec-val">GPL-3.0 (Community Maintained)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── How It Works / Workflow ─────────────────────────────────────────── -->
+    <section id="workflow" class="section section-alt" aria-labelledby="workflow-heading">
+      <div class="container">
+        <span class="section-tag">01 // ARCHITECTURE &amp; WORKFLOW</span>
+        <h2 id="workflow-heading" class="section-title">How USB-less Installation Works</h2>
+        <p class="section-lead">
+          ULLI-Next eliminates external media by turning internal disk geometry into a self-contained installation vector. Here is how the end-to-end pipeline operates:
+        </p>
+
+        <!-- Technical Flow Illustration -->
+        <div class="workflow-illustration-container">
+          <img src="assets/brand/illustration-workflow.svg" alt="Diagram showing the 4-step pipeline: Host inspection, online filesystem shrink, 7 GB FAT32 staging creation, and direct UEFI reboot" class="workflow-svg" loading="lazy">
+        </div>
+
+        <div class="workflow-steps-grid">
+          <div class="step-card">
+            <span class="step-number">STEP 01</span>
+            <h3>Pre-flight Disk Inspection</h3>
+            <p>
+              The installer queries target drives via native storage APIs, verifies partition tables (GPT/MBR), checks BitLocker encryption status on the target partition, and queries filesystem boundaries to confirm shrink viability.
+            </p>
+            <div class="step-meta">API: Get-PartitionSupportedSize / parted</div>
+          </div>
+
+          <div class="step-card">
+            <span class="step-number">STEP 02</span>
+            <h3>Non-Destructive Online Shrink</h3>
+            <p>
+              The host filesystem is shrunk online without unmounting. In <strong>Live Only</strong> mode, ~7&nbsp;GB is freed. In <strong>Full Install</strong> mode, 30+&nbsp;GB is freed to yield both staging space and target room for Linux.
+            </p>
+            <div class="step-meta">Filesystems: Windows NTFS / Linux Btrfs</div>
+          </div>
+
+          <div class="step-card">
+            <span class="step-number">STEP 03</span>
+            <h3>7 GB FAT32 Staging Partition</h3>
+            <p>
+              A 7&nbsp;GB FAT32 partition labelled <code class="mono">LINUX_LIVE</code> is formatted. The distribution ISO is downloaded, verified against authoritative SHA-256 hashes, and its kernel/initramfs payload is placed on the staging volume.
+            </p>
+            <div class="step-meta">Payload: Kernel + Initramfs + Live SquashFS</div>
+          </div>
+
+          <div class="step-card">
+            <span class="step-number">STEP 04</span>
+            <h3>Direct UEFI Boot Registration</h3>
+            <p>
+              A direct boot option is registered with the system firmware or boot manager (via GRUB on Linux or BCD on Windows). Upon restarting, your PC boots directly into the live Linux desktop.
+            </p>
+            <div class="step-meta">Result: Reboot directly into Live Linux</div>
+          </div>
+        </div>
+
+        <!-- Architecture Comparison -->
+        <div class="comparison-container">
+          <div class="comparison-illustration">
+            <img src="assets/brand/illustration-comparison.svg" alt="Comparison between traditional USB drive flashing and ULLI-Next internal staging architecture" class="workflow-svg" loading="lazy">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Distributions ─────────────────────────────────────────────────────── -->
+    <section id="distros" class="section" aria-labelledby="distros-heading">
+      <div class="container">
+        <span class="section-tag">02 // DISTRIBUTIONS</span>
+        <h2 id="distros-heading" class="section-title">Supported Distributions</h2>
+        <p class="section-lead">
+          ULLI-Next can install a curated set of Linux distributions directly to your internal drive. The list below is provided for information only and reflects the distributions the installer builds are prepared for. It is not an ISO download catalogue, and it is not the authoritative source of installer images, filenames, or checksums — always obtain installation media from each distribution's official website.
+        </p>
+
+        <div id="distro-grid" class="distro-grid" aria-live="polite">
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">Linux Mint</h3>
+              <div class="distro-card-badges"><span class="distro-badge available">Available</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">22.3 · Cinnamon Edition</span>
+              </div>
+            </div>
+            <div class="distro-card-footer">
+              <a href="https://linuxmint.com" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">CachyOS</h3>
+              <div class="distro-card-badges"><span class="distro-badge available">Available</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">Desktop</span>
+              </div>
+            </div>
+            <div class="distro-card-footer">
+              <a href="https://cachyos.org" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">Ubuntu</h3>
+              <div class="distro-card-badges"><span class="distro-badge available">Available</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">26.04 LTS · GNOME</span>
+              </div>
+            </div>
+            <div class="distro-card-footer">
+              <a href="https://ubuntu.com" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">Kubuntu</h3>
+              <div class="distro-card-badges"><span class="distro-badge available">Available</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">26.04 LTS · KDE Plasma 6</span>
+              </div>
+            </div>
+            <div class="distro-card-footer">
+              <a href="https://kubuntu.org" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">Linux Lite</h3>
+              <div class="distro-card-badges"><span class="distro-badge caution">Caution</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">8.0 · Xfce Edition</span>
+              </div>
+            </div>
+            <div class="distro-note caution">Installer support is still being validated; treat this distribution with caution.</div>
+            <div class="distro-card-footer">
+              <a href="https://www.linuxliteos.com" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">Debian Live</h3>
+              <div class="distro-card-badges"><span class="distro-badge available">Available</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">13.6.0 · KDE Edition</span>
+              </div>
+            </div>
+            <div class="distro-card-footer">
+              <a href="https://www.debian.org" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">Fedora</h3>
+              <div class="distro-card-badges"><span class="distro-badge experimental">Experimental</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">43 · KDE Plasma Desktop</span>
+              </div>
+            </div>
+            <div class="distro-note experimental">Listed for visibility; not recommended for normal use. Prefer a better-tested distribution.</div>
+            <div class="distro-card-footer">
+              <a href="https://fedoraproject.org" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+
+          <article class="distro-card">
+            <div class="distro-card-header">
+              <h3 class="distro-card-title">Zorin OS</h3>
+              <div class="distro-card-badges"><span class="distro-badge experimental">Experimental</span></div>
+            </div>
+            <div class="distro-details-list">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">18.1 Core</span>
+              </div>
+            </div>
+            <div class="distro-note experimental">Listed for visibility; not recommended for normal use. Prefer a better-tested distribution.</div>
+            <div class="distro-card-footer">
+              <a href="https://zorin.com/os/download/" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">Official Website</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Implementation Status & Reality Check ──────────────────────────── -->
+    <section id="status" class="section section-alt" aria-labelledby="status-heading">
+      <div class="container">
+        <span class="section-tag">03 // TRANSPARENT AUDIT</span>
+        <h2 id="status-heading" class="section-title">Implementation Status &amp; Reality Check</h2>
+        <p class="section-lead">
+          ULLI-Next has multiple distinct codebases at very different stages of maturity. We maintain total technical honesty: here is the exact validated capability of each implementation.
+        </p>
+
+        <div class="status-grid">
+          <!-- Linux Legacy -->
+          <div class="impl-card">
+            <span class="impl-badge stable">Functional Script</span>
+            <h3 class="impl-title">Linux Legacy</h3>
+            <div class="impl-subtitle">python3 / GTK 3 / parted</div>
+
+            <ul class="impl-feature-list">
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>Online Btrfs filesystem shrinking</span>
+              </li>
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>7 GB FAT32 staging partition layout</span>
+              </li>
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>Automated GRUB live entry registration</span>
+              </li>
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>Dependency check flag (<code class="mono">--check-deps</code>)</span>
+              </li>
+              <li>
+                <svg class="icon-pending" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                <span>Requires host system root to be Btrfs</span>
+              </li>
+            </ul>
+
+            <div class="impl-code-block">
+              sudo python3 linux/ulli-linux.py
+            </div>
+          </div>
+
+          <!-- Windows Legacy -->
+          <div class="impl-card">
+            <span class="impl-badge stable">Functional Script</span>
+            <h3 class="impl-title">Windows Legacy</h3>
+            <div class="impl-subtitle">PowerShell 5.1+ / WinForms</div>
+
+            <ul class="impl-feature-list">
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>Automatic Administrator elevation</span>
+              </li>
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>Windows Storage API partition resize</span>
+              </li>
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>BCD boot-entry registration</span>
+              </li>
+              <li>
+                <svg class="icon-pending" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                <span>Optional RefindPlus path is currently untested</span>
+              </li>
+              <li>
+                <svg class="icon-pending" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                <span>Windows 10/11 UEFI systems only</span>
+              </li>
+            </ul>
+
+            <div class="impl-code-block">
+              run-ulli-windows.bat (Run as Admin)
+            </div>
+          </div>
+
+          <!-- Qt Rewrite -->
+          <div class="impl-card experimental">
+            <span class="impl-badge experimental">In Development // Build Stage</span>
+            <h3 class="impl-title">Qt 6 / C++20 Port</h3>
+            <div class="impl-subtitle">Modern C++20 / Qt 6.5+ / CMake</div>
+
+            <div class="impl-warning-box">
+              <strong>DO NOT USE FOR REAL INSTALLATIONS.</strong> The Qt rewrite produces test builds but critical installation pipelines remain unvalidated.
+            </div>
+
+            <ul class="impl-feature-list">
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>Qt GUI with dynamic partition layout preview</span>
+              </li>
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>Native NTFS shrink logic with BitLocker checks</span>
+              </li>
+              <li>
+                <svg class="icon-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span>SHA-256 validation</span>
+              </li>
+              <li>
+                <svg class="icon-block" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+                <span>End-to-end staging workflow unverified (Phase 2.2)</span>
+              </li>
+              <li>
+                <svg class="icon-block" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+                <span>rEFInd integration unsupported</span>
+              </li>
+              <li>
+                <svg class="icon-block" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+                <span>Zero real-hardware end-to-end installation validation</span>
+              </li>
+            </ul>
+
+            <div class="impl-code-block">
+              qt-ulli/ (Active Development — Phase 2.1)
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Safety & Pre-flight Checklist ─────────────────────────────────── -->
+    <section id="safety" class="section" aria-labelledby="safety-heading">
+      <div class="container">
+        <span class="section-tag">04 // RISK MITIGATION &amp; CAUTIONS</span>
+        <h2 id="safety-heading" class="section-title">Safety &amp; Pre-flight Verification</h2>
+        <p class="section-lead">
+          Direct disk modification and UEFI configuration changes inherently involve risks. Follow this protocol to ensure data safety before executing any installer operations.
+        </p>
+
+        <div class="safety-grid">
+          <div class="safety-card">
+            <h3>Pre-flight Rules &amp; Protocols</h3>
+            <ul class="checklist">
+              <li class="checklist-item">
+                <span class="check-bullet">01</span>
+                <div class="check-content">
+                  <h4>Mandatory External Backup</h4>
+                  <p>Back up all essential files, keys, and documents to an independent external drive or cloud storage before beginning.</p>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-bullet">02</span>
+                <div class="check-content">
+                  <h4>BitLocker Encryption State</h4>
+                  <p>BitLocker must be inspected on the target partition. If locked, shrinking will fail; suspending or decrypting protection may be required.</p>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-bullet">03</span>
+                <div class="check-content">
+                  <h4>UEFI Firmware &amp; Secure Boot</h4>
+                  <p>ULLI-Next targets modern UEFI systems. Legacy BIOS / CSM boot is unsupported. Secure Boot requirements depend on the selected Linux distribution.</p>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-bullet">04</span>
+                <div class="check-content">
+                  <h4>Firmware Boot Selection</h4>
+                  <p>Certain motherboard firmware does not automatically prioritize new boot entries. Ensure you can access your BIOS/UEFI boot menu (e.g. F12, F11, Esc).</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <div class="safety-card">
+            <h3>Allocation Mode Semantics</h3>
+            <ul class="checklist">
+              <li class="checklist-item">
+                <span class="check-bullet">A</span>
+                <div class="check-content">
+                  <h4>Live Environment Only Mode</h4>
+                  <p>
+                    User requests ~7&nbsp;GB total shrink. Creates a 7&nbsp;GB FAT32 staging partition. <strong>Leaves no additional unallocated space.</strong> Ideal for testing a desktop environment without committing storage.
+                  </p>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-bullet">B</span>
+                <div class="check-content">
+                  <h4>Full Linux Installation Mode</h4>
+                  <p>
+                    User requests N&nbsp;GB (where N &ge; 30&nbsp;GB). The engine dedicates 7&nbsp;GB to the FAT32 live staging partition and leaves the remaining <strong>N &minus; 7&nbsp;GB genuinely unallocated</strong> for the Linux distribution's native installer.
+                  </p>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-bullet">C</span>
+                <div class="check-content">
+                  <h4>Custom ISO Constraints</h4>
+                  <p>
+                    Images outside the catalogue must have maximum 7&nbsp;GB total size and no single file inside the ISO exceeding 4&nbsp;GB (due to FAT32 filesystem constraints).
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── About, Attribution & License ─────────────────────────────────── -->
+    <section id="about" class="section section-alt" aria-labelledby="about-heading">
+      <div class="container">
+        <span class="section-tag">05 // OPEN SOURCE ATTRIBUTION</span>
+        <h2 id="about-heading" class="section-title">About the Project</h2>
+        <p class="section-lead">
+          ULLI-Next is an open-source initiative dedicated to streamlining Linux adoption and system recovery.
+        </p>
+
+        <div class="about-card">
+          <div class="about-grid">
+            <div class="about-text">
+              <p>
+                <strong>ULLI-Next</strong> is a community-maintained fork of the original <a href="https://github.com/rltvty2/ulli" target="_blank" rel="noopener noreferrer">ULLI project</a> created by <strong>rltvty2</strong>. It is currently maintained by <strong>Prakhar Khokhar</strong>.
+              </p>
+              <p>
+                The project maintains the functional legacy Python/GTK installer for Linux and PowerShell/Windows Forms installer for Windows, while engineering a modern, unified C++20 and Qt 6 application with explicit installation plans, partition previews, and safety checks.
+              </p>
+              <p>
+                For a human-authored, non-AI implementation of the original concept, refer to <a href="https://github.com/rltvty2/ulli-organic" target="_blank" rel="noopener noreferrer">ULLI-organic</a>.
+              </p>
+              <p>
+                Contributions in the form of hardware testing across diverse UEFI firmware, edge-case disk partition reports, bug reporting, and code reviews are warmly welcomed via GitHub Issues and Pull Requests.
+              </p>
+            </div>
+
+            <div class="about-license-box">
+              <div class="license-title">GNU GENERAL PUBLIC LICENSE v3.0</div>
+              <p style="font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5;">
+                ULLI-Next is free and open-source software, licensed under the terms of the GNU General Public License as published by the Free Software Foundation, version 3.
+              </p>
+              <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
+                <a href="https://github.com/prakhar-khokhar/ulli-next/blob/main/LICENSE" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">View Full GPL-3.0 License</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ─── Site Footer ───────────────────────────────────────────────────────── -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom: 0.75rem;">
+            <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <path d="M24 5L35 18H28V23H20V18H13L24 5Z" fill="#10b981"/>
+              <rect x="6" y="25" width="36" height="8" rx="2" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>
+              <rect x="8.5" y="27.5" width="11" height="3" rx="1" fill="#10b981"/>
+              <rect x="6" y="35" width="36" height="8" rx="2" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>
+              <rect x="8.5" y="37.5" width="18" height="3" rx="1" fill="#485360"/>
+            </svg>
+            <span style="font-weight: 800; font-size: 1.125rem; color: var(--text-primary);">ULLI<span style="color:var(--accent-bright);">_NEXT</span></span>
+          </div>
+          <p style="font-size: 0.8125rem; color: var(--text-muted); max-width: 320px; line-height: 1.5;">
+            USB-less Linux Installer — Boot and install Linux directly from internal storage drives.
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h4>Navigation</h4>
+          <ul class="footer-links">
+            <li><a href="#workflow">Architecture</a></li>
+            <li><a href="#distros">Distributions</a></li>
+            <li><a href="#status">Implementation Status</a></li>
+            <li><a href="#safety">Safety &amp; Pre-flight</a></li>
+            <li><a href="#about">About &amp; Attribution</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Repository</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/prakhar-khokhar/ulli-next" target="_blank" rel="noopener noreferrer">GitHub Repository</a></li>
+            <li><a href="https://github.com/prakhar-khokhar/ulli-next/issues" target="_blank" rel="noopener noreferrer">Issue Tracker</a></li>
+            <li><a href="https://github.com/rltvty2/ulli" target="_blank" rel="noopener noreferrer">Original ULLI by rltvty2</a></li>
+            <li><a href="https://github.com/rltvty2/ulli-organic" target="_blank" rel="noopener noreferrer">ULLI-organic</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>
+          <span>&copy; 2026 ULLI-Next Contributors. Licensed under GPL-3.0.</span>
+        </div>
+        <div>
+          <button id="back-to-top" class="back-to-top-btn" type="button" aria-label="Back to top">
+            <span>Back to top</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="19" x2="12" y2="5"></line>
+              <polyline points="5 12 12 5 19 12"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Application Script -->
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

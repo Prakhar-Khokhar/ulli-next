@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>404 — Sector Not Found | ULLI-Next</title>
+  <meta name="description" content="The requested partition or path does not exist on this storage device.">
+
+  <!-- Favicon (root-absolute so it resolves from nested 404 URLs) -->
+  <link rel="icon" type="image/png" href="/ulli-next/assets/brand/ULLI-Next-Logo.png">
+  <link rel="alternate icon" href="/ulli-next/assets/brand/ULLI-Next-Logo.png">
+
+  <!-- Theme initialization to prevent flash -->
+  <script>
+    (function() {
+      var theme = 'dark';
+      try {
+        var stored = localStorage.getItem('ulli-theme-preference');
+        if (stored === 'dark' || stored === 'light') {
+          theme = stored;
+        } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+          theme = 'light';
+        }
+      } catch (e) {
+        // Storage unavailable (e.g. private browsing); fall back to system preference.
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
+  <link rel="stylesheet" href="/ulli-next/assets/css/style.css">
+</head>
+<body style="min-height: 100vh; display: flex; flex-direction: column;">
+  <!-- Accessibility -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!-- Header -->
+  <header class="site-header" role="banner">
+    <div class="container nav-wrapper">
+      <a href="/ulli-next/index.html" class="brand-link" aria-label="ULLI-Next Home">
+        <img class="brand-icon" src="/ulli-next/assets/brand/ULLI-Next-Logo.png" alt="ULLI-Next Logo" width="34" height="34">
+        <span class="brand-text">ULLI<span>_NEXT</span></span>
+      </a>
+
+      <div class="nav-actions">
+        <button id="theme-toggle" class="btn-icon" type="button" aria-label="Toggle dark/light theme" title="Toggle dark/light theme">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+
+        <a href="https://github.com/prakhar-khokhar/ulli-next" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">
+          GitHub
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Error Content -->
+  <main id="main-content" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 4rem 1.5rem;">
+    <div style="max-width: 560px; width: 100%; text-align: center;">
+      <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background-color: var(--warn-dim); border: 1px solid var(--warn-border); border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+
+      <div class="section-tag" style="justify-content: center; margin-bottom: 0.5rem;">ERROR 404 // BAD SECTOR</div>
+      <h1 class="section-title" style="font-size: 2.5rem; margin-bottom: 1rem;">Sector Not Found</h1>
+      <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 2rem;">
+        The requested address does not correspond to an allocated partition or file path on this deployment.
+      </p>
+
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem;">
+        <a href="/ulli-next/index.html" class="btn btn-primary">Return to Homepage</a>
+        <a href="/ulli-next/index.html#distros" class="btn btn-outline">Browse Distributions</a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer" style="margin-top: 0;" role="contentinfo">
+    <div class="container" style="text-align: center; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">
+      <p>&copy; 2026 ULLI-Next Contributors. Licensed under GPL-3.0.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle support for 404 page
+    (function() {
+      var btn = document.getElementById('theme-toggle');
+      if (btn) {
+        btn.addEventListener('click', function() {
+          var current = document.documentElement.getAttribute('data-theme') || 'dark';
+          var next = current === 'light' ? 'dark' : 'light';
+          try {
+            localStorage.setItem('ulli-theme-preference', next);
+          } catch (e) {
+            // Storage unavailable; theme still applied to DOM.
+          }
+          document.documentElement.setAttribute('data-theme', next);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

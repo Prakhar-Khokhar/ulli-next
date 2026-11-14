@@ -1,0 +1,5 @@
+# Generated server log (disposable)
+docs/nohup.out
+
+# Temporary audit visuals (do not commit)
+.audit-tmp-visuals/
